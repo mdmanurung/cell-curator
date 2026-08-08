@@ -1,0 +1,4 @@
+interface:
+  display_name: "Adaptive Assay-Aware Cell Annotation"
+  short_description: "Evidence-gated annotation across single-cell assays"
+  default_prompt: "Use $adaptive-multimodal-cell-annotation to audit frozen clusters and annotate or adaptively split them using the assays actually present."

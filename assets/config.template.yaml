@@ -1,0 +1,168 @@
+schema_version: 2
+run:
+  run_id: replace-with-versioned-run-id
+  output_root: results/adaptive_annotation/v1
+  mode: evidence-only  # annotation | evidence-only
+  immutable: true
+  knowledgebase_required_for_labels: true
+
+knowledgebase:
+  available: false
+  provider: quadbio-knowledgebase-mcp
+  version_or_snapshot: ""
+
+input:
+  kind: h5ad  # h5ad supports one root assay; h5mu supports one or more assays
+  path: path/to/input.h5ad
+  expected_sha256: ""
+  assays:
+    transcriptome:
+      modality: root  # use the MuData modality name for h5mu
+      kind: rna  # rna | protein | atac | gene_activity | spatial | other
+      feature_space: gene
+      feature_id_column: gene_symbol
+      capabilities: [identity, subtype, state, ontology_markers, gene_set_ora]
+      graph_representations:
+        - {source: obsm, key: X_pca_harmony}
+      representations:
+        logcounts:
+          source: layer  # X | layer
+          key: logcounts
+          feature_space: gene
+          ranking_backend: rapids_singlecell
+          ontology_compatible: true
+          detection:
+            source: layer
+            key: counts
+            required: true
+            semantics: counts > 0
+  keys:
+    canonical_parent: canonical_cluster
+    scope: lineage
+    stored_resolutions: []
+    donor: ""
+    capture: ""
+    doublet_class: ""
+    doublet_score: ""
+    sex: ""
+    batch: ""
+  required_obs_keys: []
+  guide_columns: []
+  # Any numeric per-cell columns can be audited; names are logical, values are obs keys.
+  technical_metrics: {}
+
+canonical_partitions:
+  example_scope:
+    parent_key: canonical_cluster
+    expected_parent_count: 1
+
+adaptive:
+  outcomes:
+    - ACCEPT SPLIT
+    - RETAIN PARENT
+    - DOUBLET/MIXED
+    - TECHNICAL/UNRESOLVED
+  eligibility:
+    min_cells: 50
+    min_donors: null  # set only when donor metadata exists
+    min_captures: null  # set only when capture metadata exists
+    rare_exceptions_require_approval: true
+  audit:
+    guide_entropy_min: 0.6
+    meaningful_minority_fraction: 0.10
+    doublet_fraction_max: null
+    donor_max_fraction: null
+    capture_max_fraction: null
+    technical_effect_size_max: 0.15
+    technical_metric_robust_z_max: 3.0
+    incompatible_program_fraction_min: 0.15
+    incompatible_program_columns: []
+  stored_candidates:
+    min_parent_purity: 0.90
+    min_parent_fraction: 0.03
+    max_parent_fraction: 0.95
+    adjacent_jaccard_min: 0.80
+    min_adjacent_matches: 1
+  parent_local:
+    enabled: true
+    max_passes_per_parent: 1
+    resolutions: [0.1, 0.2, 0.3, 0.4, 0.6, 0.8, 1.0]
+    stability_metric: ari
+    stability_threshold_strictly_greater_than: 0.80
+    reference_seeds: [0, 1, 2, 3, 4]
+    reject_one_cluster: true
+    select: lowest_stable_biologically_resolving
+
+comparators:
+  roles: [parent_remainder, closest_sibling]
+  closest_sibling_strategy: graph_then_biological_review
+
+markers:
+  rapids_singlecell_version: ""
+  rapids_distribution: ""
+  cuda_major: null
+  cpu_fallback: false
+  allowed_gpu_contracts: []
+  wilcoxon:
+    tie_correct: true
+    continuity_correct: false
+    correction: benjamini-hochberg
+    chunk_size: 512
+  logreg:
+    class_weight: balanced
+    penalty: l2
+    C: 1.0
+    tol: 0.0001
+    max_iter: 1000
+    retry_max_iter: 5000
+
+evidence:
+  lanes:
+    - assay: transcriptome
+      representation: logcounts
+      required_for_acceptance: true
+  adjusted_pvalue_max: 0.05
+  require_both_marker_methods: true
+  require_both_comparators: true
+  validated_reference:
+    available: false
+    ontology_validated: false
+    method: ""
+    snapshot: ""
+  required_candidate_gates:
+    - stability_pass
+    - candidate_vs_parent_remainder_pass
+    - candidate_vs_closest_sibling_pass
+    - positive_program_pass
+    - expected_negative_program_pass
+    - cell_level_separation_pass
+    - source_corroboration_pass
+  marker_programs: {}
+  # Configure source corroboration only for compatible feature spaces.
+  enrichment:
+    panglaodb:
+      applicable_feature_spaces: [gene, gene_activity]
+      required_when_applicable: true
+      organism: human
+      top_n: [50, 100, 200]
+      min_overlap: 5
+      background: measured_features
+  guides:
+    columns: []
+    evidence_role: overridable_hypotheses
+
+review:
+  critic_passes:
+    - biological_coherence
+    - negative_markers_and_alternatives
+    - doublet_and_mixed
+    - technical_confounding
+    - ontology_hierarchy
+  require_reconciliation: true
+  require_explicit_human_approval: true
+  type_and_state_separate: true
+
+hpc:
+  snakemake_profile: ""
+  cpu_resources: {}
+  gpu_resources: {}
