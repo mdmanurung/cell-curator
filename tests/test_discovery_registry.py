@@ -6,9 +6,8 @@ import pandas as pd
 import pytest
 import yaml
 
-import discover_candidates
-import validate_candidate_registry
-from contracts import ContractError
+from cell_curator import discover_candidates, validate_candidate_registry
+from cell_curator.contracts import ContractError
 
 
 def _write(frame: pd.DataFrame, path: Path) -> Path:
@@ -37,15 +36,30 @@ def test_persistent_stored_child_and_local_child_share_registry(
     for resolution, child in ((1.0, "a"), (1.2, "b")):
         for barcode in ["c0", "c1"]:
             stored_rows.append(
-                {"barcode": barcode, "scope": "immune", "resolution": resolution, "child_id": child}
+                {
+                    "barcode": barcode,
+                    "scope": "immune",
+                    "resolution": resolution,
+                    "child_id": child,
+                }
             )
         for barcode in ["c2", "c3", "c4", "c5"]:
             stored_rows.append(
-                {"barcode": barcode, "scope": "immune", "resolution": resolution, "child_id": "rest0"}
+                {
+                    "barcode": barcode,
+                    "scope": "immune",
+                    "resolution": resolution,
+                    "child_id": "rest0",
+                }
             )
         for barcode in [f"c{i}" for i in range(6, 16)]:
             stored_rows.append(
-                {"barcode": barcode, "scope": "immune", "resolution": resolution, "child_id": f"p{parents.set_index('barcode').loc[barcode, 'parent_id']}"}
+                {
+                    "barcode": barcode,
+                    "scope": "immune",
+                    "resolution": resolution,
+                    "child_id": f"p{parents.set_index('barcode').loc[barcode, 'parent_id']}",
+                }
             )
     local_rows = []
     # Resolution 0.1 is stable but biologically uninformative (one cluster).
@@ -102,14 +116,19 @@ def test_persistent_stored_child_and_local_child_share_registry(
         output_dir=tmp_path / "discovery",
     )
     registry = pd.read_csv(tmp_path / "discovery/candidate_registry.tsv", sep="\t", dtype=str)
-    membership = pd.read_csv(tmp_path / "discovery/candidate_membership.tsv", sep="\t", dtype=str)
+    membership = pd.read_csv(
+        tmp_path / "discovery/candidate_membership.tsv", sep="\t", dtype=str
+    )
     triage = pd.read_csv(tmp_path / "discovery/parent_triage.tsv", sep="\t", dtype=str)
 
     assert set(registry["source_kind"]) == {"stored_resolution", "parent_local"}
     local = registry[registry["source_kind"].eq("parent_local")]
     assert set(local["source_resolution"]) == {"0.2"}
     assert manifest["invariants"]["stable_one_cluster_rejected"] is True
-    assert triage.set_index("parent_id").loc["2", "triage_action"] == "REJECT_NO_DISCRETE_CANDIDATE_EVIDENCE"
+    assert (
+        triage.set_index("parent_id").loc["2", "triage_action"]
+        == "REJECT_NO_DISCRETE_CANDIDATE_EVIDENCE"
+    )
     validated = validate_candidate_registry.validate_registry(
         config, audit.astype(str), registry, membership
     )
@@ -120,17 +139,31 @@ def test_registry_rejects_prefilled_biological_label(config: dict) -> None:
     audit = pd.DataFrame({"scope": ["s"], "parent_id": ["0"], "audit_flagged": [True]})
     registry = pd.DataFrame(
         {
-            "scope": ["s"], "candidate_key": ["x"], "parent_id": ["0"],
-            "candidate_child_uid": ["s::0::candidate_1"], "source_kind": ["stored_resolution"],
-            "n_cells_in_parent": [2], "n_parent_remainder": [2], "n_donors": [2],
-            "n_captures": [2], "stability_pass": [True], "eligibility_counts_pass": [True],
-            "closest_sibling": ["1"], "membership_sha256": ["wrong"],
-            "triage_action": ["FULL_TESTING"], "biological_label_L1": ["forbidden"],
+            "scope": ["s"],
+            "candidate_key": ["x"],
+            "parent_id": ["0"],
+            "candidate_child_uid": ["s::0::candidate_1"],
+            "source_kind": ["stored_resolution"],
+            "n_cells_in_parent": [2],
+            "n_parent_remainder": [2],
+            "n_donors": [2],
+            "n_captures": [2],
+            "stability_pass": [True],
+            "eligibility_counts_pass": [True],
+            "closest_sibling": ["1"],
+            "membership_sha256": ["wrong"],
+            "triage_action": ["FULL_TESTING"],
+            "biological_label_L1": ["forbidden"],
         }
     )
     membership = pd.DataFrame(
-        {"scope": ["s"] * 4, "candidate_key": ["x"] * 4, "parent_id": ["0"] * 4,
-         "barcode": ["a", "b", "c", "d"], "candidate_membership": [True, True, False, False]}
+        {
+            "scope": ["s"] * 4,
+            "candidate_key": ["x"] * 4,
+            "parent_id": ["0"] * 4,
+            "barcode": ["a", "b", "c", "d"],
+            "candidate_membership": [True, True, False, False],
+        }
     )
     with pytest.raises(ContractError, match="must remain blank"):
         validate_candidate_registry.validate_registry(config, audit, registry, membership)

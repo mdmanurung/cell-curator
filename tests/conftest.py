@@ -1,16 +1,11 @@
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import pytest
 import yaml
 
-
 SKILL = Path(__file__).resolve().parents[1]
-SCRIPTS = SKILL / "scripts"
-if str(SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS))
 
 
 @pytest.fixture
@@ -23,7 +18,6 @@ def config(tmp_path: Path) -> dict:
             "mode": "evidence-only",
         }
     )
-    value["knowledgebase"]["available"] = False
     value["adaptive"]["eligibility"].update(
         {"min_cells": 2, "min_donors": 2, "min_captures": 2}
     )
@@ -60,6 +54,10 @@ def config(tmp_path: Path) -> dict:
             ],
         }
     )
+    # Exercise the fail-closed GPU lane independently of the CPU-safe template.
+    value["input"]["assays"]["transcriptome"]["representations"]["logcounts"][
+        "ranking_backend"
+    ] = "rapids_singlecell"
     return value
 
 

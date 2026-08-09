@@ -4,9 +4,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import evaluate_candidate_evidence
-import summarize_multimodal_evidence
-from contracts import ContractError
+from cell_curator import evaluate_candidate_evidence, summarize_multimodal_evidence
+from cell_curator.contracts import ContractError
 
 
 def test_signed_protein_uses_nonnegative_detection_source() -> None:
@@ -106,9 +105,27 @@ def test_configured_assay_gates_and_parent_outcomes(config: dict) -> None:
     evidence = pd.DataFrame(
         [
             _candidate(),
-            _candidate(candidate_key="c2", parent_id="1", parent_uid="s::1", candidate_child_uid="s::1::candidate_1", max_donor_fraction=0.8),
-            _candidate(candidate_key="c3", parent_id="2", parent_uid="s::2", candidate_child_uid="s::2::candidate_1", incompatible_coexpression_fraction=0.6),
-            _candidate(candidate_key="c4", parent_id="3", parent_uid="s::3", candidate_child_uid="s::3::candidate_1", expected_negative_program_pass=False),
+            _candidate(
+                candidate_key="c2",
+                parent_id="1",
+                parent_uid="s::1",
+                candidate_child_uid="s::1::candidate_1",
+                max_donor_fraction=0.8,
+            ),
+            _candidate(
+                candidate_key="c3",
+                parent_id="2",
+                parent_uid="s::2",
+                candidate_child_uid="s::2::candidate_1",
+                incompatible_coexpression_fraction=0.6,
+            ),
+            _candidate(
+                candidate_key="c4",
+                parent_id="3",
+                parent_uid="s::3",
+                candidate_child_uid="s::3::candidate_1",
+                expected_negative_program_pass=False,
+            ),
         ]
     )
     children = evaluate_candidate_evidence.evaluate_candidates(config, evidence)

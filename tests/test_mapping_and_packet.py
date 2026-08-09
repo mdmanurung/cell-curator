@@ -7,9 +7,8 @@ import pandas as pd
 import pytest
 import yaml
 
-import build_review_packet
-import validate_final_mapping
-from contracts import ContractError, atomic_write_text, sha256
+from cell_curator import build_review_packet, validate_final_mapping
+from cell_curator.contracts import ContractError, atomic_write_text, sha256
 
 
 def _mapping_inputs():
@@ -21,7 +20,11 @@ def _mapping_inputs():
             "scope": ["s", "s", "s"],
             "candidate_key": ["pass1", "fail", "pass2"],
             "parent_id": ["0", "0", "0"],
-            "candidate_child_uid": ["s::0::candidate_1", "s::0::candidate_2", "s::0::candidate_3"],
+            "candidate_child_uid": [
+                "s::0::candidate_1",
+                "s::0::candidate_2",
+                "s::0::candidate_3",
+            ],
         }
     )
     memberships = []
@@ -29,8 +32,13 @@ def _mapping_inputs():
     for candidate, members in selected.items():
         for barcode in list("abcdef"):
             memberships.append(
-                {"scope": "s", "candidate_key": candidate, "parent_id": "0", "barcode": barcode,
-                 "candidate_membership": barcode in members}
+                {
+                    "scope": "s",
+                    "candidate_key": candidate,
+                    "parent_id": "0",
+                    "barcode": barcode,
+                    "candidate_membership": barcode in members,
+                }
             )
     membership = pd.DataFrame(memberships)
     decisions = pd.DataFrame(
@@ -86,7 +94,7 @@ def _minimal_packet_run(root: Path, config: dict, *, label: str = "") -> None:
     state = {
         "mode": config["run"]["mode"],
         "gate_a_approved": False,
-        "knowledgebase_available": False,
+        "local_grounding_available": False,
         "critic_reconciled": True,
         "human_approval": False,
     }
@@ -104,15 +112,20 @@ def _minimal_packet_run(root: Path, config: dict, *, label: str = "") -> None:
     generic = pd.DataFrame({"scope": ["s"], "parent_id": ["0"]})
     generic.to_csv(root / "adaptive_parent_audit.tsv", sep="\t", index=False)
     registry = pd.DataFrame(
-        {"scope": ["s"], "candidate_key": ["c"], "parent_id": ["0"],
-         "biological_label_L1": [label], "cl_id": [""]}
+        {
+            "scope": ["s"],
+            "candidate_key": ["c"],
+            "parent_id": ["0"],
+            "biological_label_L1": [label],
+            "cl_id": [""],
+        }
     )
     registry_path = root / "discovery/candidate_registry.tsv"
     registry_path.parent.mkdir(parents=True, exist_ok=True)
     registry.to_csv(registry_path, sep="\t", index=False)
-    pd.DataFrame({"scope": ["s"], "parent_id": ["0"], "triage_action": ["FULL_TESTING"]}).to_csv(
-        root / "discovery/parent_triage.tsv", sep="\t", index=False
-    )
+    pd.DataFrame(
+        {"scope": ["s"], "parent_id": ["0"], "triage_action": ["FULL_TESTING"]}
+    ).to_csv(root / "discovery/parent_triage.tsv", sep="\t", index=False)
     (root / "contrasts").mkdir(parents=True, exist_ok=True)
     pd.DataFrame({"lane_id": ["x"]}).to_csv(
         root / "contrasts/comparator_manifest.tsv", sep="\t", index=False
@@ -123,9 +136,9 @@ def _minimal_packet_run(root: Path, config: dict, *, label: str = "") -> None:
         "annotation_review_template.tsv",
     ):
         path = root / relative
-        pd.DataFrame({"scope": ["s"], "parent_id": ["0"], "biological_label_L1": [label], "cl_id": [""]}).to_csv(
-            path, sep="\t", index=False
-        )
+        pd.DataFrame(
+            {"scope": ["s"], "parent_id": ["0"], "biological_label_L1": [label], "cl_id": [""]}
+        ).to_csv(path, sep="\t", index=False)
     pd.DataFrame({"barcode": ["a"], "leaf_id": ["s::0"]}).to_csv(
         root / "parent_child_mapping.tsv", sep="\t", index=False
     )
@@ -154,7 +167,10 @@ def test_evidence_only_packet_prohibits_labels_and_preserves_sources(
 
     assert (packet / "review_packet.manifest.json").is_file()
     assert sha256(run / "input_contract.manifest.json") == input_hash
-    assert json.loads((packet / "review_packet.manifest.json").read_text())["writeback_permitted"] is False
+    assert (
+        json.loads((packet / "review_packet.manifest.json").read_text())["writeback_permitted"]
+        is False
+    )
     packet_hash = sha256(packet / "review_packet.manifest.json")
     with pytest.raises(ContractError, match="overwrite"):
         build_review_packet.build_packet(config_path, run)

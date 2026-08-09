@@ -6,10 +6,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-import build_candidate_contrasts
-import rank_markers_gpu
-import validate_gpu_receipts
-from contracts import ContractError, sha256
+from cell_curator import build_candidate_contrasts, rank_markers_gpu, validate_gpu_receipts
+from cell_curator.contracts import ContractError, sha256
 
 
 def _inputs():
@@ -151,9 +149,7 @@ def _write_receipt(root: Path, lane: pd.Series) -> None:
     (lane_dir / "receipt.json").write_text(json.dumps(receipt))
 
 
-def test_receipts_required_only_for_rapids_lanes(
-    tmp_path: Path, config: dict
-) -> None:
+def test_receipts_required_only_for_rapids_lanes(tmp_path: Path, config: dict) -> None:
     _add_atac_plugin_lane(config)
     cells, registry, membership = _inputs()
     lanes = build_candidate_contrasts.build_contrasts(

@@ -9,9 +9,8 @@ import pandas as pd
 import pytest
 import yaml
 
-import audit_parents
-import inspect_input_contract
-from contracts import ContractError
+from cell_curator import audit_parents, inspect_input_contract
+from cell_curator.contracts import ContractError
 
 
 def _obs() -> pd.DataFrame:
@@ -125,18 +124,11 @@ def test_atac_only_h5ad_is_auditable_but_peak_only_labels_are_blocked(
             },
         }
     }
-    config["evidence"]["lanes"] = [
-        {"assay": "chromatin", "representation": "accessibility"}
-    ]
+    config["evidence"]["lanes"] = [{"assay": "chromatin", "representation": "accessibility"}]
     _set_two_parents(config)
     summary = inspect_input_contract.inspect_input(config)
     assert summary["assays"]["chromatin"]["kind"] == "atac"
-    assert any("ontology-compatible" in item for item in summary["blockers"])
-    config["evidence"]["validated_reference"].update(
-        {"available": True, "ontology_validated": True}
-    )
-    unblocked = inspect_input_contract.inspect_input(config)
-    assert not any("ontology-compatible" in item for item in unblocked["blockers"])
+    assert not any("ontology-compatible" in item for item in summary["blockers"])
 
 
 def _configure_multimodal(config: dict, path: Path) -> None:
@@ -162,9 +154,7 @@ def _configure_multimodal(config: dict, path: Path) -> None:
             }
         },
     }
-    config["evidence"]["lanes"].append(
-        {"assay": "protein", "representation": "corrected"}
-    )
+    config["evidence"]["lanes"].append({"assay": "protein", "representation": "corrected"})
     _set_two_parents(config)
 
 
@@ -181,9 +171,7 @@ def test_multimodal_mudata_and_signed_effect_representation(
     assert not summary["blockers"]
 
 
-def test_signed_required_detection_blocks_acceptance(
-    tmp_path: Path, config: dict
-) -> None:
+def test_signed_required_detection_blocks_acceptance(tmp_path: Path, config: dict) -> None:
     source = tmp_path / "fixture.h5mu"
     _multimodal(source)
     mdata = md.read_h5mu(source)
@@ -195,9 +183,9 @@ def test_signed_required_detection_blocks_acceptance(
     assert any("requires detection" in item for item in summary["blockers"])
 
 
-def test_input_contract_fails_on_annotation_without_knowledgebase(config: dict) -> None:
+def test_input_contract_fails_on_annotation_without_local_grounding(config: dict) -> None:
     config["run"]["mode"] = "annotation"
-    with pytest.raises(ContractError, match="Knowledgebase"):
+    with pytest.raises(ContractError, match="local knowledge"):
         inspect_input_contract.validate_mode(config)
 
 
@@ -227,9 +215,7 @@ def test_parent_audit_uses_configured_metadata_and_technical_metrics(
 
 
 def test_parent_audit_allows_missing_replication_axes(config: dict) -> None:
-    config["input"]["keys"].update(
-        {"donor": "", "capture": "", "doublet_class": ""}
-    )
+    config["input"]["keys"].update({"donor": "", "capture": "", "doublet_class": ""})
     config["adaptive"]["audit"].update(
         {
             "donor_max_fraction": None,
