@@ -3,15 +3,13 @@
 
 from __future__ import annotations
 
-import argparse
 import math
-from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from .contracts import ContractError, atomic_write_tsv, read_config, require_columns
+from .contracts import ContractError, require_columns
 
 
 def normalized_entropy(values: pd.Series) -> float:
@@ -203,25 +201,3 @@ def build_audit(config: dict, cells: pd.DataFrame) -> pd.DataFrame:
     if result["parent_uid"].duplicated().any():
         raise ContractError("parent audit is not one row per canonical parent")
     return result.sort_values(["scope", "parent_id"], ignore_index=True)
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", required=True, type=Path)
-    parser.add_argument("--cells", required=True, type=Path)
-    parser.add_argument("--output", required=True, type=Path)
-    return parser.parse_args()
-
-
-def main() -> None:
-    args = parse_args()
-    try:
-        config = read_config(args.config)
-        cells = pd.read_csv(args.cells, sep="\t")
-        atomic_write_tsv(args.output, build_audit(config, cells))
-    except ContractError as exc:
-        raise SystemExit(str(exc)) from exc
-
-
-if __name__ == "__main__":
-    main()

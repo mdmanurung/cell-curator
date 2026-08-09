@@ -12,8 +12,8 @@ from scipy import sparse
 
 from .capabilities import build_capability_registry
 from .config import CellCuratorConfig
-from .contracts import ContractError, sha256, values_sha256
-from .evidence import lane_key
+from .contracts import ContractError, as_bool, sha256, values_sha256
+from .evidence import lane_key, validate_backend_receipt
 from .models import BackendReceipt, CapabilityLevel, MarkerProgram, ParentOutcome
 from .provenance import atomic_publish, publish_json
 
@@ -75,6 +75,9 @@ def build_comparator_manifest(
     membership = pd.read_csv(
         run_root / "discovery" / "candidate_membership.tsv", sep="\t", keep_default_na=False
     )
+    # Snakemake declares this directory as a checkpoint output. It must exist
+    # even when every parent is retained and there are zero candidate lanes.
+    (run_root / "comparators" / "groups").mkdir(parents=True, exist_ok=True)
     member_sets = {
         str(candidate): set(
             block.loc[
@@ -270,6 +273,7 @@ def derive_candidate_evidence(
                     raise ContractError(
                         f"candidate evidence receipt failed validation: {lane_id}"
                     )
+                validate_backend_receipt(receipt, capability)
                 scored = pd.read_csv(evidence_path, sep="\t", keep_default_na=False)
                 markers = pd.read_csv(markers_path, sep="\t", keep_default_na=False)
                 comparison = json.loads(comparison_path.read_text())
@@ -296,19 +300,42 @@ def derive_candidate_evidence(
                     .eq("cell_state")
                 ].sort_values(["score", "label"], ascending=[False, True])
                 marker_target = markers[markers["cluster_id"].astype(str).eq("candidate")]
-                marker_significant = (
-                    bool(
+                if marker_target.empty:
+                    marker_significant = False
+                elif capability.requires_gpu:
+                    if "method" not in marker_target:
+                        raise ContractError(f"RAPIDS marker table lacks method rows: {lane_id}")
+                    wilcoxon = marker_target[
+                        marker_target["method"].astype(str).eq("wilcoxon")
+                        & (pd.to_numeric(marker_target["effect"], errors="coerce") > 0)
+                        & (
+                            pd.to_numeric(
+                                marker_target["adjusted_pvalue"], errors="coerce"
+                            )
+                            <= config.evidence.adjusted_pvalue_max
+                        )
+                    ]
+                    logreg = marker_target[
+                        marker_target["method"].astype(str).eq("logreg")
+                        & (pd.to_numeric(marker_target["effect"], errors="coerce") > 0)
+                    ]
+                    marker_significant = bool(
+                        set(wilcoxon["feature"].astype(str)).intersection(
+                            logreg["feature"].astype(str)
+                        )
+                    )
+                else:
+                    marker_significant = bool(
                         (
                             (pd.to_numeric(marker_target["effect"], errors="coerce") > 0)
                             & (
-                                pd.to_numeric(marker_target["adjusted_pvalue"], errors="coerce")
+                                pd.to_numeric(
+                                    marker_target["adjusted_pvalue"], errors="coerce"
+                                )
                                 <= config.evidence.adjusted_pvalue_max
                             )
                         ).any()
                     )
-                    if not marker_target.empty
-                    else False
-                )
                 separation = float(comparison["separation"])
                 if target.empty:
                     winner = cl_id = ""
@@ -320,9 +347,13 @@ def derive_candidate_evidence(
                     cl_id = str(best["cl_id"])
                     coverage = float(best["positive_coverage"])
                     violation = float(best["negative_violation"])
+                    program_coverage = float(best["program_coverage"])
+                    detection_valid = as_bool(best["detection_valid"])
                     passed = bool(
                         marker_significant
                         and separation >= 0.1
+                        and detection_valid
+                        and program_coverage >= config.evidence.min_positive_coverage
                         and coverage >= config.evidence.min_positive_coverage
                         and violation <= config.evidence.max_negative_violation
                     )
@@ -343,6 +374,10 @@ def derive_candidate_evidence(
                         "cl_id": cl_id,
                         "separation": separation,
                         "positive_coverage": coverage,
+                        "program_coverage": (
+                            program_coverage if not target.empty else 0.0
+                        ),
+                        "detection_valid": detection_valid if not target.empty else False,
                         "negative_violation": violation,
                         "marker_significant": marker_significant,
                         "receipt_sha256": sha256(receipt_path),
@@ -360,16 +395,26 @@ def derive_candidate_evidence(
         )
         gate_values = {
             "stability_pass": stability_pass,
-            "candidate_vs_parent_remainder_pass": all(role_results.get("parent_remainder", [])),
-            "candidate_vs_closest_sibling_pass": all(role_results.get("closest_sibling", [])),
+            "candidate_vs_parent_remainder_pass": bool(
+                role_results.get("parent_remainder")
+            )
+            and all(role_results["parent_remainder"]),
+            "candidate_vs_closest_sibling_pass": bool(
+                role_results.get("closest_sibling")
+            )
+            and all(role_results["closest_sibling"]),
             "positive_program_pass": any(
-                item["positive_coverage"] >= config.evidence.min_positive_coverage
+                item["detection_valid"]
+                and item["program_coverage"] >= config.evidence.min_positive_coverage
+                and item["positive_coverage"] >= config.evidence.min_positive_coverage
                 for item in lane_rows
             ),
             "expected_negative_program_pass": all(
-                item["negative_violation"] <= config.evidence.max_negative_violation
+                item["detection_valid"]
+                and item["negative_violation"] <= config.evidence.max_negative_violation
                 for item in lane_rows
-            ),
+            )
+            and bool(lane_rows),
             "cell_level_separation_pass": all(item["separation"] >= 0.1 for item in lane_rows),
             "source_corroboration_pass": bool(winners),
             "technical_confounding_pass": technical_pass,

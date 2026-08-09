@@ -410,6 +410,41 @@ def matrix_for(adata: Any, declaration: RepresentationConfig | dict[str, Any]) -
     return adata.layers[key]
 
 
+def feature_ids_for(
+    adata: Any,
+    feature_id_column: str,
+    *,
+    declaration: Any,
+    gene_mapping_path: str | Path = "",
+) -> pd.Index:
+    """Return feature IDs from the same axis as a declared matrix source."""
+
+    source = str(_declaration_value(declaration, "source")).lower()
+    holder = adata.raw if source == "raw" else adata
+    if holder is None:
+        raise ContractError("declared .raw representation is absent")
+    if gene_mapping_path:
+        identifiers = gene_symbols(holder, mapping=gene_mapping_path)
+    elif feature_id_column:
+        if feature_id_column not in holder.var:
+            raise ContractError(
+                f"feature ID column is absent from {source} feature axis: {feature_id_column}"
+            )
+        identifiers = pd.Index(holder.var[feature_id_column].astype(str))
+        if holder.var[feature_id_column].isna().any() or (
+            identifiers.str.strip() == ""
+        ).any():
+            raise ContractError("feature IDs contain missing or blank values")
+    else:
+        identifiers = pd.Index(holder.var_names.astype(str))
+        if (identifiers.str.strip() == "").any():
+            raise ContractError("feature names contain blank values")
+    if identifiers.has_duplicates:
+        duplicates = sorted(identifiers[identifiers.duplicated()].unique())[:5]
+        raise ContractError(f"feature IDs are not unique: {duplicates}")
+    return identifiers
+
+
 def dense(matrix: Any) -> np.ndarray:
     return matrix.toarray() if sparse.issparse(matrix) else np.asarray(matrix)
 
@@ -701,6 +736,54 @@ def _obsm_inventory(obj: Any) -> dict[str, list[int]]:
     return {str(key): [int(item) for item in value.shape] for key, value in obj.obsm.items()}
 
 
+def resolve_obsm(
+    loaded: LoadedInput,
+    key: str,
+    *,
+    preferred_assay: str = "",
+) -> tuple[np.ndarray, pd.Index, str]:
+    """Resolve one declared observation matrix to a single concrete source.
+
+    Root-level MuData coordinates are authoritative.  Otherwise a preferred
+    assay may bind the key; without one, the key must occur in exactly one
+    declared assay so inspection and downstream consumers cannot silently use
+    different matrices with the same name.
+    """
+
+    if not key:
+        raise ContractError("obsm key must not be blank")
+    if key in loaded.root.obsm:
+        return (
+            np.asarray(loaded.root.obsm[key]),
+            loaded.root.obs_names.astype(str),
+            "root",
+        )
+    if preferred_assay:
+        preferred = loaded.assays.get(preferred_assay)
+        if preferred is None:
+            raise ContractError(f"preferred assay is not declared: {preferred_assay}")
+        if key in preferred.obsm:
+            return (
+                np.asarray(preferred.obsm[key]),
+                preferred.obs_names.astype(str),
+                f"assay:{preferred_assay}",
+            )
+    matches = [
+        (assay_id, adata)
+        for assay_id, adata in loaded.assays.items()
+        if key in adata.obsm
+    ]
+    if not matches:
+        raise ContractError(f"declared observation matrix is absent: {key}")
+    if len(matches) != 1:
+        raise ContractError(
+            f"declared observation matrix is ambiguous across assays: {key}; "
+            f"matches={sorted(assay_id for assay_id, _ in matches)}"
+        )
+    assay_id, adata = matches[0]
+    return np.asarray(adata.obsm[key]), adata.obs_names.astype(str), f"assay:{assay_id}"
+
+
 def _obs_frame(loaded: LoadedInput, config: CellCuratorConfig) -> pd.DataFrame:
     obs = loaded.root.obs.copy()
     keys = config.input.keys
@@ -886,28 +969,37 @@ def inspect(config: CellCuratorConfig) -> dict[str, Any]:
                     ),
                 },
             }
-        if config.input.keys.embedding and config.input.keys.embedding not in available_obsm:
-            raise ContractError(
-                f"declared frozen embedding is absent: {config.input.keys.embedding}"
-            )
+        resolved_obsm: dict[str, dict[str, Any]] = {}
         if config.input.keys.embedding:
-            embedding_shape = available_obsm[config.input.keys.embedding]
+            embedding, barcodes, source = resolve_obsm(
+                loaded, config.input.keys.embedding
+            )
+            embedding_shape = list(embedding.shape)
             if (
                 embedding_shape[0] != len(obs)
                 or len(embedding_shape) != 2
                 or embedding_shape[1] < 2
             ):
                 raise ContractError("declared embedding must be a cells-by-at-least-two matrix")
-        if config.input.keys.spatial and config.input.keys.spatial not in available_obsm:
-            raise ContractError(
-                f"declared spatial coordinate representation is absent: {config.input.keys.spatial}"
-            )
+            if list(barcodes) != root_barcodes:
+                raise ContractError("declared embedding barcode order differs from root")
+            resolved_obsm[config.input.keys.embedding] = {
+                "shape": embedding_shape,
+                "source": source,
+            }
         if config.input.keys.spatial:
-            spatial_shape = available_obsm[config.input.keys.spatial]
+            spatial, barcodes, source = resolve_obsm(loaded, config.input.keys.spatial)
+            spatial_shape = list(spatial.shape)
             if spatial_shape[0] != len(obs) or len(spatial_shape) != 2 or spatial_shape[1] < 2:
                 raise ContractError(
                     "declared spatial coordinates must be cells-by-at-least-two"
                 )
+            if list(barcodes) != root_barcodes:
+                raise ContractError("declared spatial-coordinate barcode order differs from root")
+            resolved_obsm[config.input.keys.spatial] = {
+                "shape": spatial_shape,
+                "source": source,
+            }
         guidance = getattr(config, "guidance", None)
         context = getattr(guidance, "context", None)
         visualization_key = str(
@@ -915,8 +1007,16 @@ def inspect(config: CellCuratorConfig) -> dict[str, Any]:
             or getattr(config.input.keys, "visualization", "")
             or ""
         )
-        if visualization_key and visualization_key not in available_obsm:
-            raise ContractError(f"declared visualization is absent: {visualization_key}")
+        if visualization_key:
+            visualization, barcodes, source = resolve_obsm(loaded, visualization_key)
+            if visualization.ndim != 2 or visualization.shape[0] != len(obs):
+                raise ContractError("declared visualization must be a cells-by-dimensions matrix")
+            if list(barcodes) != root_barcodes:
+                raise ContractError("declared visualization barcode order differs from root")
+            resolved_obsm[visualization_key] = {
+                "shape": list(visualization.shape),
+                "source": source,
+            }
         expected = sum(
             item.expected_parent_count for item in config.canonical_partitions.values()
         )
@@ -944,6 +1044,7 @@ def inspect(config: CellCuratorConfig) -> dict[str, Any]:
             "ordered_barcode_sha256": values_sha256(root_barcodes),
             "representations": {
                 "obsm": available_obsm,
+                "resolved_obsm": resolved_obsm,
                 "embedding": config.input.keys.embedding or None,
                 "visualization": visualization_key or None,
                 "spatial": config.input.keys.spatial or None,
@@ -1515,10 +1616,7 @@ def derive_closest_siblings(
     keys = config.input.keys
     embedding_key = keys.embedding
     if embedding_key:
-        candidate = next(iter(loaded.assays.values()))
-        if embedding_key not in candidate.obsm:
-            raise ContractError(f"declared embedding is absent: {embedding_key}")
-        embedding = np.asarray(candidate.obsm[embedding_key])
+        embedding, _, _ = resolve_obsm(loaded, embedding_key)
     else:
         candidate = next(iter(loaded.assays.values()))
         expression = dense(candidate.X)

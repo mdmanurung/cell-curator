@@ -7,10 +7,10 @@ import mudata as md
 import numpy as np
 import pandas as pd
 import pytest
-import yaml
 
-from cell_curator import audit_parents, inspect_input_contract
-from cell_curator.contracts import ContractError
+from cell_curator import audit_parents
+from cell_curator.config import CellCuratorConfig
+from cell_curator.data import inspect
 
 
 def _obs() -> pd.DataFrame:
@@ -80,14 +80,10 @@ def test_rna_only_h5ad_contract(tmp_path: Path, config: dict) -> None:
     config["input"]["path"] = str(source)
     config["input"]["keys"]["stored_resolutions"] = ["stored_1"]
     _set_two_parents(config)
-    config_path = tmp_path / "config.yaml"
-    config_path.write_text(yaml.safe_dump(config, sort_keys=False))
-
-    manifest = inspect_input_contract.run(config_path, tmp_path / "run")
-    assert set(manifest["input"]["assays"]) == {"transcriptome"}
-    assert manifest["input"]["assays"]["transcriptome"]["kind"] == "rna"
-    assert not any("ontology-compatible" in item for item in manifest["blockers"])
-    assert (tmp_path / "run/run_state.json").is_file()
+    manifest = inspect(CellCuratorConfig.model_validate(config))
+    assert set(manifest["assays"]) == {"transcriptome"}
+    assert manifest["assays"]["transcriptome"]["kind"] == "rna"
+    assert not manifest["blockers"]
 
 
 def test_atac_only_h5ad_is_auditable_but_peak_only_labels_are_blocked(
@@ -125,8 +121,10 @@ def test_atac_only_h5ad_is_auditable_but_peak_only_labels_are_blocked(
         }
     }
     config["evidence"]["lanes"] = [{"assay": "chromatin", "representation": "accessibility"}]
+    config["input"]["keys"]["embedding"] = ""
+    config["guidance"]["context"]["visualization_key"] = ""
     _set_two_parents(config)
-    summary = inspect_input_contract.inspect_input(config)
+    summary = inspect(CellCuratorConfig.model_validate(config))
     assert summary["assays"]["chromatin"]["kind"] == "atac"
     assert not any("ontology-compatible" in item for item in summary["blockers"])
 
@@ -164,7 +162,7 @@ def test_multimodal_mudata_and_signed_effect_representation(
     source = tmp_path / "fixture.h5mu"
     _multimodal(source)
     _configure_multimodal(config, source)
-    summary = inspect_input_contract.inspect_input(config)
+    summary = inspect(CellCuratorConfig.model_validate(config))
     assert set(summary["assays"]) == {"transcriptome", "protein"}
     protein = summary["assays"]["protein"]["representations"]["corrected"]
     assert protein["detection"]["nonnegative"] is True
@@ -179,14 +177,14 @@ def test_signed_required_detection_blocks_acceptance(tmp_path: Path, config: dic
     broken = tmp_path / "broken.h5mu"
     mdata.write(broken)
     _configure_multimodal(config, broken)
-    summary = inspect_input_contract.inspect_input(config)
-    assert any("requires detection" in item for item in summary["blockers"])
+    summary = inspect(CellCuratorConfig.model_validate(config))
+    assert any("requires a nonnegative detection" in item for item in summary["blockers"])
 
 
 def test_input_contract_fails_on_annotation_without_local_grounding(config: dict) -> None:
     config["run"]["mode"] = "annotation"
-    with pytest.raises(ContractError, match="local knowledge"):
-        inspect_input_contract.validate_mode(config)
+    with pytest.raises(ValueError, match="local marker"):
+        CellCuratorConfig.model_validate(config)
 
 
 def test_parent_audit_uses_configured_metadata_and_technical_metrics(

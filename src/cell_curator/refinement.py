@@ -13,8 +13,8 @@ import pandas as pd
 from scipy.spatial import cKDTree
 
 from .config import CellCuratorConfig
-from .contracts import ContractError, values_sha256
-from .data import LoadedInput, close_input, dense, load_input
+from .contracts import ContractError, safe_path_component, values_sha256
+from .data import LoadedInput, close_input, dense, load_input, resolve_obsm
 from .provenance import atomic_publish, publish_json
 
 
@@ -249,6 +249,69 @@ class PartitionEvaluation:
     eligible: bool
     technical_dominated: bool
     gradient_like: bool
+    eligible_children: tuple[int, ...] | None = None
+
+
+def _candidate_eligibility(
+    *,
+    obs: pd.DataFrame,
+    parent_obs: pd.DataFrame,
+    selected: PartitionEvaluation,
+    child: int,
+    config: CellCuratorConfig,
+    scope: str,
+    parent: str,
+) -> dict[str, Any]:
+    """Evaluate the configured child-level purity, fraction, and replication gates."""
+
+    mask = selected.labels == child
+    fraction = float(mask.mean())
+    keys = config.input.keys
+    donor_key = keys.donor
+    capture_key = keys.capture
+    n_donors = (
+        int(parent_obs.loc[mask, donor_key].astype(str).nunique())
+        if donor_key and donor_key in parent_obs
+        else 0
+    )
+    n_captures = (
+        int(parent_obs.loc[mask, capture_key].astype(str).nunique())
+        if capture_key and capture_key in parent_obs
+        else 0
+    )
+    purity = 1.0
+    raw_child = str(child)
+    failures: list[str] = []
+    if selected.source == "stored_resolution":
+        raw = parent_obs[selected.resolution].astype(str)
+        categories = pd.Categorical(raw)
+        raw_child = str(categories.categories[child])
+        scoped = obs[obs[keys.scope].astype(str).eq(scope)]
+        all_matching = scoped[selected.resolution].astype(str).eq(raw_child)
+        matching_parent = all_matching & scoped[keys.canonical_parent].astype(str).eq(parent)
+        purity = float(matching_parent.sum() / all_matching.sum()) if all_matching.any() else 0.0
+        stored = config.adaptive.stored_candidates
+        if purity < stored.min_parent_purity:
+            failures.append("min_parent_purity")
+        if fraction < stored.min_parent_fraction:
+            failures.append("min_parent_fraction")
+        if fraction > stored.max_parent_fraction:
+            failures.append("max_parent_fraction")
+    eligibility = config.adaptive.eligibility
+    if eligibility.min_donors is not None and n_donors < eligibility.min_donors:
+        failures.append("min_donors")
+    if eligibility.min_captures is not None and n_captures < eligibility.min_captures:
+        failures.append("min_captures")
+    return {
+        "child": int(child),
+        "source_child_id": raw_child,
+        "parent_purity": purity,
+        "parent_fraction": fraction,
+        "n_donors": n_donors,
+        "n_captures": n_captures,
+        "eligible": not failures,
+        "failures": tuple(failures),
+    }
 
 
 def _technical_effect(
@@ -323,12 +386,11 @@ def evaluate_local_partitions(
 
 
 def _embedding(loaded: LoadedInput, config: CellCuratorConfig) -> np.ndarray:
-    adata = next(iter(loaded.assays.values()))
     key = config.input.keys.embedding
     if key:
-        if key not in adata.obsm:
-            raise ContractError(f"declared refinement embedding is absent: {key}")
-        return np.asarray(adata.obsm[key])
+        embedding, _, _ = resolve_obsm(loaded, key)
+        return embedding
+    adata = next(iter(loaded.assays.values()))
     matrix = dense(adata.X)
     centered = matrix - matrix.mean(axis=0)
     u, singular, _ = np.linalg.svd(centered, full_matrices=False)
@@ -347,7 +409,8 @@ def _stored_evaluation(
     threshold = config.adaptive.stored_candidates.adjacent_jaccard_min
     minimum_matches = config.adaptive.stored_candidates.min_adjacent_matches
     previous: dict[str, set[str]] | None = None
-    persistence: dict[tuple[str, str], int] = {}
+    previous_persistence: dict[str, int] = {}
+    persistence_by_key: dict[str, dict[str, int]] = {}
     for key in keys:
         current = {
             str(label): set(
@@ -356,48 +419,55 @@ def _stored_evaluation(
             for label in sorted(parent_obs[key].astype(str).unique())
         }
         if previous is not None:
+            current_persistence: dict[str, int] = {}
             for left, right, _ in mutual_best_matches(previous, current, threshold=threshold):
-                persistence[(key, right)] = max(
-                    persistence.get((key, right), 0),
-                    max(
-                        (
-                            value
-                            for (stored_key, child), value in persistence.items()
-                            if child == left
-                        ),
-                        default=0,
-                    )
-                    + 1,
+                current_persistence[right] = max(
+                    current_persistence.get(right, 0),
+                    previous_persistence.get(left, 0) + 1,
                 )
+            persistence_by_key[key] = current_persistence
+            previous_persistence = current_persistence
         previous = current
     for key in keys:
-        labels = parent_obs[key].astype(str).to_numpy()
-        counts = pd.Series(labels).value_counts()
-        persistent = sum(
-            1
+        raw_labels = parent_obs[key].astype(str)
+        counts = raw_labels.value_counts()
+        persistent_labels = sorted(
+            str(label)
             for label in counts.index
-            if persistence.get((key, str(label)), 0) >= minimum_matches
+            if persistence_by_key.get(key, {}).get(str(label), 0) >= minimum_matches
         )
-        if persistent < 2:
+        if len(persistent_labels) < 2:
             continue
-        encoded = pd.Categorical(labels).codes
-        separation = discrete_separation(embedding, encoded)
-        technical = _technical_effect(encoded, parent_obs, config)
+        categorical = pd.Categorical(raw_labels)
+        encoded = categorical.codes
+        eligible_children = tuple(
+            int(categorical.categories.get_loc(label)) for label in persistent_labels
+        )
+        persistent_mask = raw_labels.isin(persistent_labels).to_numpy()
+        persistent_codes = encoded[persistent_mask]
+        separation = discrete_separation(embedding[persistent_mask], persistent_codes)
+        technical = _technical_effect(
+            persistent_codes,
+            parent_obs.iloc[np.flatnonzero(persistent_mask)],
+            config,
+        )
+        persistent_counts = counts.loc[persistent_labels]
         limit = config.adaptive.audit.technical_effect_size_max
         return PartitionEvaluation(
             source="stored_resolution",
             resolution=key,
             labels=encoded,
-            n_clusters=int(counts.size),
-            minimum_cluster_size=int(counts.min()),
+            n_clusters=len(eligible_children),
+            minimum_cluster_size=int(persistent_counts.min()),
             stability=1.0,
             stability_metric="adjacent_jaccard",
             separation=separation,
             technical_effect_size=technical,
             stable=True,
-            eligible=int(counts.min()) >= config.adaptive.eligibility.min_cells,
+            eligible=int(persistent_counts.min()) >= config.adaptive.eligibility.min_cells,
             technical_dominated=limit is not None and technical >= limit,
             gradient_like=separation < 0.1,
+            eligible_children=eligible_children,
         )
     return None
 
@@ -447,7 +517,7 @@ def discover_refinement_candidates(
                     else []
                 )
             )
-            selected = next(
+            provisional_selected = next(
                 (
                     item
                     for item in evaluations
@@ -459,6 +529,31 @@ def discover_refinement_candidates(
                 ),
                 None,
             )
+            selected = provisional_selected
+            selected_metrics: dict[int, dict[str, Any]] = {}
+            eligibility_failures: list[str] = []
+            if selected is not None:
+                candidate_children = (
+                    selected.eligible_children
+                    if selected.eligible_children is not None
+                    else tuple(map(int, sorted(np.unique(selected.labels))))
+                )
+                for child in candidate_children:
+                    metrics = _candidate_eligibility(
+                        obs=obs,
+                        parent_obs=parent_obs,
+                        selected=selected,
+                        child=int(child),
+                        config=config,
+                        scope=str(scope),
+                        parent=str(parent),
+                    )
+                    selected_metrics[int(child)] = metrics
+                    eligibility_failures.extend(
+                        f"child={child}:{failure}" for failure in metrics["failures"]
+                    )
+                if eligibility_failures:
+                    selected = None
             for item in evaluations:
                 if item is None:
                     continue
@@ -479,18 +574,30 @@ def discover_refinement_candidates(
                         "technical_dominated": item.technical_dominated,
                         "gradient_like": item.gradient_like,
                         "action": "SELECTED_FOR_EVIDENCE" if item is selected else "REJECTED",
+                        "eligibility_failures": (
+                            ";".join(sorted(eligibility_failures))
+                            if item is provisional_selected
+                            else ""
+                        ),
                     }
                 )
             if selected is None:
                 continue
-            cluster_ids = sorted(np.unique(selected.labels))
+            cluster_ids = list(
+                selected.eligible_children
+                if selected.eligible_children is not None
+                else tuple(map(int, sorted(np.unique(selected.labels))))
+            )
             centroids = {
                 child: parent_embedding[selected.labels == child].mean(axis=0)
                 for child in cluster_ids
             }
             for child in cluster_ids:
                 mask = selected.labels == child
-                candidate_key = f"{scope}__p{parent}__c{child}"
+                child_metrics = selected_metrics[int(child)]
+                candidate_key = (
+                    f"{safe_path_component(scope)}__p{safe_path_component(parent)}__c{child}"
+                )
                 closest = min(
                     (other for other in cluster_ids if other != child),
                     key=lambda other: (
@@ -513,7 +620,16 @@ def discover_refinement_candidates(
                         "stability_score": selected.stability,
                         "separation_score": selected.separation,
                         "technical_effect_size": selected.technical_effect_size,
-                        "closest_sibling": f"{scope}__p{parent}__c{closest}",
+                        "source_child_id": child_metrics["source_child_id"],
+                        "parent_purity": child_metrics["parent_purity"],
+                        "parent_fraction": child_metrics["parent_fraction"],
+                        "n_donors": child_metrics["n_donors"],
+                        "n_captures": child_metrics["n_captures"],
+                        "eligibility_counts_pass": child_metrics["eligible"],
+                        "closest_sibling": (
+                            f"{safe_path_component(scope)}__p{safe_path_component(parent)}"
+                            f"__c{closest}"
+                        ),
                         "membership_sha256": values_sha256(sorted(members)),
                         "triage_action": "FULL_EVIDENCE_TESTING",
                         "cell_type": "",
@@ -548,6 +664,12 @@ def discover_refinement_candidates(
                 "stability_score",
                 "separation_score",
                 "technical_effect_size",
+                "source_child_id",
+                "parent_purity",
+                "parent_fraction",
+                "n_donors",
+                "n_captures",
+                "eligibility_counts_pass",
                 "closest_sibling",
                 "membership_sha256",
                 "triage_action",
@@ -584,6 +706,7 @@ def discover_refinement_candidates(
                 "technical_dominated",
                 "gradient_like",
                 "action",
+                "eligibility_failures",
             ],
         )
     finally:

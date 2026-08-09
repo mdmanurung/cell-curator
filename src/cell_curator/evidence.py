@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import math
+import warnings
 from dataclasses import dataclass
 from itertools import combinations
 from pathlib import Path
@@ -15,8 +17,15 @@ from scipy.spatial import cKDTree
 
 from .capabilities import build_capability_registry
 from .config import CellCuratorConfig
-from .contracts import ContractError, sha256
-from .data import LoadedInput, close_input, load_input, matrix_for
+from .contracts import ContractError, as_bool, sha256
+from .data import (
+    LoadedInput,
+    close_input,
+    feature_ids_for,
+    load_input,
+    matrix_for,
+    resolve_obsm,
+)
 from .models import AnnotationDecision, Capability, CapabilityLevel, MarkerProgram
 from .provenance import make_receipt, publish_json
 
@@ -27,6 +36,34 @@ class LaneResult:
     evidence: pd.DataFrame
     bottom_up: pd.DataFrame
     receipt_path: Path
+
+
+def validate_backend_receipt(receipt: Any, capability: Capability) -> None:
+    """Enforce the common no-fallback contract and strict RAPIDS method receipt."""
+
+    if receipt.fallback_used or receipt.cpu_fallback_available or receipt.cpu_fallback_used:
+        raise ContractError("backend receipt records a prohibited CPU fallback")
+    if not capability.requires_gpu:
+        return
+    if set(receipt.marker_methods) != {"wilcoxon", "logreg"}:
+        raise ContractError("RAPIDS receipt must record native Wilcoxon and balanced logreg")
+    if receipt.convergence_validated is not True:
+        raise ContractError("RAPIDS receipt lacks successful logreg convergence validation")
+    required_runtime = {
+        "device_count",
+        "device_name",
+        "compute_capability",
+        "validated_gpu_contract",
+        "rapids_singlecell",
+        "rapids_distribution",
+        "cuda_major",
+        "cuda_runtime_version",
+        "cuda_driver_version",
+        "native_api",
+    }
+    missing = required_runtime.difference(receipt.runtime)
+    if missing or int(receipt.runtime.get("device_count", 0)) != 1:
+        raise ContractError(f"RAPIDS receipt runtime contract is incomplete: {sorted(missing)}")
 
 
 def lane_key(assay: str, representation: str, configured: str | None = None) -> str:
@@ -45,19 +82,6 @@ def benjamini_hochberg(pvalues: np.ndarray) -> np.ndarray:
     result = np.empty_like(adjusted)
     result[order] = np.clip(adjusted, 0.0, 1.0)
     return result
-
-
-def feature_ids(adata: Any, feature_id_column: str) -> pd.Index:
-    if feature_id_column:
-        if feature_id_column not in adata.var:
-            raise ContractError(f"feature ID column is absent: {feature_id_column}")
-        ids = pd.Index(adata.var[feature_id_column].astype(str))
-    else:
-        ids = pd.Index(adata.var_names.astype(str))
-    if ids.has_duplicates:
-        duplicates = sorted(ids[ids.duplicated()].unique())[:5]
-        raise ContractError(f"feature IDs are not unique: {duplicates}")
-    return ids
 
 
 def _matrix_rows(matrix: Any, mask: np.ndarray) -> np.ndarray:
@@ -89,10 +113,8 @@ def compute_bottom_up_markers(
         target_mean = np.asarray(target.mean(axis=0)).ravel()
         reference_mean = np.asarray(reference.mean(axis=0)).ravel()
         effect = target_mean - reference_mean
-        order = np.lexsort((features.astype(str).to_numpy(), -effect))
-        selected = order[: min(top_n, len(order))]
         pvalues = []
-        for column in selected:
+        for column in range(len(features)):
             try:
                 pvalue = stats.mannwhitneyu(
                     target[:, column],
@@ -104,6 +126,8 @@ def compute_bottom_up_markers(
                 pvalue = 1.0
             pvalues.append(float(pvalue))
         adjusted = benjamini_hochberg(np.asarray(pvalues))
+        order = np.lexsort((features.astype(str).to_numpy(), -effect))
+        selected = order[: min(top_n, len(order))]
         if detection is not None:
             target_detect = (_matrix_rows(detection, target_mask)[:, selected] > 0).mean(axis=0)
             reference_detect = (_matrix_rows(detection, reference_mask)[:, selected] > 0).mean(
@@ -113,7 +137,14 @@ def compute_bottom_up_markers(
             target_detect = np.full(len(selected), np.nan)
             reference_detect = np.full(len(selected), np.nan)
         for rank, (column, pvalue, padj, target_fraction, reference_fraction) in enumerate(
-            zip(selected, pvalues, adjusted, target_detect, reference_detect, strict=True),
+            zip(
+                selected,
+                np.asarray(pvalues)[selected],
+                adjusted[selected],
+                target_detect,
+                reference_detect,
+                strict=True,
+            ),
             1,
         ):
             rows.append(
@@ -155,15 +186,16 @@ def compute_gpu_bottom_up_markers(
     marker_config: dict[str, Any],
     top_n: int = 100,
 ) -> pd.DataFrame:
-    """Run the declared native RAPIDS ranker and attach descriptive group summaries."""
+    """Run native RAPIDS Wilcoxon and balanced logreg without a CPU fallback."""
 
     import anndata as ad
 
     categories = sorted(groups.astype(str).unique())
     if len(categories) < 2:
-        return compute_bottom_up_markers(
-            matrix, groups, features, detection=detection, top_n=top_n
-        ).iloc[0:0]
+        raise ContractError(
+            "RAPIDS marker evidence requires at least two observed groups; "
+            "no marker methods were executed"
+        )
     gpu_input = ad.AnnData(
         X=matrix.copy(),
         obs=pd.DataFrame(
@@ -173,7 +205,7 @@ def compute_gpu_bottom_up_markers(
         var=pd.DataFrame(index=features.astype(str)),
     )
     rsc.get.anndata_to_GPU(gpu_input)
-    key = "cell_curator_native_rapids_wilcoxon"
+    wilcoxon_key = "cell_curator_native_rapids_wilcoxon"
     rsc.tl.rank_genes_groups(
         gpu_input,
         groupby="cell_curator_group",
@@ -182,7 +214,7 @@ def compute_gpu_bottom_up_markers(
         n_genes=min(top_n, len(features)),
         rankby_abs=False,
         pts=True,
-        key_added=key,
+        key_added=wilcoxon_key,
         method="wilcoxon",
         corr_method="benjamini-hochberg",
         tie_correct=bool(marker_config["wilcoxon"]["tie_correct"]),
@@ -192,7 +224,39 @@ def compute_gpu_bottom_up_markers(
         chunk_size=int(marker_config["wilcoxon"]["chunk_size"]),
         multi_gpu=False,
     )
-    result = gpu_input.uns[key]
+    logreg_key = "cell_curator_native_rapids_logreg"
+    with warnings.catch_warnings(record=True) as observed_warnings:
+        warnings.simplefilter("always")
+        rsc.tl.rank_genes_groups(
+            gpu_input,
+            groupby="cell_curator_group",
+            groups=categories,
+            reference="rest",
+            n_genes=min(top_n, len(features)),
+            rankby_abs=False,
+            pts=True,
+            key_added=logreg_key,
+            method="logreg",
+            use_raw=False,
+            layer=None,
+            class_weight="balanced",
+            penalty="l2",
+            C=float(marker_config["logreg"]["C"]),
+            fit_intercept=True,
+            max_iter=int(marker_config["logreg"]["retry_max_iter"]),
+            tol=float(marker_config["logreg"]["tol"]),
+            solver="qn",
+        )
+    convergence_warnings = [
+        str(item.message)
+        for item in observed_warnings
+        if "converg" in str(item.message).casefold()
+    ]
+    if convergence_warnings:
+        raise ContractError(
+            "native RAPIDS logistic regression did not converge: "
+            + "; ".join(convergence_warnings)
+        )
     positions = {str(feature): index for index, feature in enumerate(features)}
     group_values = groups.astype(str).to_numpy()
     rows: list[dict[str, Any]] = []
@@ -203,47 +267,77 @@ def compute_gpu_bottom_up_markers(
         reference = _matrix_rows(matrix, reference_mask)
         target_mean = np.asarray(target.mean(axis=0)).ravel()
         reference_mean = np.asarray(reference.mean(axis=0)).ravel()
-        names = result["names"][cluster_id]
-        for rank, feature in enumerate(names, 1):
-            feature = str(feature)
-            column = positions[feature]
+        for method, key in (("wilcoxon", wilcoxon_key), ("logreg", logreg_key)):
+            result = gpu_input.uns[key]
+            names = result["names"][cluster_id]
+            for rank, feature in enumerate(names, 1):
+                feature = str(feature)
+                column = positions[feature]
 
-            def scalar(
-                field: str,
-                default: float = float("nan"),
-                *,
-                group: str = cluster_id,
-                row_rank: int = rank,
-            ) -> float:
-                value = result.get(field)
-                if value is None or group not in (value.dtype.names or ()):
-                    return default
-                return float(value[group][row_rank - 1])
+                def scalar(
+                    field: str,
+                    default: float = float("nan"),
+                    *,
+                    group: str = cluster_id,
+                    row_rank: int = rank,
+                    method_result: dict[str, Any] = result,
+                ) -> float:
+                    value = method_result.get(field)
+                    if value is None or group not in (value.dtype.names or ()):
+                        return default
+                    return float(value[group][row_rank - 1])
 
-            if detection is None:
-                target_fraction = reference_fraction = float("nan")
-            else:
-                target_fraction = float(
-                    (_matrix_rows(detection, target_mask)[:, column] > 0).mean()
+                if detection is None:
+                    target_fraction = reference_fraction = float("nan")
+                else:
+                    target_fraction = float(
+                        (_matrix_rows(detection, target_mask)[:, column] > 0).mean()
+                    )
+                    reference_fraction = float(
+                        (_matrix_rows(detection, reference_mask)[:, column] > 0).mean()
+                    )
+                rows.append(
+                    {
+                        "cluster_id": cluster_id,
+                        "method": method,
+                        "feature": feature,
+                        "rank": rank,
+                        "target_mean": float(target_mean[column]),
+                        "reference_mean": float(reference_mean[column]),
+                        "effect": (
+                            scalar("scores")
+                            if method == "logreg"
+                            else float(target_mean[column] - reference_mean[column])
+                        ),
+                        "pvalue": scalar("pvals") if method == "wilcoxon" else float("nan"),
+                        "adjusted_pvalue": (
+                            scalar("pvals_adj") if method == "wilcoxon" else float("nan")
+                        ),
+                        "target_fraction_detected": target_fraction,
+                        "reference_fraction_detected": reference_fraction,
+                    }
                 )
-                reference_fraction = float(
-                    (_matrix_rows(detection, reference_mask)[:, column] > 0).mean()
-                )
-            rows.append(
-                {
-                    "cluster_id": cluster_id,
-                    "feature": feature,
-                    "rank": rank,
-                    "target_mean": float(target_mean[column]),
-                    "reference_mean": float(reference_mean[column]),
-                    "effect": float(target_mean[column] - reference_mean[column]),
-                    "pvalue": scalar("pvals", 1.0),
-                    "adjusted_pvalue": scalar("pvals_adj", 1.0),
-                    "target_fraction_detected": target_fraction,
-                    "reference_fraction_detected": reference_fraction,
-                }
+    result = pd.DataFrame(rows)
+    positive_methods = {
+        (str(row.cluster_id), str(row.feature), str(row.method))
+        for row in result.itertuples(index=False)
+        if float(row.effect) > 0
+        and (
+            str(row.method) == "logreg"
+            or (
+                np.isfinite(float(row.adjusted_pvalue))
+                and float(row.adjusted_pvalue) <= 1.0
             )
-    return pd.DataFrame(rows)
+        )
+    }
+    result["method_concordant"] = [
+        all(
+            (str(row.cluster_id), str(row.feature), method) in positive_methods
+            for method in ("wilcoxon", "logreg")
+        )
+        for row in result.itertuples(index=False)
+    ]
+    return result
 
 
 def _group_summaries(
@@ -306,6 +400,7 @@ def score_marker_programs(
         missing_negative = tuple(item for item in program.negative if item not in positions)
         if not positive:
             continue
+        program_coverage = len(positive) / len(program.positive)
         for row_index, cluster_id in enumerate(cluster_ids):
             positive_signal = float(np.mean(standardized[row_index, positive]))
             negative_signal = (
@@ -317,21 +412,20 @@ def score_marker_programs(
                 positive_coverage = float(
                     np.mean(fractions[row_index, positive] >= positive_detection_threshold)
                 )
-                negative_violation = (
-                    float(
+                if missing_negative:
+                    negative_violation = float("nan")
+                elif negative:
+                    negative_violation = float(
                         np.mean(fractions[row_index, negative] >= positive_detection_threshold)
                     )
-                    if negative
-                    else 0.0
-                )
+                else:
+                    negative_violation = 0.0
             else:
-                # Signed or transformed representations can support relative effects but
-                # cannot manufacture detection fractions.
-                positive_coverage = float(np.mean(standardized[row_index, positive] > 0))
-                negative_violation = (
-                    float(np.mean(standardized[row_index, negative] > 0)) if negative else 0.0
-                )
-            score = positive_signal - negative_signal - negative_violation
+                positive_coverage = float("nan")
+                negative_violation = float("nan")
+            score = positive_signal - negative_signal - (
+                negative_violation if np.isfinite(negative_violation) else 0.0
+            )
             rows.append(
                 {
                     "schema_version": 3,
@@ -350,6 +444,7 @@ def score_marker_programs(
                     "negative_signal": negative_signal,
                     "positive_coverage": positive_coverage,
                     "negative_violation": negative_violation,
+                    "program_coverage": program_coverage,
                     "measured_positive": len(positive),
                     "total_positive": len(program.positive),
                     "measured_negative": len(negative),
@@ -377,6 +472,7 @@ def score_marker_programs(
         "negative_signal",
         "positive_coverage",
         "negative_violation",
+        "program_coverage",
         "measured_positive",
         "total_positive",
         "measured_negative",
@@ -415,6 +511,8 @@ def _call_cell_state(
             score=("score", "mean"),
             positive_coverage=("positive_coverage", "mean"),
             negative_violation=("negative_violation", "max"),
+            program_coverage=("program_coverage", "min"),
+            detection_valid=("detection_valid", "all"),
         )
         .reset_index()
         .sort_values(["score", "label"], ascending=[False, True])
@@ -429,6 +527,8 @@ def _call_cell_state(
     )
     passes = bool(
         direct
+        and bool(winner["detection_valid"])
+        and float(winner["program_coverage"]) >= config.evidence.min_positive_coverage
         and float(winner["positive_coverage"]) >= config.evidence.min_positive_coverage
         and float(winner["negative_violation"]) <= config.evidence.max_negative_violation
     )
@@ -486,10 +586,11 @@ def aggregate_multimodal_evidence(
                 )
             )
             continue
-        block["lane_key"] = (
-            block["assay"].astype(str) + "__" + block["representation"].astype(str)
-        )
-        if not state_block.empty:
+        if "lane_key" not in block:
+            block["lane_key"] = (
+                block["assay"].astype(str) + "__" + block["representation"].astype(str)
+            )
+        if not state_block.empty and "lane_key" not in state_block:
             state_block["lane_key"] = (
                 state_block["assay"].astype(str)
                 + "__"
@@ -509,7 +610,8 @@ def aggregate_multimodal_evidence(
             label_block = block[block["label"].astype(str).eq(label)]
             weighted_scores = []
             weights = []
-            annotation_lanes = 0
+            passing_lanes: set[str] = set()
+            annotation_lanes: set[str] = set()
             for item in label_block.to_dict("records"):
                 capability = capability_by_key[
                     (str(item["assay"]), str(item["representation"]))
@@ -524,11 +626,26 @@ def aggregate_multimodal_evidence(
                     weight *= 0.5
                 elif capability.level in {CapabilityLevel.QC, CapabilityLevel.UNAVAILABLE}:
                     weight = 0.0
-                if (
-                    capability.level is CapabilityLevel.ANNOTATION
-                    and int(item["measured_positive"]) > 0
-                ):
-                    annotation_lanes += 1
+                configured_key = str(
+                    item.get("lane_key")
+                    or lane_key(str(item["assay"]), str(item["representation"]))
+                )
+                detection_valid = as_bool(item["detection_valid"])
+                lane_passes = bool(
+                    detection_valid
+                    and np.isfinite(float(item["positive_coverage"]))
+                    and np.isfinite(float(item["negative_violation"]))
+                    and float(item["program_coverage"])
+                    >= config.evidence.min_positive_coverage
+                    and float(item["positive_coverage"])
+                    >= config.evidence.min_positive_coverage
+                    and float(item["negative_violation"])
+                    <= config.evidence.max_negative_violation
+                )
+                if lane_passes:
+                    passing_lanes.add(configured_key)
+                    if capability.level is CapabilityLevel.ANNOTATION:
+                        annotation_lanes.add(configured_key)
                 weighted_scores.append(float(item["score"]) * weight)
                 weights.append(weight)
             score = sum(weighted_scores) / sum(weights) if sum(weights) else -math.inf
@@ -539,7 +656,11 @@ def aggregate_multimodal_evidence(
                     "score": score,
                     "positive_coverage": float(label_block["positive_coverage"].mean()),
                     "negative_violation": float(label_block["negative_violation"].max()),
-                    "annotation_lanes": annotation_lanes,
+                    "program_coverage": float(label_block["program_coverage"].min()),
+                    "annotation_lanes": len(annotation_lanes),
+                    "required_program_evidence_complete": required_lanes.issubset(
+                        passing_lanes
+                    ),
                     "cl_id": next(
                         (str(value) for value in label_block["cl_id"] if str(value).strip()),
                         "",
@@ -587,6 +708,8 @@ def aggregate_multimodal_evidence(
             winner
             and config.run.mode.value == "annotation"
             and winner["annotation_lanes"] >= 1
+            and winner["required_program_evidence_complete"]
+            and winner["program_coverage"] >= thresholds.min_positive_coverage
             and winner["positive_coverage"] >= thresholds.min_positive_coverage
             and winner["negative_violation"] <= thresholds.max_negative_violation
             and confidence >= thresholds.min_confidence
@@ -602,9 +725,17 @@ def aggregate_multimodal_evidence(
                 reasons.append("run is explicitly evidence-only")
             if winner["annotation_lanes"] < 1:
                 reasons.append("no direct annotation-capable lane supported the winner")
-            if winner["positive_coverage"] < thresholds.min_positive_coverage:
+            if not winner["required_program_evidence_complete"]:
+                reasons.append("required lanes lacked valid detection-dependent program evidence")
+            if winner["program_coverage"] < thresholds.min_positive_coverage:
+                reasons.append("too little of the signed marker program was measured")
+            if not np.isfinite(winner["positive_coverage"]):
+                reasons.append("positive-marker detection was unavailable")
+            elif winner["positive_coverage"] < thresholds.min_positive_coverage:
                 reasons.append("positive-program coverage was insufficient")
-            if winner["negative_violation"] > thresholds.max_negative_violation:
+            if not np.isfinite(winner["negative_violation"]):
+                reasons.append("expected-negative detection was unavailable")
+            elif winner["negative_violation"] > thresholds.max_negative_violation:
                 reasons.append("expected-negative markers were violated")
             if confidence < thresholds.min_confidence or margin < thresholds.min_margin:
                 reasons.append("confidence or winner margin was insufficient")
@@ -645,7 +776,9 @@ def aggregate_multimodal_evidence(
         "score",
         "positive_coverage",
         "negative_violation",
+        "program_coverage",
         "annotation_lanes",
+        "required_program_evidence_complete",
         "cl_id",
         "probability",
         "lane_winners",
@@ -730,7 +863,13 @@ def _lane_materials(
     assay = config.input.assays[assay_id]
     representation = assay.representations[representation_name]
     matrix = matrix_for(adata, representation)
-    features = feature_ids(adata, assay.feature_id_column)
+    source_features = feature_ids_for(
+        adata,
+        assay.feature_id_column,
+        declaration=representation,
+        gene_mapping_path=assay.gene_mapping_path,
+    )
+    features = source_features
     transform = None
     if representation.peak_to_gene_path:
         transform, features = _feature_mapping(
@@ -745,6 +884,16 @@ def _lane_materials(
     detection = None
     if representation.detection is not None:
         detection = matrix_for(adata, representation.detection.model_dump())
+        detection_features = feature_ids_for(
+            adata,
+            assay.feature_id_column,
+            declaration=representation.detection,
+            gene_mapping_path=assay.gene_mapping_path,
+        )
+        if not detection_features.equals(source_features):
+            raise ContractError(
+                f"representation and detection feature axes differ for {key}"
+            )
         if transform is not None:
             if transform.data.size and float(transform.data.min()) < 0:
                 raise ContractError(
@@ -823,6 +972,7 @@ def run_lane(
             or receipt.fallback_used
         ):
             raise ContractError(f"evidence lane receipt or artifact hash drifted: {key}")
+        validate_backend_receipt(receipt, capability)
         return LaneResult(
             key,
             pd.read_csv(evidence_path, sep="\t", keep_default_na=False),
@@ -840,7 +990,6 @@ def run_lane(
         _, gpu_rsc, gpu_runtime = inspect_runtime(config.model_dump(mode="json"))
     loaded = load_input(config, backed=False)
     try:
-        adata = loaded.assays[assay_id]
         matrix, detection, features, assay, _ = _lane_materials(
             loaded, config, assay_id, representation_name, key=key
         )
@@ -873,12 +1022,11 @@ def run_lane(
             capability=capability,
         )
         if assay.kind == "spatial" and config.input.keys.spatial:
-            if config.input.keys.spatial not in adata.obsm:
-                raise ContractError(
-                    f"declared spatial coordinate key is absent: {config.input.keys.spatial}"
-                )
+            coordinates, _, _ = resolve_obsm(
+                loaded, config.input.keys.spatial, preferred_assay=assay_id
+            )
             spatial = spatial_context_evidence(
-                np.asarray(adata.obsm[config.input.keys.spatial]), groups
+                coordinates, groups
             )
             evidence = evidence.merge(spatial, on="cluster_id", how="left")
         lane_dir.mkdir(parents=True, exist_ok=True)
@@ -902,6 +1050,8 @@ def run_lane(
             groups=list(groups.astype(str)),
             limitations=capability.reasons,
             runtime=gpu_runtime,
+            marker_methods=("wilcoxon", "logreg") if capability.requires_gpu else (),
+            convergence_validated=True if capability.requires_gpu else None,
         )
         publish_json(receipt_path, receipt.model_dump(mode="json"))
         return LaneResult(key, evidence, bottom_up, receipt_path)
@@ -964,6 +1114,13 @@ def run_candidate_lane(
             or receipt.fallback_used
         ):
             raise ContractError(f"candidate lane receipt drifted: {comparison_lane_id}")
+        validate_backend_receipt(receipt, capability)
+        comparison = json.loads(comparison_path.read_text())
+        groups_path = Path(str(row["groups_path"]))
+        if not groups_path.is_file() or comparison.get("groups_sha256") != sha256(groups_path):
+            raise ContractError(
+                f"candidate comparator group artifact drifted: {comparison_lane_id}"
+            )
         return LaneResult(
             comparison_lane_id,
             pd.read_csv(evidence_path, sep="\t", keep_default_na=False),
@@ -1044,13 +1201,11 @@ def run_candidate_lane(
             capability=capability,
         )
         if assay.kind == "spatial" and config.input.keys.spatial:
-            adata = loaded.assays[assay_id]
-            if config.input.keys.spatial not in adata.obsm:
-                raise ContractError(
-                    f"declared spatial coordinate key is absent: {config.input.keys.spatial}"
-                )
+            coordinates, _, _ = resolve_obsm(
+                loaded, config.input.keys.spatial, preferred_assay=assay_id
+            )
             spatial = spatial_context_evidence(
-                np.asarray(adata.obsm[config.input.keys.spatial])[positions], groups
+                coordinates[positions], groups
             )
             evidence = evidence.merge(spatial, on="cluster_id", how="left")
         separation = _binary_separation(matrix, groups)
@@ -1096,6 +1251,8 @@ def run_candidate_lane(
             groups=list(groups),
             limitations=capability.reasons,
             runtime=gpu_runtime,
+            marker_methods=("wilcoxon", "logreg") if capability.requires_gpu else (),
+            convergence_validated=True if capability.requires_gpu else None,
         )
         publish_json(receipt_path, receipt.model_dump(mode="json"))
         return LaneResult(comparison_lane_id, evidence, bottom_up, receipt_path)

@@ -24,6 +24,9 @@ signed effects with semantics, adjusted P values, method concordance,
 positive-program coverage, and expected-negative violations. A signed
 representation may contribute means/effects. Detection requires a declared
 nonnegative matrix; otherwise report it unavailable rather than thresholding.
+Compute program coverage against every declared positive marker, not only the
+measured subset, and make missing detection or insufficient measured-program
+coverage ineligible for detection-dependent acceptance gates.
 
 ## Program and cell-level evidence
 

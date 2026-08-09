@@ -11,6 +11,12 @@ from pydantic import Field, ValidationError, field_validator, model_validator
 
 from .models import SCHEMA_VERSION, RunMode, StrictModel
 
+SAFE_COMPONENT = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
+
+
+def _is_safe_component(value: str) -> bool:
+    return bool(SAFE_COMPONENT.fullmatch(value))
+
 
 class DetectionConfig(StrictModel):
     source: Literal["X", "x", "raw", "layer"]
@@ -250,6 +256,15 @@ class ComparatorConfig(StrictModel):
     roles: list[Literal["parent_remainder", "closest_sibling"]]
     closest_sibling_strategy: Literal["embedding_centroid"] = "embedding_centroid"
 
+    @model_validator(mode="after")
+    def require_independent_comparators(self) -> ComparatorConfig:
+        required = {"parent_remainder", "closest_sibling"}
+        if len(self.roles) != 2 or set(self.roles) != required:
+            raise ValueError(
+                "comparators.roles must contain parent_remainder and closest_sibling exactly once"
+            )
+        return self
+
 
 class GpuContractConfig(StrictModel):
     name_contains: str
@@ -428,6 +443,23 @@ class CellCuratorConfig(StrictModel):
                 )
         gpu_lane = False
         lane_keys: set[str] = set()
+        lane_pairs: set[tuple[str, str]] = set()
+        for assay_id, assay in self.input.assays.items():
+            if not _is_safe_component(assay_id):
+                raise ValueError(f"assay name is not a safe path component: {assay_id!r}")
+            for representation_name in assay.representations:
+                if not _is_safe_component(representation_name):
+                    raise ValueError(
+                        "representation name is not a safe path component: "
+                        f"{representation_name!r}"
+                    )
+        for level in self.guidance.hierarchy_levels:
+            if not _is_safe_component(level):
+                raise ValueError(f"hierarchy level is not a safe path component: {level!r}")
+        if self.adaptive.eligibility.min_donors is not None and not self.input.keys.donor:
+            raise ValueError("adaptive.eligibility.min_donors requires input.keys.donor")
+        if self.adaptive.eligibility.min_captures is not None and not self.input.keys.capture:
+            raise ValueError("adaptive.eligibility.min_captures requires input.keys.capture")
         for lane in self.evidence.lanes:
             if lane.assay not in self.input.assays:
                 raise ValueError(f"evidence lane refers to unknown assay {lane.assay!r}")
@@ -439,9 +471,18 @@ class CellCuratorConfig(StrictModel):
             backend = assay.representations[lane.representation].ranking_backend.lower()
             gpu_lane = gpu_lane or backend in {"rapids_singlecell", "rapids-singlecell"}
             key = lane.lane_key or f"{lane.assay}__{lane.representation}"
+            if not _is_safe_component(key):
+                raise ValueError(f"evidence lane key is not a safe path component: {key!r}")
             if key in lane_keys:
                 raise ValueError(f"evidence lane key is duplicated: {key}")
             lane_keys.add(key)
+            pair = (lane.assay, lane.representation)
+            if pair in lane_pairs:
+                raise ValueError(
+                    "evidence assay/representation pair is duplicated: "
+                    f"{lane.assay}/{lane.representation}"
+                )
+            lane_pairs.add(pair)
         if gpu_lane:
             missing = []
             if not self.markers.rapids_singlecell_version:

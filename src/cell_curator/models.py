@@ -93,6 +93,7 @@ class EvidenceRecord(StrictModel):
     score: float
     positive_coverage: float
     negative_violation: float
+    program_coverage: float = Field(ge=0.0, le=1.0)
     measured_positive: int
     measured_negative: int
     missing_positive: tuple[str, ...] = ()
@@ -147,6 +148,10 @@ class BackendReceipt(StrictModel):
     feature_order_sha256: str | None = None
     group_membership_sha256: str | None = None
     fallback_used: bool = False
+    marker_methods: tuple[Literal["wilcoxon", "logreg"], ...] = ()
+    cpu_fallback_available: bool = False
+    cpu_fallback_used: bool = False
+    convergence_validated: bool | None = None
     runtime: dict[str, Any] = Field(default_factory=dict)
     limitations: tuple[str, ...] = ()
     created_utc: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())

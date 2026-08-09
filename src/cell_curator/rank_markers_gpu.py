@@ -1,24 +1,15 @@
 #!/usr/bin/env python3
-"""Run native binary RAPIDS Wilcoxon and balanced logreg with no CPU fallback."""
+"""Validate the native RAPIDS runtime contract with no CPU fallback."""
 
 from __future__ import annotations
 
-import argparse
-import gc
-import gzip
 import inspect
 import os
-import platform
 import socket
-import warnings
-from datetime import UTC, datetime
 from importlib.metadata import distribution, version
-from pathlib import Path
 from typing import Any
 
-import pandas as pd
-
-from .contracts import ContractError, atomic_write_json, read_config, sha256, values_sha256
+from .contracts import ContractError
 
 
 class GpuContractError(ContractError):
@@ -73,7 +64,7 @@ def inspect_runtime(config: dict[str, Any]) -> tuple[Any, Any, dict[str, Any]]:
     observed_version = version("rapids-singlecell")
     expected_distribution = str(marker["rapids_distribution"])
     package = distribution("rapids-singlecell")
-    observed_distribution = (package.read_text("INSTALLER") or "unknown").strip()
+    observed_distribution = str(package.metadata["Name"])
     device_count = int(cp.cuda.runtime.getDeviceCount())
     if device_count == 1:
         device = cp.cuda.Device(0)
@@ -118,219 +109,3 @@ def inspect_runtime(config: dict[str, Any]) -> tuple[Any, Any, dict[str, Any]]:
             "cuda_visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES"),
         },
     )
-
-
-def _result_frame(adata, key: str, *, method: str, metadata: dict) -> pd.DataFrame:
-    result = adata.uns[key]
-    names = result["names"]
-    group = "0"
-    if group not in (names.dtype.names or ()):
-        raise GpuContractError("native result lacks candidate group 0")
-    rows = []
-    for rank, feature in enumerate(names[group], 1):
-        feature = str(feature)
-
-        def scalar(field: str, *, row_rank: int = rank) -> float:
-            value = result.get(field)
-            if value is None or group not in (value.dtype.names or ()):
-                return float("nan")
-            return float(value[group][row_rank - 1])
-
-        rows.append(
-            {
-                **metadata,
-                "method": method,
-                "feature": feature,
-                "rank": rank,
-                "score": scalar("scores"),
-                "logfoldchange": scalar("logfoldchanges")
-                if method == "wilcoxon"
-                else float("nan"),
-                "pvalue": scalar("pvals"),
-                "pvalue_adj": scalar("pvals_adj"),
-                "effect_semantics": (
-                    "native binary Wilcoxon candidate versus declared comparator"
-                    if method == "wilcoxon"
-                    else "balanced binary logistic-regression coefficient candidate versus declared comparator"
-                ),
-            }
-        )
-    return pd.DataFrame(rows)
-
-
-def _write_gzip(frame: pd.DataFrame, path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if path.exists():
-        raise GpuContractError(f"refusing to overwrite immutable output: {path}")
-    partial = path.with_name(f".{path.name}.partial.{os.getpid()}")
-    try:
-        with gzip.open(partial, "wt", encoding="utf-8", newline="") as handle:
-            frame.to_csv(handle, sep="\t", index=False)
-        os.replace(partial, path)
-    finally:
-        partial.unlink(missing_ok=True)
-
-
-def run(args: argparse.Namespace) -> dict:
-    outputs = (args.wilcoxon_output, args.logreg_output, args.receipt_output)
-    if any(path.exists() for path in outputs):
-        raise GpuContractError("refusing to overwrite GPU marker outputs")
-    config = read_config(args.config)
-    # Must be first runtime action: no input read and no output directory creation.
-    cp, rsc, runtime = inspect_runtime(config)
-
-    import anndata as ad
-
-    adata = ad.read_h5ad(args.input)
-    if args.group_key not in adata.obs:
-        raise GpuContractError(f"input lacks binary group key {args.group_key!r}")
-    groups = adata.obs[args.group_key].astype(str)
-    if sorted(groups.unique()) != ["0", "1"]:
-        raise GpuContractError("marker input must contain exactly binary groups 0 and 1")
-    if args.matrix_source == "layer":
-        matrix_key = args.matrix_key or args.representation
-        if matrix_key not in adata.layers:
-            raise GpuContractError("requested representation layer is absent")
-        evidence_matrix = adata.layers[matrix_key]
-    else:
-        evidence_matrix = adata.X
-    adata.obs[args.group_key] = pd.Categorical(groups, categories=["0", "1"], ordered=True)
-    adata.X = evidence_matrix.copy()
-    adata.layers.clear()
-    adata.obsm.clear()
-    adata.obsp.clear()
-    gc.collect()
-    rsc.get.anndata_to_GPU(adata)
-    marker = config["markers"]
-    wilcoxon_key = "native_binary_wilcoxon"
-    rsc.tl.rank_genes_groups(
-        adata,
-        groupby=args.group_key,
-        groups=["0"],
-        reference="1",
-        n_genes=adata.n_vars,
-        rankby_abs=False,
-        pts=True,
-        key_added=wilcoxon_key,
-        method="wilcoxon",
-        corr_method="benjamini-hochberg",
-        tie_correct=bool(marker["wilcoxon"]["tie_correct"]),
-        use_continuity=bool(marker["wilcoxon"]["continuity_correct"]),
-        use_raw=False,
-        layer=None,
-        chunk_size=int(marker["wilcoxon"]["chunk_size"]),
-        multi_gpu=False,
-    )
-    logreg_key = "native_binary_logreg"
-    with warnings.catch_warnings(record=True) as observed_warnings:
-        warnings.simplefilter("always")
-        rsc.tl.rank_genes_groups(
-            adata,
-            groupby=args.group_key,
-            groups=["0"],
-            reference="1",
-            n_genes=adata.n_vars,
-            rankby_abs=False,
-            pts=True,
-            key_added=logreg_key,
-            method="logreg",
-            use_raw=False,
-            layer=None,
-            class_weight="balanced",
-            penalty="l2",
-            C=float(marker["logreg"]["C"]),
-            fit_intercept=True,
-            max_iter=int(marker["logreg"]["retry_max_iter"]),
-            tol=float(marker["logreg"]["tol"]),
-            solver="qn",
-        )
-    convergence_warnings = [
-        str(item.message)
-        for item in observed_warnings
-        if "converg" in str(item.message).lower()
-    ]
-    if convergence_warnings:
-        raise GpuContractError(
-            "native RAPIDS logistic regression did not converge: "
-            + "; ".join(convergence_warnings)
-        )
-    metadata = {
-        "lane_id": args.lane_id,
-        "candidate_key": args.candidate_key,
-        "comparator_role": args.comparator_role,
-        "assay": args.assay,
-        "assay_kind": args.assay_kind,
-        "feature_space": args.feature_space,
-        "representation": args.representation,
-        "target_group": "0",
-        "comparator_group": "1",
-    }
-    wilcoxon = _result_frame(adata, wilcoxon_key, method="wilcoxon", metadata=metadata)
-    logreg = _result_frame(adata, logreg_key, method="logreg", metadata=metadata)
-    _write_gzip(wilcoxon, args.wilcoxon_output)
-    _write_gzip(logreg, args.logreg_output)
-    receipt = {
-        "schema_version": 3,
-        "artifact_kind": "native_rapids_binary_marker_lane",
-        "status": "complete",
-        "created_utc": datetime.now(UTC).isoformat(),
-        **metadata,
-        "methods": ["wilcoxon", "logreg"],
-        "binary_groups": {"0": "candidate_child", "1": args.comparator_role},
-        "n_cells": int(adata.n_obs),
-        "n_features": int(adata.n_vars),
-        "ordered_barcode_sha256": values_sha256(list(adata.obs_names)),
-        "feature_order_sha256": values_sha256(list(map(str, adata.var_names))),
-        "group_membership_sha256": values_sha256(list(groups.astype(str))),
-        "input": {"path": str(args.input), "sha256": sha256(args.input)},
-        "config": {"path": str(args.config), "sha256": sha256(args.config)},
-        "outputs": {
-            "wilcoxon": {
-                "path": str(args.wilcoxon_output),
-                "sha256": sha256(args.wilcoxon_output),
-            },
-            "logreg": {"path": str(args.logreg_output), "sha256": sha256(args.logreg_output)},
-        },
-        "runtime": runtime,
-        "software": {"python": platform.python_version()},
-        "cpu_fallback_available": False,
-        "cpu_fallback_used": False,
-        "convergence_validated": True,
-    }
-    atomic_write_json(args.receipt_output, receipt)
-    cp.get_default_memory_pool().free_all_blocks()
-    return receipt
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", required=True, type=Path)
-    parser.add_argument("--input", required=True, type=Path)
-    parser.add_argument("--group-key", default="analysis_group")
-    parser.add_argument("--lane-id", required=True)
-    parser.add_argument("--candidate-key", required=True)
-    parser.add_argument(
-        "--comparator-role", required=True, choices=("parent_remainder", "closest_sibling")
-    )
-    parser.add_argument("--assay", required=True)
-    parser.add_argument("--assay-kind", required=True)
-    parser.add_argument("--feature-space", required=True)
-    parser.add_argument("--representation", required=True)
-    parser.add_argument("--matrix-source", choices=("X", "layer", "x"), default="layer")
-    parser.add_argument("--matrix-key", default="")
-    parser.add_argument("--wilcoxon-output", required=True, type=Path)
-    parser.add_argument("--logreg-output", required=True, type=Path)
-    parser.add_argument("--receipt-output", required=True, type=Path)
-    return parser.parse_args()
-
-
-def main() -> None:
-    args = parse_args()
-    try:
-        run(args)
-    except ContractError as exc:
-        raise SystemExit(str(exc)) from exc
-
-
-if __name__ == "__main__":
-    main()

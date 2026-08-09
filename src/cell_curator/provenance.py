@@ -87,6 +87,8 @@ def make_receipt(
     status: Literal["complete", "unavailable", "failed"] = "complete",
     limitations: tuple[str, ...] = (),
     runtime: dict[str, Any] | None = None,
+    marker_methods: tuple[Literal["wilcoxon", "logreg"], ...] = (),
+    convergence_validated: bool | None = None,
 ) -> BackendReceipt:
     return BackendReceipt(
         run_id=run_id,
@@ -103,6 +105,10 @@ def make_receipt(
         feature_order_sha256=values_sha256(feature_ids),
         group_membership_sha256=values_sha256(groups),
         fallback_used=False,
+        marker_methods=marker_methods,
+        cpu_fallback_available=False,
+        cpu_fallback_used=False,
+        convergence_validated=convergence_validated,
         runtime=runtime or runtime_fingerprint(),
         limitations=limitations,
     )

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import math
-import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from html import escape
@@ -21,9 +20,9 @@ import pandas as pd
 from scipy import sparse
 
 from .config import CellCuratorConfig, load_config
-from .contracts import ContractError, sha256
-from .data import close_input, load_input, matrix_for
-from .evidence import compute_bottom_up_markers, feature_ids
+from .contracts import ContractError, safe_path_component, sha256
+from .data import close_input, feature_ids_for, load_input, matrix_for
+from .evidence import compute_bottom_up_markers
 from .knowledge import (
     LocalMarkerProvider,
     MarkerProvider,
@@ -1311,7 +1310,7 @@ def _obs_column(loaded: Any, adata: Any, key: str) -> pd.Series:
 def _scope_slug(value: str | None) -> str:
     if value is None:
         return "all-parents"
-    return re.sub(r"[^A-Za-z0-9_.-]+", "-", value).strip("-") or "parent"
+    return safe_path_component(value)
 
 
 def run_marker_analysis_from_config(
@@ -1365,11 +1364,28 @@ def run_marker_analysis_from_config(
         adata = loaded.assays[assay]
         declaration = assay_config.representations[representation]
         matrix = matrix_for(adata, declaration)
+        features = feature_ids_for(
+            adata,
+            assay_config.feature_id_column,
+            declaration=declaration,
+            gene_mapping_path=assay_config.gene_mapping_path,
+        )
         detection = (
             matrix_for(adata, declaration.detection.model_dump())
             if declaration.detection is not None
             else None
         )
+        if declaration.detection is not None:
+            detection_features = feature_ids_for(
+                adata,
+                assay_config.feature_id_column,
+                declaration=declaration.detection,
+                gene_mapping_path=assay_config.gene_mapping_path,
+            )
+            if not detection_features.equals(features):
+                raise ContractError(
+                    "marker representation and detection source use different feature axes"
+                )
         groups = _obs_column(loaded, adata, group_key)
         mask = np.ones(adata.n_obs, dtype=bool)
         if parent_scope is not None:
@@ -1383,7 +1399,7 @@ def run_marker_analysis_from_config(
         result = run_marker_analysis(
             matrix[mask],
             scoped_groups,
-            feature_ids(adata, assay_config.feature_id_column),
+            features,
             programs,
             detection=detection[mask] if detection is not None else None,
             detection_threshold=detection_threshold,
