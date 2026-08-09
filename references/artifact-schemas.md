@@ -41,6 +41,26 @@ scope when applicable.
 - RAPIDS receipt: validated hardware/software contract, method parameters,
   convergence, hashes, and explicit fallback booleans.
 
+## Recursive hierarchy invocation
+
+Pass `run execute --score-manifest FILE` a strict JSON object with
+`schema_version: 3` and a non-empty `score_tables` array. Each entry contains
+exactly `level`, `parent_scope`, and `path`, plus optional `state_path`. Paths are
+absolute or relative to the manifest directory. Optional top-level fields are
+`vocabulary_path`, `minimum_confidence`, and `minimum_margin`.
+
+Every score TSV contains `cluster_id`, `label`, and finite numeric `score`; optional
+`specificity`, `agreement`, and `coverage` columns feed advisory confidence. Every
+state JSON maps cluster IDs to structured parallel-state values. Duplicate scopes,
+unknown fields, invalid thresholds, absent files, cross-parent labels, and stale
+artifacts are hard errors.
+
+The executor copies scoped inputs into `hierarchy/scores/` and `hierarchy/states/`,
+writes scoped labels below `labels/scopes/`, consolidates sibling parents into one
+durable `labels/L*.tsv`, writes retained leaves, and hashes each scope checkpoint.
+Missing child scopes retain their accepted parent leaf and never reuse sibling
+evidence.
+
 ## Review packet
 
 Include evidence cards, parent decision cards, parent/full embeddings,

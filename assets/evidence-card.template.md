@@ -45,7 +45,7 @@ Status: evidence candidate; biological review pending
 - Recommended parent outcome:
 - Proposed cell type: <!-- blank in evidence-only mode -->
 - Proposed cell state: <!-- blank until review -->
-- Proposed CL ID: <!-- blank until Knowledgebase validation -->
+- Proposed CL ID: <!-- blank until local ontology validation -->
 
 ## Raw evidence
 

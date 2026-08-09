@@ -1,4 +1,4 @@
 interface:
-  display_name: "Adaptive Assay-Aware Cell Annotation"
-  short_description: "Evidence-gated annotation across single-cell assays"
-  default_prompt: "Use $adaptive-multimodal-cell-annotation to audit frozen clusters and annotate or adaptively split them using the assays actually present."
+  display_name: "Cell Curator"
+  short_description: "Guided local-first hierarchical cell annotation"
+  default_prompt: "Use $cell-curator to inspect and canonicalize AnnData or MuData, approve assumptions, run parent-scoped evidence cross-checks, reconcile critics, and prepare guarded write-back."

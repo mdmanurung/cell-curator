@@ -37,7 +37,8 @@ Status: DRAFT — Gate A not signed
 - Automated annotation/gating guides:
 - Other classifiers:
 - Panel/feature-space limitations and missing markers:
-- Knowledgebase MCP status:
+- Local marker/reference provider versions and checksums:
+- Local ontology status or explicit ontology-unavailable limitation:
 
 All guides are overridable hypotheses. `Unknown` is permitted. Type and state
 will be reviewed separately.
