@@ -74,6 +74,9 @@ cell_curator = ["py.typed"]
 addopts = "-ra"
 testpaths = ["tests"]
 pythonpath = ["src"]
+markers = [
+  "gpu: requires a real contract-satisfying NVIDIA GPU with the RAPIDS stack installed",
+]
 
 [tool.ruff]
 line-length = 96
