@@ -243,7 +243,60 @@ the write-back preview. Annotation execution never mutates the source object. On
 separate approval bound to the preview and mapping hashes can authorize a new
 annotated `.h5ad` or `.h5mu` output.
 
-## Stable Python API
+## Python API
+
+### Guided object (`CellCurator`)
+
+`CellCurator` builds the strict configuration from keyword arguments and delegates
+every step to the same functions the CLI and the Snakemake DAG call. It adds
+convenience, never science.
+
+```python
+from cell_curator import CellCurator
+
+cur = CellCurator(
+    adata=adata,                     # or path="pancreas.h5ad"
+    organism="human",
+    tissue="pancreas",
+    cluster_key="leiden_1",
+    markers="pancreas_markers.json", # or a {label: {pos, neg}} mapping
+    run_id="pancreas-v1",
+    output_root="results",
+)
+
+cur.inspect()          # structure and keys; changes nothing
+cur.prepare()          # freeze + hash the input, then scene and plan
+evidence, markers = cur.evidence()
+cur.review_packet()    # evidence cards, critic packets, HTML report
+```
+
+Adaptive refinement — cluster impurity is investigated, not assumed:
+
+```python
+cur.audit_parents()        # per-parent impurity signals: donor/capture dominance,
+                           # doublet and incompatible-program fractions, QC outliers
+cur.propose_subclusters()  # bounded candidates: reuse a stored higher-resolution
+                           # clustering if one matches, else one parent-local pass
+cur.decide_subclusters()   # ACCEPT SPLIT | RETAIN PARENT | DOUBLET/MIXED |
+                           # TECHNICAL/UNRESOLVED, from frozen evidence
+cur.refine_clusters()      # all four of the above, in order
+```
+
+Canonical parents stay frozen throughout: refinement proposes candidates that must
+clear `evidence.required_candidate_gates` and reviewer sign-off. A parent whose
+impurity turns out to be technical or doublet-driven is reported as such rather than
+carved into subtypes.
+
+Two deliberate differences from LLM-annotator packages: an in-memory `AnnData` is
+written to the run directory and hashed before anything reads it, and there is no
+method that returns finished labels. Evidence is computed for you; deciding what it
+means is the reviewer's job — a person, or the Claude/Codex agent driving the skill.
+Nothing here contacts a third-party inference service.
+
+Anything not exposed as a keyword argument can be set through `overrides=`, which is
+deep-merged onto the template last.
+
+### Stable function API
 
 ```python
 from cell_curator import (
