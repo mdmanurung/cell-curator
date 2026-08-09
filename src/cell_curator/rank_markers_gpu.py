@@ -54,6 +54,30 @@ def validate_runtime_contract_values(
     )
 
 
+def format_compute_capability(raw: Any) -> str:
+    """Render CuPy's packed compute capability as ``major.minor``.
+
+    ``cupy.cuda.Device.compute_capability`` is a digit string in which only the
+    final character is the minor version, so a two-digit major such as Blackwell
+    ``sm_120`` must not be split positionally. Indexing ``[0]`` and ``[1]`` is
+    correct only for single-digit majors and silently yields ``1.2`` for
+    ``"120"``, which then compares against ``allowed_gpu_contracts`` as a
+    different device.
+    """
+
+    if isinstance(raw, (tuple, list)):
+        if len(raw) != 2:
+            raise GpuContractError(f"unreadable compute capability: {raw!r}")
+        return f"{int(raw[0])}.{int(raw[1])}"
+    text = str(raw).strip()
+    if "." in text:
+        major, _, minor = text.partition(".")
+        text = f"{major}{minor}"
+    if not text.isdigit() or len(text) < 2:
+        raise GpuContractError(f"unreadable compute capability: {raw!r}")
+    return f"{int(text[:-1])}.{int(text[-1])}"
+
+
 def inspect_runtime(config: dict[str, Any]) -> tuple[Any, Any, dict[str, Any]]:
     marker = config["markers"]
     if marker.get("cpu_fallback") is not False:
@@ -71,7 +95,7 @@ def inspect_runtime(config: dict[str, Any]) -> tuple[Any, Any, dict[str, Any]]:
         properties = cp.cuda.runtime.getDeviceProperties(0)
         raw_name = properties["name"]
         device_name = raw_name.decode() if isinstance(raw_name, bytes) else str(raw_name)
-        capability = f"{device.compute_capability[0]}.{device.compute_capability[1]}"
+        capability = format_compute_capability(device.compute_capability)
     else:
         device_name, capability = "", ""
     runtime_version = int(cp.cuda.runtime.runtimeGetVersion())
