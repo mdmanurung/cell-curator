@@ -491,17 +491,9 @@ def profile_refined_clusters(config_path: str | Path) -> dict[str, Any]:
         spatial_key = config.input.keys.spatial
         spatial: np.ndarray | None = None
         if spatial_key:
-            if spatial_key in loaded.root.obsm:
-                spatial = np.asarray(loaded.root.obsm[spatial_key])
-            else:
-                spatial = next(
-                    (
-                        np.asarray(adata.obsm[spatial_key])
-                        for adata in loaded.assays.values()
-                        if spatial_key in adata.obsm
-                    ),
-                    None,
-                )
+            from .data import resolve_obsm
+
+            spatial, _, _ = resolve_obsm(loaded, spatial_key)
         spatial_frame = (
             pd.DataFrame(
                 spatial,

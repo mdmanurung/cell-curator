@@ -16,7 +16,7 @@ import pandas as pd
 from .audit_parents import build_audit
 from .benchmark import write_pending_status
 from .config import CellCuratorConfig, load_config
-from .contracts import ContractError, sha256
+from .contracts import ContractError, safe_path_component, sha256
 from .decisions import (
     build_comparator_manifest,
     build_mapping,
@@ -173,9 +173,7 @@ def _knowledge_provider_records(config: CellCuratorConfig) -> list[dict[str, Any
 
 
 def _scope_filename(parent: str) -> str:
-    return "".join(
-        character if character.isalnum() or character in "-_." else "_" for character in parent
-    )
+    return safe_path_component(parent)
 
 
 def _replace_if_changed(path: Path, payload: bytes) -> str:
@@ -750,12 +748,25 @@ def execute_recursive_hierarchy_manifest(
 def initialize(config_path: Path) -> dict[str, Any]:
     """Execute Stage 1 and persist local knowledge without opening the label gate."""
 
-    from .guided import prepare_scene
+    from .guided import load_state, prepare_scene
 
     config = load_config(config_path)
     root = run_root(config)
-    prepare_scene(config_path)
-    manifest = json.loads((root / "input_contract.manifest.json").read_text())
+    state_path = root / "run_state.json"
+    contract_path = root / "input_contract.manifest.json"
+    if state_path.is_file() and contract_path.is_file():
+        state = load_state(root)
+        if state.config_sha256 != sha256(config_path):
+            raise ContractError(
+                "existing run state belongs to a different configuration; choose a new run_id"
+            )
+        if state.input_sha256 != sha256(Path(config.input.path)):
+            raise ContractError(
+                "existing run state belongs to a changed input; choose a new run_id"
+            )
+    else:
+        prepare_scene(config_path)
+    manifest = json.loads(contract_path.read_text())
     programs = _programs(config)
     ontology = ontology_from_config(config)
     publish_json(
@@ -910,10 +921,10 @@ def evidence_all(config_path: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
             "all_gpu_fallback_flags_false": True,
         },
     )
-    from .guided import require_label_gate
+    from .guided import require_assumption_gate
 
     level = config.guidance.hierarchy_levels[0]
-    require_label_gate(config_path, level=level, parent="ROOT")
+    require_assumption_gate(config_path, level=level, parent="ROOT")
     result = consolidate_lanes(config=config, run_root=root)
     from .hierarchy import labels_from_existing_proposals, scaffold_labels_table
 
@@ -926,9 +937,11 @@ def evidence_all(config_path: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
 def decide(config_path: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
     config = load_config(config_path)
     root = run_root(config)
-    from .guided import require_label_gate
+    from .guided import require_assumption_gate
 
-    require_label_gate(config_path, level=config.guidance.hierarchy_levels[0], parent="ROOT")
+    require_assumption_gate(
+        config_path, level=config.guidance.hierarchy_levels[0], parent="ROOT"
+    )
     comparator_manifest = pd.read_csv(
         root / "comparators" / "comparator_manifest.tsv", sep="\t", keep_default_na=False
     )
@@ -947,9 +960,11 @@ def decide(config_path: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
 def map_cells(config_path: Path) -> pd.DataFrame:
     config = load_config(config_path)
     root = run_root(config)
-    from .guided import require_label_gate
+    from .guided import require_assumption_gate
 
-    require_label_gate(config_path, level=config.guidance.hierarchy_levels[0], parent="ROOT")
+    require_assumption_gate(
+        config_path, level=config.guidance.hierarchy_levels[0], parent="ROOT"
+    )
     mapping = build_mapping(config=config, run_root=root)
     _advance(root, "MAPPING_VALIDATED")
     return mapping
@@ -958,10 +973,10 @@ def map_cells(config_path: Path) -> pd.DataFrame:
 def review(config_path: Path, *, strict: bool = True) -> Path:
     config = load_config(config_path)
     root = run_root(config)
-    from .guided import checkpoint_level, require_label_gate
+    from .guided import checkpoint_level, require_assumption_gate
 
     level = config.guidance.hierarchy_levels[0]
-    require_label_gate(config_path, level=level, parent="ROOT")
+    require_assumption_gate(config_path, level=level, parent="ROOT")
     build_evidence_cards(config, root)
     build_critic_packet(config, root)
     level_report = build_html_report(config, root, strict=strict, level=level)
@@ -1132,11 +1147,38 @@ def validate(config_path: Path) -> dict[str, Any]:
 def build_review_packet(config_path: Path) -> Path:
     config = load_config(config_path)
     root = run_root(config)
-    validate(config_path)
     packet = root / "review_packet"
     if packet.exists():
         manifest_path = packet / "review_packet.manifest.json"
         if manifest_path.is_file():
+            manifest = json.loads(manifest_path.read_text())
+            files = manifest.get("files")
+            if (
+                manifest.get("status") != "complete"
+                or manifest.get("run_id") != config.run.run_id
+                or manifest.get("immutable") is not True
+                or not isinstance(files, dict)
+            ):
+                raise ContractError("existing review packet manifest is invalid")
+            observed = {
+                str(path.relative_to(packet))
+                for path in packet.rglob("*")
+                if path.is_file() and path != manifest_path
+            }
+            if observed != set(files):
+                raise ContractError("existing review packet file inventory drifted")
+            for relative, record in files.items():
+                frozen = packet / relative
+                source = root / relative
+                if (
+                    not source.is_file()
+                    or sha256(frozen) != record.get("sha256")
+                    or frozen.stat().st_size != record.get("bytes")
+                    or sha256(source) != record.get("sha256")
+                ):
+                    raise ContractError(
+                        f"existing review packet or source artifact drifted: {relative}"
+                    )
             return packet
         try:
             # Snakemake creates the parent of a declared file output before the
@@ -1145,6 +1187,7 @@ def build_review_packet(config_path: Path) -> Path:
             packet.rmdir()
         except OSError as exc:
             raise ContractError("incomplete review packet directory already exists") from exc
+    validate(config_path)
     stage = packet.with_name(f".{packet.name}.partial.{os.getpid()}")
     stage.mkdir(parents=True)
     include = [
@@ -1207,10 +1250,19 @@ def run_annotation(config_path: str | Path) -> Path:
     """Execute all computational phases and return the immutable review packet."""
 
     path = Path(config_path)
-    initialize(path)
-    from .guided import construct_plan, load_state, require_label_gate
+    from .guided import construct_plan, load_state, require_assumption_gate
 
     config = load_config(path)
+    if len(config.guidance.hierarchy_levels) != 1:
+        raise ContractError(
+            "the standard pipeline supports exactly one hierarchy level; "
+            "use `cell-curator run execute --score-manifest MANIFEST.json` "
+            "for recursive multi-level annotation"
+        )
+    existing_packet = run_root(config) / "review_packet" / "review_packet.manifest.json"
+    if existing_packet.is_file():
+        return build_review_packet(path)
+    initialize(path)
     state = load_state(run_root(config))
     if not state.plan_complete:
         if config.guidance.interactive:
@@ -1219,7 +1271,7 @@ def run_annotation(config_path: str | Path) -> Path:
                 "review/approve assumptions, then retry execute"
             )
         construct_plan(path)
-    require_label_gate(path, level=config.guidance.hierarchy_levels[0], parent="ROOT")
+    require_assumption_gate(path, level=config.guidance.hierarchy_levels[0], parent="ROOT")
     audit(path)
     refine(path)
     evidence_all(path)

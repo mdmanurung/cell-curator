@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from cell_curator.contracts import sha256
-from cell_curator.guided import load_assumptions, require_label_gate
+from cell_curator.guided import load_assumptions, require_assumption_gate
 from cell_curator.provenance import atomic_publish, publish_json
 
 workflow_context: Any = globals()["snakemake"]
@@ -18,7 +18,7 @@ def validate_gate() -> None:
     level = str(workflow_context.params.level)
     parent = str(workflow_context.params.parent)
 
-    state = require_label_gate(config_path, level=level, parent=parent)
+    state = require_assumption_gate(config_path, level=level, parent=parent)
     rows = load_assumptions(assumptions_path.parent)
     applicable_scopes = {"global", f"{level}::{parent}"}
     approved = [

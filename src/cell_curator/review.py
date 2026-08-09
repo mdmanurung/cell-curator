@@ -13,8 +13,13 @@ import numpy as np
 import pandas as pd
 
 from .config import CellCuratorConfig
-from .contracts import ContractError, sha256
-from .data import close_input, dense, load_input
+from .contracts import (
+    ContractError,
+    require_safe_path_component,
+    safe_path_component,
+    sha256,
+)
+from .data import close_input, dense, load_input, resolve_obsm
 from .guided import load_assumptions, load_state
 from .provenance import atomic_publish, atomic_replace, replace_json
 
@@ -145,9 +150,7 @@ def build_evidence_cards(config: CellCuratorConfig, run_root: Path) -> list[Path
 
 
 def _safe(value: str) -> str:
-    return "".join(
-        character if character.isalnum() or character in "-_." else "_" for character in value
-    )
+    return safe_path_component(value)
 
 
 def _label_card_path(run_root: Path, level: str, parent_scope: str, cluster: str) -> Path:
@@ -641,20 +644,15 @@ def _embedding_svg(
     try:
         key = coordinate_key or config.input.keys.embedding
         if key:
-            matching = [adata for adata in loaded.assays.values() if key in adata.obsm]
-            if not matching:
-                raise ContractError(
-                    f"configured report embedding is absent from every assay: {key}"
-                )
-            adata = matching[0]
-            coordinates = np.asarray(adata.obsm[key])[:, :2]
+            coordinates, barcodes, _ = resolve_obsm(loaded, key)
+            coordinates = coordinates[:, :2]
         else:
             adata = next(iter(loaded.assays.values()))
             matrix = dense(adata.X)
             centered = matrix - matrix.mean(axis=0)
             u, singular, _ = np.linalg.svd(centered, full_matrices=False)
             coordinates = u[:, :2] * singular[:2]
-        barcodes = adata.obs_names.astype(str)
+            barcodes = adata.obs_names.astype(str)
         root_obs = loaded.root.obs.copy()
         root_obs.index = root_obs.index.astype(str)
         canonical = (
@@ -673,7 +671,16 @@ def _embedding_svg(
             if label_by_cluster is None and label_by_barcode is None
             else preferred_color_column
         )
-        color_source = loaded.root if color_column in loaded.root.obs else adata
+        color_source = loaded.root
+        if color_column not in color_source.obs:
+            color_source = next(
+                (
+                    assay
+                    for assay in loaded.assays.values()
+                    if color_column in assay.obs
+                ),
+                loaded.root,
+            )
         colors = _categorical_colors(color_source, color_column, groups)
         observed = list(dict.fromkeys(map(str, groups)))
         if color_column in color_source.obs and isinstance(
@@ -801,11 +808,7 @@ def _spatial_svg(
     loaded = load_input(config, backed=False)
     try:
         key = config.input.keys.spatial
-        matching = [adata for adata in loaded.assays.values() if key in adata.obsm]
-        if not matching:
-            return "<p>Configured spatial coordinates are absent.</p>"
-        adata = matching[0]
-        barcodes = adata.obs_names.astype(str)
+        coordinates, barcodes, _ = resolve_obsm(loaded, key)
         root_obs = loaded.root.obs.copy()
         root_obs.index = root_obs.index.astype(str)
         canonical = root_obs.loc[barcodes, config.input.keys.canonical_parent].astype(str)
@@ -821,7 +824,7 @@ def _spatial_svg(
             for index, label in enumerate(dict.fromkeys(groups))
         }
         return _coordinate_svg(
-            np.asarray(adata.obsm[key]), groups, local_colors, label="Spatial label context"
+            coordinates, groups, local_colors, label="Spatial label context"
         )
     finally:
         close_input(loaded)
@@ -871,6 +874,8 @@ def check_report_completeness(
     level: str | None = None,
     require_report: bool = True,
 ) -> dict[str, Any]:
+    if level is not None:
+        level = require_safe_path_component(level, field="report level")
     all_labels_paths = sorted((run_root / "labels").glob("*.tsv"))
     labels_paths = [run_root / "labels" / f"{level}.tsv"] if level else all_labels_paths
     missing_files = [str(path) for path in labels_paths if not path.is_file()]
@@ -1062,6 +1067,8 @@ def build_html_report(
     level: str | None = None,
     check_only: bool = False,
 ) -> Path:
+    if level is not None:
+        level = require_safe_path_component(level, field="report level")
     if check_only:
         if not strict:
             raise ContractError("report --check-only requires --strict")

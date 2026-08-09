@@ -12,7 +12,12 @@ import pandas as pd
 
 from .capabilities import annotation_capable, build_capability_registry
 from .config import BiologicalContextConfig, CellCuratorConfig, load_config
-from .contracts import ContractError, sha256
+from .contracts import (
+    ContractError,
+    require_safe_path_component,
+    safe_path_component,
+    sha256,
+)
 from .data import canonicalize, inspect
 from .knowledge import collect_programs, programs_digest, providers_from_config
 from .models import RunMode, RunState
@@ -310,7 +315,11 @@ def prepare_scene(config_path: str | Path) -> dict[str, Any]:
                 "interactive": config.guidance.interactive,
                 "preauthorized": config.guidance.preauthorized,
                 "assumptions_sha256": ledger_digest,
-                "labels_permitted": prior.assumptions_approved and not blockers,
+                "labels_permitted": (
+                    prior.assumptions_approved
+                    and not blockers
+                    and effective_mode is RunMode.ANNOTATION
+                ),
                 "next_action": (
                     "resolve scene context blockers"
                     if blockers
@@ -527,6 +536,7 @@ def construct_plan(config_path: str | Path) -> dict[str, Any]:
     atomic_publish(vocab_path, vocabulary.to_csv(sep="\t", index=False).encode())
     scene = json.loads((root / "context.json").read_text())
     biological_context = scene["biological_context"]
+    from .data import close_input, load_input
     from .environment import EnvironmentReport
     from .routing import (
         HealthContext,
@@ -536,15 +546,11 @@ def construct_plan(config_path: str | Path) -> dict[str, Any]:
         route_crosscheck,
     )
 
-    obs_columns: list[str] = []
+    loaded = load_input(config, backed=True)
     try:
-        from .data import close_input, load_input
-
-        loaded = load_input(config, backed=True)
         obs_columns = list(map(str, loaded.root.obs.columns))
+    finally:
         close_input(loaded)
-    except Exception:
-        obs_columns = []
     existing = sorted(
         column
         for column in obs_columns
@@ -815,19 +821,19 @@ def approve_assumptions(
     }
 
 
-def require_label_gate(
+def require_assumption_gate(
     config_path: str | Path,
     *,
     level: str = "",
     parent: str = "ROOT",
 ) -> RunState:
+    """Require complete scene/plan state and approved applicable assumptions."""
+
     config = load_config(config_path)
     root = run_directory(config)
     state = load_state(root)
     if not state.context_complete or not state.plan_complete:
-        raise ContractError("biological labels require complete scene and plan stages")
-    if state.mode is not RunMode.ANNOTATION:
-        raise ContractError("Gate A blocks biological labels while the run is evidence-only")
+        raise ContractError("execution requires complete scene and plan stages")
     ledger_path = _ledger_path(root)
     if not ledger_path.is_file() or sha256(ledger_path) != state.assumptions_sha256:
         raise ContractError(
@@ -851,7 +857,21 @@ def require_label_gate(
     if not config.guidance.interactive and not (
         config.guidance.preauthorized and state.preauthorized
     ):
-        raise ContractError("non-interactive labeling lacks recorded pre-authorization")
+        raise ContractError("non-interactive execution lacks recorded pre-authorization")
+    return state
+
+
+def require_label_gate(
+    config_path: str | Path,
+    *,
+    level: str = "",
+    parent: str = "ROOT",
+) -> RunState:
+    """Require the assumptions gate and annotation mode before emitting labels."""
+
+    state = require_assumption_gate(config_path, level=level, parent=parent)
+    if state.mode is not RunMode.ANNOTATION:
+        raise ContractError("Gate A blocks biological labels while the run is evidence-only")
     return state
 
 
@@ -900,9 +920,10 @@ def checkpoint_level(
     artifacts: dict[str, str],
     next_action: str,
 ) -> dict[str, Any]:
+    level = require_safe_path_component(level, field="hierarchy level")
     config = load_config(config_path)
     root = run_directory(config)
-    state = require_label_gate(config_path, level=level, parent=parent)
+    state = require_assumption_gate(config_path, level=level, parent=parent)
     missing = sorted(name for name, path in artifacts.items() if not Path(path).is_file())
     if missing:
         raise ContractError(
@@ -923,9 +944,7 @@ def checkpoint_level(
         "artifact_sha256": checksums,
         "status": "complete",
     }
-    safe_parent = "".join(
-        character if character.isalnum() or character in "-_." else "_" for character in parent
-    )
+    safe_parent = safe_path_component(parent)
     path = root / "checkpoints" / level / f"{safe_parent}.json"
     replace_json(path, checkpoint)
     progress = dict(state.progress)

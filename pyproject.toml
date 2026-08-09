@@ -27,7 +27,10 @@ reference-models = ["scvi-tools>=1.2"]
 census = ["cellxgene-census>=1.16"]
 scimilarity = ["scimilarity>=0.4"]
 gpu = ["rapids-singlecell>=0.12"]
-workflow = ["snakemake>=8"]
+workflow = [
+  "snakemake>=8",
+  "snakemake-executor-plugin-slurm>=2.7.1",
+]
 dev = [
   "build>=1.2",
   "mypy>=1.10",
@@ -35,6 +38,7 @@ dev = [
   "ruff>=0.6",
   "setuptools>=77",
   "snakemake>=8",
+  "snakemake-executor-plugin-slurm>=2.7.1",
   "wheel>=0.45",
 ]
 
@@ -54,7 +58,6 @@ cell_curator = ["py.typed"]
 "share/cell-curator/references" = ["references/*.md"]
 "share/cell-curator/workflow" = ["workflow/Snakefile"]
 "share/cell-curator/workflow/config" = ["workflow/config/*.yaml"]
-"share/cell-curator/workflow/envs" = ["workflow/envs/*.yaml"]
 "share/cell-curator/workflow/profiles/slurm" = ["workflow/profiles/slurm/config.yaml"]
 "share/cell-curator/workflow/scripts" = ["workflow/scripts/*.py"]
 "share/cell-curator/benchmarks" = ["benchmarks/*.json"]

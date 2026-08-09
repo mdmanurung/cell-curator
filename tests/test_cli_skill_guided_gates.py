@@ -18,6 +18,7 @@ from cell_curator.contracts import ContractError
 from cell_curator.environment import ComputeProfile, detect_environment
 from cell_curator.guided import (
     approve_assumptions,
+    confirm_context,
     construct_plan,
     load_assumptions,
     load_state,
@@ -26,6 +27,7 @@ from cell_curator.guided import (
     require_label_gate,
     run_directory,
 )
+from cell_curator.pipeline import run_annotation
 from cell_curator.routing import (
     CrosscheckMethod,
     HealthContext,
@@ -36,12 +38,13 @@ from cell_curator.routing import (
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 SKILL_PATH = REPOSITORY_ROOT / "SKILL.md"
+README_PATH = REPOSITORY_ROOT / "README.md"
 DOCUMENTED_COMMAND_PATHS = sorted(
     {
         tuple(part for part in match.groups() if part)
         for match in re.finditer(
-            r"^\s*cell-curator\s+([\w-]+)(?:\s+([\w-]+))?",
-            SKILL_PATH.read_text(),
+            r"^\s*(?:uv run )?cell-curator\s+([A-Za-z][\w-]*)(?:\s+([A-Za-z][\w-]*))?",
+            SKILL_PATH.read_text() + "\n" + README_PATH.read_text(),
             re.MULTILINE,
         )
     }
@@ -294,3 +297,70 @@ def test_interactive_scene_plan_approval_and_material_assumption_revocation(
     assert revoked_state.approved_assumptions_sha256 == ""
     with pytest.raises(ContractError, match="Gate A blocks biological labels"):
         require_label_gate(config_path, level="L1", parent="ROOT")
+
+
+def test_confirmed_context_survives_execute_resume(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config_path = _write_interactive_fixture(tmp_path)
+    value = yaml.safe_load(config_path.read_text())
+    value["run"]["run_id"] = "confirmed-context-v1"
+    value["guidance"]["context"].update(
+        {
+            "organism": "",
+            "tissue": "",
+            "developmental_stage": "",
+            "condition": "",
+            "technology": "other",
+            "experimental_context": "",
+            "vocabulary_contract": "",
+        }
+    )
+    config_path.write_text(yaml.safe_dump(value, sort_keys=False))
+    fixed_environment = detect_environment(
+        environ={},
+        which=lambda _command: None,
+        system="Linux",
+        machine="x86_64",
+        cpu_count=4,
+        total_ram_bytes=8 * 1024**3,
+        validate_cuda=False,
+    )
+    monkeypatch.setattr(
+        environment_module,
+        "detect_environment",
+        lambda **_kwargs: fixed_environment,
+    )
+
+    scene = prepare_scene(config_path)
+    assert scene["context_complete"] is False
+    confirmation_path = tmp_path / "confirmed-context.json"
+    confirmation_path.write_text(
+        json.dumps(
+            {
+                "organism": "human",
+                "tissue": "reviewer-corrected tissue",
+                "developmental_stage": "adult",
+                "condition": "healthy",
+                "technology": "dissociated",
+                "experimental_context": "reviewer-confirmed fixture",
+                "composition_covariates": ["lineage"],
+                "vocabulary_contract": "reviewer-approved local markers",
+                "reference_contract": "local_only",
+                "visualization_key": "X_pca_harmony",
+                "writeback_prefix": "guided_label",
+            }
+        )
+    )
+    confirmed = confirm_context(
+        config_path,
+        input_path=confirmation_path,
+        reviewer="context-reviewer",
+    )
+    construct_plan(config_path)
+    approve_assumptions(config_path, reviewer="context-reviewer")
+    packet = run_annotation(config_path)
+    persisted = json.loads((packet.parent / "context.json").read_text())
+    assert confirmed["confirmation"] == persisted["confirmation"]
+    assert persisted["biological_context"]["tissue"] == "reviewer-corrected tissue"
