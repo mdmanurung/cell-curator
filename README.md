@@ -97,13 +97,14 @@ Reconcile critics and run strict read-only validation before the separate write-
 approval:
 
 ```bash
-uv run cell-curator write-back preview --config config.yaml
+uv run cell-curator write-back preview --config config.yaml --output annotated.h5ad
 uv run cell-curator write-back apply --config config.yaml \
   --approval approval.json --output annotated.h5ad
 ```
 
-Bind `approval.json` to the run ID and the source, mapping, durable-label, and
-preview-diff hashes emitted by `write-back preview`.
+Bind `approval.json` to every field emitted for approval by `write-back preview`:
+the run, source, mapping, durable labels, assumptions, report, critic artifacts,
+diff, exact output path, and in-place intent.
 
 ### Snakemake execution
 
@@ -111,18 +112,21 @@ The DAG is authoritative for dependencies and resumability. Its default aggregat
 target stops at evidence; review, finalization, and write-back remain explicit:
 
 ```bash
-uv run snakemake --snakefile workflow/Snakefile \
-  --configfile config.yaml all_evidence --cores 4
-uv run snakemake --snakefile workflow/Snakefile \
-  --configfile config.yaml review_packet --cores 4
-uv run snakemake --snakefile workflow/Snakefile \
-  --configfile config.yaml finalization --cores 4
+uv run snakemake --snakefile workflow/Snakefile all_evidence \
+  --configfile config.yaml --cores 4
+uv run snakemake --snakefile workflow/Snakefile review_packet \
+  --configfile config.yaml --cores 4
+uv run snakemake --snakefile workflow/Snakefile finalization \
+  --configfile config.yaml --cores 4
 ```
 
 Use `--dry-run` before scheduling a new configuration. For HPC execution, adapt
 [`workflow/profiles/slurm/config.yaml`](workflow/profiles/slurm/config.yaml) to the
-site rather than hard-coding cluster resources in the workflow. The separate
-`writeback` target remains blocked until its run-bound approval exists.
+site rather than hard-coding cluster resources in the workflow. The DAG uses the
+locked environment that invoked Snakemake, which keeps an installed wheel independent
+of a source-tree `-e .` path. RAPIDS lanes request one `gpu` resource and validate the
+real device at runtime. The separate `writeback` target remains blocked until its
+run-bound approval exists.
 
 ## Use-case guide
 
@@ -199,7 +203,8 @@ explicit results when the acceptance gates are not met.
 
 List the hierarchy levels in `guidance.hierarchy_levels`. The normal execution path
 first audits compatible stored resolutions, then performs parent-local reclustering
-only for eligible scopes. For externally computed score tables, pass
+only for eligible scopes. The standard pipeline intentionally accepts one declared
+level so it cannot finalize a partial hierarchy. For two or more levels, pass
 `--score-manifest hierarchy-scores.json` to `run execute`; each entry must identify
 its exact `(level, parent_scope)` and pass the same scope, evidence, and review gates.
 
