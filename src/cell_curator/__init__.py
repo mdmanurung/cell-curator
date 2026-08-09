@@ -1,5 +1,7 @@
 """Independent, evidence-driven multimodal cell annotation."""
 
+from importlib.metadata import PackageNotFoundError, version
+
 from .api import (
     annotate,
     annotation_progress,
@@ -40,7 +42,10 @@ from .models import (
     RunState,
 )
 
-__version__ = "0.2.0"
+try:
+    __version__ = version("cell-curator")
+except PackageNotFoundError:  # Source checkout before installation.
+    __version__ = "0+unknown"
 
 __all__ = [
     "AnnotationDecision",
