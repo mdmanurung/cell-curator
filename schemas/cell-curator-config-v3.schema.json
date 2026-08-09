@@ -1,0 +1,1199 @@
+{
+  "$defs": {
+    "AdaptiveConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "audit": {
+          "$ref": "#/$defs/AuditConfig"
+        },
+        "eligibility": {
+          "$ref": "#/$defs/EligibilityConfig"
+        },
+        "outcomes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Outcomes",
+          "type": "array"
+        },
+        "parent_local": {
+          "$ref": "#/$defs/ParentLocalConfig"
+        },
+        "stored_candidates": {
+          "$ref": "#/$defs/StoredCandidateConfig"
+        }
+      },
+      "required": [
+        "outcomes",
+        "eligibility",
+        "audit",
+        "stored_candidates",
+        "parent_local"
+      ],
+      "title": "AdaptiveConfig",
+      "type": "object"
+    },
+    "AssayConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "capabilities": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Capabilities",
+          "type": "array"
+        },
+        "feature_id_column": {
+          "default": "",
+          "title": "Feature Id Column",
+          "type": "string"
+        },
+        "feature_space": {
+          "title": "Feature Space",
+          "type": "string"
+        },
+        "gene_mapping_path": {
+          "default": "",
+          "title": "Gene Mapping Path",
+          "type": "string"
+        },
+        "graph_representations": {
+          "items": {
+            "$ref": "#/$defs/GraphRepresentationConfig"
+          },
+          "title": "Graph Representations",
+          "type": "array"
+        },
+        "kind": {
+          "enum": [
+            "rna",
+            "protein",
+            "atac",
+            "gene_activity",
+            "spatial",
+            "other"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "modality": {
+          "default": "root",
+          "title": "Modality",
+          "type": "string"
+        },
+        "representations": {
+          "additionalProperties": {
+            "$ref": "#/$defs/RepresentationConfig"
+          },
+          "title": "Representations",
+          "type": "object"
+        }
+      },
+      "required": [
+        "kind",
+        "feature_space",
+        "representations"
+      ],
+      "title": "AssayConfig",
+      "type": "object"
+    },
+    "AuditConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "capture_max_fraction": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Capture Max Fraction"
+        },
+        "donor_max_fraction": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Donor Max Fraction"
+        },
+        "doublet_fraction_max": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Doublet Fraction Max"
+        },
+        "guide_entropy_min": {
+          "default": 0.6,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Guide Entropy Min",
+          "type": "number"
+        },
+        "incompatible_program_columns": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Incompatible Program Columns",
+          "type": "array"
+        },
+        "incompatible_program_fraction_min": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 0.15,
+          "title": "Incompatible Program Fraction Min"
+        },
+        "meaningful_minority_fraction": {
+          "default": 0.1,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Meaningful Minority Fraction",
+          "type": "number"
+        },
+        "technical_effect_size_max": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 0.15,
+          "title": "Technical Effect Size Max"
+        },
+        "technical_metric_robust_z_max": {
+          "default": 3.0,
+          "minimum": 0,
+          "title": "Technical Metric Robust Z Max",
+          "type": "number"
+        }
+      },
+      "title": "AuditConfig",
+      "type": "object"
+    },
+    "BiologicalContextConfig": {
+      "additionalProperties": false,
+      "description": "Biological and reporting facts that cannot be inferred safely from the object.",
+      "properties": {
+        "composition_covariates": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Composition Covariates",
+          "type": "array"
+        },
+        "condition": {
+          "default": "",
+          "title": "Condition",
+          "type": "string"
+        },
+        "developmental_stage": {
+          "default": "",
+          "title": "Developmental Stage",
+          "type": "string"
+        },
+        "experimental_context": {
+          "default": "",
+          "title": "Experimental Context",
+          "type": "string"
+        },
+        "organism": {
+          "default": "",
+          "title": "Organism",
+          "type": "string"
+        },
+        "reference_contract": {
+          "default": "local_only",
+          "title": "Reference Contract",
+          "type": "string"
+        },
+        "technology": {
+          "default": "other",
+          "enum": [
+            "dissociated",
+            "whole_transcriptome_spatial",
+            "targeted_panel",
+            "other"
+          ],
+          "title": "Technology",
+          "type": "string"
+        },
+        "tissue": {
+          "default": "",
+          "title": "Tissue",
+          "type": "string"
+        },
+        "visualization_key": {
+          "default": "",
+          "title": "Visualization Key",
+          "type": "string"
+        },
+        "vocabulary_contract": {
+          "default": "",
+          "title": "Vocabulary Contract",
+          "type": "string"
+        },
+        "writeback_prefix": {
+          "default": "cell_curator",
+          "title": "Writeback Prefix",
+          "type": "string"
+        }
+      },
+      "title": "BiologicalContextConfig",
+      "type": "object"
+    },
+    "CanonicalPartitionConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_parent_count": {
+          "minimum": 1,
+          "title": "Expected Parent Count",
+          "type": "integer"
+        },
+        "parent_key": {
+          "title": "Parent Key",
+          "type": "string"
+        }
+      },
+      "required": [
+        "parent_key",
+        "expected_parent_count"
+      ],
+      "title": "CanonicalPartitionConfig",
+      "type": "object"
+    },
+    "ComparatorConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "closest_sibling_strategy": {
+          "const": "embedding_centroid",
+          "default": "embedding_centroid",
+          "title": "Closest Sibling Strategy",
+          "type": "string"
+        },
+        "roles": {
+          "items": {
+            "enum": [
+              "parent_remainder",
+              "closest_sibling"
+            ],
+            "type": "string"
+          },
+          "title": "Roles",
+          "type": "array"
+        }
+      },
+      "required": [
+        "roles"
+      ],
+      "title": "ComparatorConfig",
+      "type": "object"
+    },
+    "DetectionConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "default": "",
+          "title": "Key",
+          "type": "string"
+        },
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "semantics": {
+          "default": "> 0",
+          "title": "Semantics",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "X",
+            "x",
+            "raw",
+            "layer"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "DetectionConfig",
+      "type": "object"
+    },
+    "EligibilityConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "min_captures": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min Captures"
+        },
+        "min_cells": {
+          "default": 50,
+          "minimum": 2,
+          "title": "Min Cells",
+          "type": "integer"
+        },
+        "min_donors": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min Donors"
+        },
+        "rare_exceptions_require_approval": {
+          "default": true,
+          "title": "Rare Exceptions Require Approval",
+          "type": "boolean"
+        }
+      },
+      "title": "EligibilityConfig",
+      "type": "object"
+    },
+    "EvidenceConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "adjusted_pvalue_max": {
+          "default": 0.05,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Adjusted Pvalue Max",
+          "type": "number"
+        },
+        "lanes": {
+          "items": {
+            "$ref": "#/$defs/EvidenceLaneConfig"
+          },
+          "title": "Lanes",
+          "type": "array"
+        },
+        "max_negative_violation": {
+          "default": 0.25,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Max Negative Violation",
+          "type": "number"
+        },
+        "max_normalized_entropy": {
+          "default": 0.85,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Max Normalized Entropy",
+          "type": "number"
+        },
+        "min_confidence": {
+          "default": 0.55,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Min Confidence",
+          "type": "number"
+        },
+        "min_margin": {
+          "default": 0.1,
+          "minimum": 0,
+          "title": "Min Margin",
+          "type": "number"
+        },
+        "min_positive_coverage": {
+          "default": 0.35,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Min Positive Coverage",
+          "type": "number"
+        },
+        "parent_vocabulary": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Parent Vocabulary",
+          "type": "object"
+        },
+        "require_both_comparators": {
+          "default": true,
+          "title": "Require Both Comparators",
+          "type": "boolean"
+        },
+        "require_both_marker_methods": {
+          "default": true,
+          "title": "Require Both Marker Methods",
+          "type": "boolean"
+        },
+        "required_candidate_gates": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Required Candidate Gates",
+          "type": "array"
+        }
+      },
+      "title": "EvidenceConfig",
+      "type": "object"
+    },
+    "EvidenceLaneConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "assay": {
+          "title": "Assay",
+          "type": "string"
+        },
+        "lane_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lane Key"
+        },
+        "representation": {
+          "title": "Representation",
+          "type": "string"
+        },
+        "required_for_acceptance": {
+          "default": true,
+          "title": "Required For Acceptance",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "assay",
+        "representation"
+      ],
+      "title": "EvidenceLaneConfig",
+      "type": "object"
+    },
+    "GpuContractConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "compute_capability": {
+          "title": "Compute Capability",
+          "type": "string"
+        },
+        "name_contains": {
+          "title": "Name Contains",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name_contains",
+        "compute_capability"
+      ],
+      "title": "GpuContractConfig",
+      "type": "object"
+    },
+    "GraphRepresentationConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "default": "",
+          "title": "Key",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "obsm",
+            "X",
+            "x",
+            "layer"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "GraphRepresentationConfig",
+      "type": "object"
+    },
+    "GuidanceConfig": {
+      "additionalProperties": false,
+      "description": "Interactive/non-interactive gate contract for the three-stage workflow.",
+      "properties": {
+        "assumptions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Assumptions",
+          "type": "array"
+        },
+        "context": {
+          "$ref": "#/$defs/BiologicalContextConfig"
+        },
+        "hierarchy_levels": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Hierarchy Levels",
+          "type": "array"
+        },
+        "interactive": {
+          "default": true,
+          "title": "Interactive",
+          "type": "boolean"
+        },
+        "pause_after_each_level": {
+          "default": true,
+          "title": "Pause After Each Level",
+          "type": "boolean"
+        },
+        "preauthorized": {
+          "default": false,
+          "title": "Preauthorized",
+          "type": "boolean"
+        },
+        "reviewer": {
+          "default": "",
+          "title": "Reviewer",
+          "type": "string"
+        }
+      },
+      "title": "GuidanceConfig",
+      "type": "object"
+    },
+    "HpcConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "cpu_resources": {
+          "additionalProperties": true,
+          "title": "Cpu Resources",
+          "type": "object"
+        },
+        "gpu_resources": {
+          "additionalProperties": true,
+          "title": "Gpu Resources",
+          "type": "object"
+        }
+      },
+      "title": "HpcConfig",
+      "type": "object"
+    },
+    "InputConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "assays": {
+          "additionalProperties": {
+            "$ref": "#/$defs/AssayConfig"
+          },
+          "title": "Assays",
+          "type": "object"
+        },
+        "expected_sha256": {
+          "default": "",
+          "title": "Expected Sha256",
+          "type": "string"
+        },
+        "guide_columns": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Guide Columns",
+          "type": "array"
+        },
+        "keys": {
+          "$ref": "#/$defs/InputKeysConfig"
+        },
+        "kind": {
+          "enum": [
+            "h5ad",
+            "h5mu"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "required_obs_keys": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Required Obs Keys",
+          "type": "array"
+        },
+        "technical_metrics": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Technical Metrics",
+          "type": "object"
+        }
+      },
+      "required": [
+        "kind",
+        "path",
+        "assays",
+        "keys"
+      ],
+      "title": "InputConfig",
+      "type": "object"
+    },
+    "InputKeysConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "batch": {
+          "default": "",
+          "title": "Batch",
+          "type": "string"
+        },
+        "canonical_parent": {
+          "title": "Canonical Parent",
+          "type": "string"
+        },
+        "capture": {
+          "default": "",
+          "title": "Capture",
+          "type": "string"
+        },
+        "donor": {
+          "default": "",
+          "title": "Donor",
+          "type": "string"
+        },
+        "doublet_class": {
+          "default": "",
+          "title": "Doublet Class",
+          "type": "string"
+        },
+        "doublet_score": {
+          "default": "",
+          "title": "Doublet Score",
+          "type": "string"
+        },
+        "embedding": {
+          "default": "",
+          "title": "Embedding",
+          "type": "string"
+        },
+        "scope": {
+          "title": "Scope",
+          "type": "string"
+        },
+        "sex": {
+          "default": "",
+          "title": "Sex",
+          "type": "string"
+        },
+        "spatial": {
+          "default": "",
+          "title": "Spatial",
+          "type": "string"
+        },
+        "stored_resolutions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Stored Resolutions",
+          "type": "array"
+        }
+      },
+      "required": [
+        "canonical_parent",
+        "scope"
+      ],
+      "title": "InputKeysConfig",
+      "type": "object"
+    },
+    "KnowledgeConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "allow_optional_remote_enhancement": {
+          "default": true,
+          "title": "Allow Optional Remote Enhancement",
+          "type": "boolean"
+        },
+        "providers": {
+          "items": {
+            "$ref": "#/$defs/ProviderConfig"
+          },
+          "title": "Providers",
+          "type": "array"
+        },
+        "require_local_grounding_for_labels": {
+          "default": true,
+          "title": "Require Local Grounding For Labels",
+          "type": "boolean"
+        }
+      },
+      "title": "KnowledgeConfig",
+      "type": "object"
+    },
+    "MarkerConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "allowed_gpu_contracts": {
+          "items": {
+            "$ref": "#/$defs/GpuContractConfig"
+          },
+          "title": "Allowed Gpu Contracts",
+          "type": "array"
+        },
+        "cpu_fallback": {
+          "default": false,
+          "title": "Cpu Fallback",
+          "type": "boolean"
+        },
+        "cuda_major": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cuda Major"
+        },
+        "logreg": {
+          "additionalProperties": true,
+          "title": "Logreg",
+          "type": "object"
+        },
+        "rapids_distribution": {
+          "default": "",
+          "title": "Rapids Distribution",
+          "type": "string"
+        },
+        "rapids_singlecell_version": {
+          "default": "",
+          "title": "Rapids Singlecell Version",
+          "type": "string"
+        },
+        "wilcoxon": {
+          "additionalProperties": true,
+          "title": "Wilcoxon",
+          "type": "object"
+        }
+      },
+      "title": "MarkerConfig",
+      "type": "object"
+    },
+    "ParentLocalConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "bootstrap_fraction": {
+          "default": 0.8,
+          "exclusiveMinimum": 0.5,
+          "maximum": 1,
+          "title": "Bootstrap Fraction",
+          "type": "number"
+        },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "knn_k": {
+          "default": 15,
+          "minimum": 2,
+          "title": "Knn K",
+          "type": "integer"
+        },
+        "max_passes_per_parent": {
+          "default": 1,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Max Passes Per Parent",
+          "type": "integer"
+        },
+        "reference_seeds": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Reference Seeds",
+          "type": "array"
+        },
+        "reject_one_cluster": {
+          "default": true,
+          "title": "Reject One Cluster",
+          "type": "boolean"
+        },
+        "resolutions": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Resolutions",
+          "type": "array"
+        },
+        "select": {
+          "const": "lowest_stable_biologically_resolving",
+          "default": "lowest_stable_biologically_resolving",
+          "title": "Select",
+          "type": "string"
+        },
+        "stability_metric": {
+          "default": "ari",
+          "enum": [
+            "ari",
+            "jaccard"
+          ],
+          "title": "Stability Metric",
+          "type": "string"
+        },
+        "stability_threshold_strictly_greater_than": {
+          "default": 0.8,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Stability Threshold Strictly Greater Than",
+          "type": "number"
+        }
+      },
+      "title": "ParentLocalConfig",
+      "type": "object"
+    },
+    "ProviderConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "cache_path": {
+          "default": "",
+          "title": "Cache Path",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "local_markers",
+            "ontology",
+            "remote_ontology",
+            "reference",
+            "cached_table",
+            "remote_table"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "label_key": {
+          "default": "",
+          "title": "Label Key",
+          "type": "string"
+        },
+        "parent_key": {
+          "default": "",
+          "title": "Parent Key",
+          "type": "string"
+        },
+        "path": {
+          "default": "",
+          "title": "Path",
+          "type": "string"
+        },
+        "sha256": {
+          "default": "",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "timeout_seconds": {
+          "default": 30.0,
+          "exclusiveMinimum": 0,
+          "title": "Timeout Seconds",
+          "type": "number"
+        },
+        "url": {
+          "default": "",
+          "title": "Url",
+          "type": "string"
+        },
+        "version": {
+          "default": "unversioned",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "ProviderConfig",
+      "type": "object"
+    },
+    "RepresentationConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "detection": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DetectionConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "feature_space": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Feature Space"
+        },
+        "key": {
+          "default": "",
+          "title": "Key",
+          "type": "string"
+        },
+        "motif_mapping_path": {
+          "default": "",
+          "title": "Motif Mapping Path",
+          "type": "string"
+        },
+        "ontology_compatible": {
+          "default": false,
+          "title": "Ontology Compatible",
+          "type": "boolean"
+        },
+        "peak_to_gene_path": {
+          "default": "",
+          "title": "Peak To Gene Path",
+          "type": "string"
+        },
+        "ranking_backend": {
+          "title": "Ranking Backend",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "X",
+            "x",
+            "raw",
+            "layer"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "weight": {
+          "default": 1.0,
+          "exclusiveMinimum": 0,
+          "title": "Weight",
+          "type": "number"
+        }
+      },
+      "required": [
+        "source",
+        "ranking_backend"
+      ],
+      "title": "RepresentationConfig",
+      "type": "object"
+    },
+    "ReviewConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "critic_passes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Critic Passes",
+          "type": "array"
+        },
+        "require_explicit_human_approval": {
+          "default": true,
+          "title": "Require Explicit Human Approval",
+          "type": "boolean"
+        },
+        "require_reconciliation": {
+          "default": true,
+          "title": "Require Reconciliation",
+          "type": "boolean"
+        },
+        "type_and_state_separate": {
+          "default": true,
+          "title": "Type And State Separate",
+          "type": "boolean"
+        }
+      },
+      "title": "ReviewConfig",
+      "type": "object"
+    },
+    "RunConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "immutable": {
+          "default": true,
+          "title": "Immutable",
+          "type": "boolean"
+        },
+        "mode": {
+          "$ref": "#/$defs/RunMode",
+          "default": "evidence-only"
+        },
+        "output_root": {
+          "title": "Output Root",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "output_root"
+      ],
+      "title": "RunConfig",
+      "type": "object"
+    },
+    "RunMode": {
+      "enum": [
+        "annotation",
+        "evidence-only"
+      ],
+      "title": "RunMode",
+      "type": "string"
+    },
+    "StoredCandidateConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "adjacent_jaccard_min": {
+          "default": 0.8,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Adjacent Jaccard Min",
+          "type": "number"
+        },
+        "max_parent_fraction": {
+          "default": 0.95,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Max Parent Fraction",
+          "type": "number"
+        },
+        "min_adjacent_matches": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Min Adjacent Matches",
+          "type": "integer"
+        },
+        "min_parent_fraction": {
+          "default": 0.03,
+          "exclusiveMaximum": 1,
+          "exclusiveMinimum": 0,
+          "title": "Min Parent Fraction",
+          "type": "number"
+        },
+        "min_parent_purity": {
+          "default": 0.9,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Min Parent Purity",
+          "type": "number"
+        }
+      },
+      "title": "StoredCandidateConfig",
+      "type": "object"
+    }
+  },
+  "$id": "urn:cell-curator:schema:configuration:3",
+  "additionalProperties": false,
+  "properties": {
+    "adaptive": {
+      "$ref": "#/$defs/AdaptiveConfig"
+    },
+    "canonical_partitions": {
+      "additionalProperties": {
+        "$ref": "#/$defs/CanonicalPartitionConfig"
+      },
+      "title": "Canonical Partitions",
+      "type": "object"
+    },
+    "comparators": {
+      "$ref": "#/$defs/ComparatorConfig"
+    },
+    "evidence": {
+      "$ref": "#/$defs/EvidenceConfig"
+    },
+    "guidance": {
+      "$ref": "#/$defs/GuidanceConfig"
+    },
+    "hpc": {
+      "$ref": "#/$defs/HpcConfig"
+    },
+    "input": {
+      "$ref": "#/$defs/InputConfig"
+    },
+    "knowledge": {
+      "$ref": "#/$defs/KnowledgeConfig"
+    },
+    "markers": {
+      "$ref": "#/$defs/MarkerConfig"
+    },
+    "review": {
+      "$ref": "#/$defs/ReviewConfig"
+    },
+    "run": {
+      "$ref": "#/$defs/RunConfig"
+    },
+    "schema_version": {
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "run",
+    "input",
+    "canonical_partitions",
+    "adaptive",
+    "comparators",
+    "markers",
+    "evidence",
+    "review"
+  ],
+  "title": "CellCuratorConfig",
+  "type": "object",
+  "x-cell-curator-schema-version": 3
+}

@@ -1,0 +1,421 @@
+"""Snakemake-authoritative guided cell-curator phase DAG.
+
+The default target stops at evidence completion. Scene setting, planning, the
+assumptions gate, level checkpoints, review, finalization, and write-back remain
+separate resumable targets.
+"""
+
+from pathlib import Path
+
+import pandas as pd
+from snakemake.exceptions import WorkflowError
+
+
+if not workflow.configfiles:
+    raise WorkflowError("pass the strict run configuration with --configfile CONFIG.yaml")
+
+CONFIG = Path(workflow.configfiles[0])
+RUN = Path(config["run"]["output_root"]) / config["run"]["run_id"]
+LANE_ITEMS = {
+    str(item.get("lane_key") or f"{item['assay']}__{item['representation']}"): item
+    for item in config.get("evidence", {}).get("lanes", [])
+}
+LANES = sorted(LANE_ITEMS)
+RECEIPTS = [RUN / "evidence" / "lanes" / lane / "receipt.json" for lane in LANES]
+WRITEBACK_SUFFIX = "h5ad" if config["input"]["kind"] == "h5ad" else "h5mu"
+FIRST_LEVEL = str(config.get("guidance", {}).get("hierarchy_levels", ["L1"])[0])
+ROOT_GATE = RUN / "gates" / FIRST_LEVEL / "ROOT.approved.json"
+ASSEMBLED_MARKERS = RUN / "markers" / "assembled_programs.json"
+
+
+def candidate_lane_receipts(wildcards):
+    completed = checkpoints.discover_refinement_candidates.get(**wildcards)
+    manifest = pd.read_csv(completed.output.comparators, sep="\t", keep_default_na=False)
+    return [
+        RUN / "evidence" / "candidate_lanes" / lane_id / "receipt.json"
+        for lane_id in sorted(manifest["lane_id"].astype(str))
+    ]
+
+
+rule all_evidence:
+    input:
+        ROOT_GATE,
+        ASSEMBLED_MARKERS,
+        RUN / "evidence" / "summary" / "evidence.manifest.json",
+        RUN / "evidence" / "receipts.validated.json",
+        candidate_lane_receipts,
+
+
+rule guided_scene:
+    input:
+        RUN / "context.json",
+        RUN / "environment.json",
+        RUN / "qc" / "qc.manifest.json",
+
+
+rule guided_plan:
+    input:
+        RUN / "plan.json",
+        RUN / "plan" / "vocabulary.tsv",
+
+
+rule approved_execution:
+    input:
+        ROOT_GATE,
+
+
+rule review_packet:
+    input:
+        RUN / "review_packet" / "review_packet.manifest.json",
+
+
+rule finalization:
+    input:
+        RUN / "final_provenance.manifest.json",
+
+
+rule writeback:
+    input:
+        RUN / "writeback" / f"annotated.{WRITEBACK_SUFFIX}",
+
+
+rule canonicalize_and_qc:
+    input:
+        config=CONFIG,
+        source=lambda wildcards: config["input"]["path"],
+    output:
+        contract=RUN / "input_contract.manifest.json",
+        canonical=RUN / "canonical" / f"input.{config['input']['kind']}",
+        qc_manifest=RUN / "qc" / "qc.manifest.json",
+        qc_cells=RUN / "qc" / "cell_metrics.tsv",
+        cells=RUN / "prepared" / "cells.tsv",
+        parents=RUN / "prepared" / "parent_membership.tsv",
+        stored=RUN / "prepared" / "stored_membership_long.tsv",
+    log:
+        RUN / "logs" / "canonicalize_qc.log",
+    benchmark:
+        RUN / "benchmarks" / "canonicalize_qc.tsv",
+    params:
+        run_root=RUN,
+    conda:
+        "envs/cell-curator.yaml"
+    shell:
+        "cell-curator data qc --config {input.config} "
+        "--run-root {params.run_root} > {log} 2>&1"
+
+
+rule set_scene:
+    input:
+        config=CONFIG,
+        contract=rules.canonicalize_and_qc.output.contract,
+        qc=rules.canonicalize_and_qc.output.qc_manifest,
+        cells=rules.canonicalize_and_qc.output.cells,
+    output:
+        context_json=RUN / "context.json",
+        context_md=RUN / "context.md",
+        environment=RUN / "environment.json",
+        knowledge=RUN / "knowledge.manifest.json",
+        assumptions_json=RUN / "assumptions.json",
+        assumptions_md=RUN / "assumptions.md",
+    log:
+        RUN / "logs" / "scene.log",
+    benchmark:
+        RUN / "benchmarks" / "scene.tsv",
+    conda:
+        "envs/cell-curator.yaml"
+    shell:
+        "cell-curator run init --config {input.config} > {log} 2>&1"
+
+
+rule construct_annotation_plan:
+    input:
+        config=CONFIG,
+        context=rules.set_scene.output.context_json,
+        environment=rules.set_scene.output.environment,
+        knowledge=rules.set_scene.output.knowledge,
+    output:
+        plan_json=RUN / "plan.json",
+        plan_md=RUN / "plan.md",
+        vocabulary=RUN / "plan" / "vocabulary.tsv",
+    log:
+        RUN / "logs" / "plan.log",
+    benchmark:
+        RUN / "benchmarks" / "plan.tsv",
+    conda:
+        "envs/cell-curator.yaml"
+    shell:
+        "cell-curator run plan --config {input.config} > {log} 2>&1"
+
+
+rule assemble_marker_programs:
+    input:
+        config=CONFIG,
+        plan=rules.construct_annotation_plan.output.plan_json,
+        vocabulary=rules.construct_annotation_plan.output.vocabulary,
+    output:
+        programs=ASSEMBLED_MARKERS,
+    log:
+        RUN / "logs" / "markers_assemble.log",
+    benchmark:
+        RUN / "benchmarks" / "markers_assemble.tsv",
+    conda:
+        "envs/cell-curator.yaml"
+    shell:
+        "cell-curator markers assemble --config {input.config} "
+        "--include-unscoped --output {output.programs} > {log} 2>&1"
+
+
+rule validate_assumption_gate:
+    input:
+        config=CONFIG,
+        plan=rules.construct_annotation_plan.output.plan_json,
+        assumptions=rules.set_scene.output.assumptions_json,
+    output:
+        receipt=ROOT_GATE,
+    params:
+        level=FIRST_LEVEL,
+        parent="ROOT",
+    benchmark:
+        RUN / "benchmarks" / "assumption_gate.tsv",
+    log:
+        RUN / "logs" / "assumption_gate.log",
+    conda:
+        "envs/cell-curator.yaml"
+    script:
+        "scripts/validate_gate.py"
+
+
+rule audit_parents:
+    input:
+        config=CONFIG,
+        gate=rules.validate_assumption_gate.output.receipt,
+        contract=rules.canonicalize_and_qc.output.contract,
+        cells=rules.canonicalize_and_qc.output.cells,
+    output:
+        audit=RUN / "adaptive_parent_audit.tsv",
+        technical=RUN / "adaptive" / "technical_summary.tsv",
+        doublets=RUN / "adaptive" / "doublet_summary.tsv",
+    log:
+        RUN / "logs" / "audit.log",
+    benchmark:
+        RUN / "benchmarks" / "audit.tsv",
+    conda:
+        "envs/cell-curator.yaml"
+    shell:
+        "cell-curator pipeline audit --config {input.config} > {log} 2>&1"
+
+
+checkpoint discover_refinement_candidates:
+    input:
+        config=CONFIG,
+        audit=rules.audit_parents.output.audit,
+        parents=rules.canonicalize_and_qc.output.parents,
+        stored=rules.canonicalize_and_qc.output.stored,
+    output:
+        registry=RUN / "discovery" / "candidate_registry.tsv",
+        membership=RUN / "discovery" / "candidate_membership.tsv",
+        evaluations=RUN / "discovery" / "partition_evaluations.tsv",
+        manifest=RUN / "discovery" / "discovery.manifest.json",
+        comparators=RUN / "comparators" / "comparator_manifest.tsv",
+        comparator_manifest=RUN / "comparators" / "comparator_manifest.json",
+    log:
+        RUN / "logs" / "refinement.log",
+    benchmark:
+        RUN / "benchmarks" / "refinement.tsv",
+    conda:
+        "envs/cell-curator.yaml"
+    shell:
+        "cell-curator pipeline refine --config {input.config} > {log} 2>&1"
+
+
+rule evidence_lane:
+    input:
+        config=CONFIG,
+        contract=rules.canonicalize_and_qc.output.contract,
+        discovery=rules.discover_refinement_candidates.output.manifest,
+        programs=rules.assemble_marker_programs.output.programs,
+    output:
+        receipt=RUN / "evidence" / "lanes" / "{lane}" / "receipt.json",
+        program=RUN / "evidence" / "lanes" / "{lane}" / "program_evidence.tsv",
+        markers=RUN / "evidence" / "lanes" / "{lane}" / "bottom_up_markers.tsv",
+    params:
+        assay=lambda wildcards: LANE_ITEMS[wildcards.lane]["assay"],
+        representation=lambda wildcards: LANE_ITEMS[wildcards.lane]["representation"],
+    wildcard_constraints:
+        lane="|".join(LANES) if LANES else "a^",
+    log:
+        RUN / "logs" / "evidence" / "{lane}.log",
+    benchmark:
+        RUN / "benchmarks" / "evidence" / "{lane}.tsv",
+    conda:
+        "envs/cell-curator.yaml"
+    shell:
+        "cell-curator pipeline evidence-lane --config {input.config} "
+        "--assay {params.assay} --representation {params.representation} > {log} 2>&1"
+
+
+rule consolidate_evidence:
+    input:
+        config=CONFIG,
+        gate=rules.validate_assumption_gate.output.receipt,
+        programs=rules.assemble_marker_programs.output.programs,
+        receipts=RECEIPTS,
+        discovery=rules.discover_refinement_candidates.output.manifest,
+    output:
+        receipts=RUN / "evidence" / "receipts.validated.json",
+        scores=RUN / "evidence" / "summary" / "multimodal_label_scores.tsv",
+        proposals=RUN / "evidence" / "summary" / "annotation_proposals.tsv",
+        cooccurrence=RUN / "evidence" / "summary" / "program_cooccurrence.tsv",
+        corroboration=RUN / "evidence" / "summary" / "source_corroboration.tsv",
+        manifest=RUN / "evidence" / "summary" / "evidence.manifest.json",
+    log:
+        RUN / "logs" / "evidence_consolidation.log",
+    benchmark:
+        RUN / "benchmarks" / "evidence_consolidation.tsv",
+    conda:
+        "envs/cell-curator.yaml"
+    shell:
+        "cell-curator pipeline evidence --config {input.config} > {log} 2>&1"
+
+
+rule candidate_evidence_lane:
+    input:
+        config=CONFIG,
+        programs=rules.assemble_marker_programs.output.programs,
+        comparators=lambda wildcards: checkpoints.discover_refinement_candidates.get().output.comparators,
+    output:
+        receipt=RUN / "evidence" / "candidate_lanes" / "{candidate_lane_id}" / "receipt.json",
+        program=RUN / "evidence" / "candidate_lanes" / "{candidate_lane_id}" / "program_evidence.tsv",
+        markers=RUN / "evidence" / "candidate_lanes" / "{candidate_lane_id}" / "bottom_up_markers.tsv",
+        comparison=RUN / "evidence" / "candidate_lanes" / "{candidate_lane_id}" / "comparison.json",
+    log:
+        RUN / "logs" / "candidate_evidence" / "{candidate_lane_id}.log",
+    benchmark:
+        RUN / "benchmarks" / "candidate_evidence" / "{candidate_lane_id}.tsv",
+    conda:
+        "envs/cell-curator.yaml"
+    shell:
+        "cell-curator pipeline candidate-evidence-lane --config {input.config} "
+        "--lane-id {wildcards.candidate_lane_id} > {log} 2>&1"
+
+
+rule derive_decisions:
+    input:
+        config=CONFIG,
+        gate=rules.validate_assumption_gate.output.receipt,
+        evidence=rules.consolidate_evidence.output.manifest,
+        registry=rules.discover_refinement_candidates.output.registry,
+        membership=rules.discover_refinement_candidates.output.membership,
+        comparators=rules.discover_refinement_candidates.output.comparators,
+        candidate_receipts=candidate_lane_receipts,
+        audit=rules.audit_parents.output.audit,
+    output:
+        children=RUN / "decisions" / "child_evidence_summary.tsv",
+        candidate_manifest=RUN / "decisions" / "candidate_evidence.manifest.json",
+        parents=RUN / "decisions" / "parent_decision_summary.tsv",
+    log:
+        RUN / "logs" / "decisions.log",
+    benchmark:
+        RUN / "benchmarks" / "decisions.tsv",
+    conda:
+        "envs/cell-curator.yaml"
+    shell:
+        "cell-curator pipeline decide --config {input.config} > {log} 2>&1"
+
+
+rule build_mapping:
+    input:
+        config=CONFIG,
+        gate=rules.validate_assumption_gate.output.receipt,
+        decisions=rules.derive_decisions.output.parents,
+        children=rules.derive_decisions.output.children,
+        proposals=rules.consolidate_evidence.output.proposals,
+        cells=rules.canonicalize_and_qc.output.cells,
+    output:
+        mapping=RUN / "mapping" / "parent_child_mapping.tsv",
+        totals=RUN / "mapping" / "leaf_identity_totals.tsv",
+        validation=RUN / "mapping" / "mapping.validation.json",
+    log:
+        RUN / "logs" / "mapping.log",
+    benchmark:
+        RUN / "benchmarks" / "mapping.tsv",
+    conda:
+        "envs/cell-curator.yaml"
+    shell:
+        "cell-curator pipeline map --config {input.config} > {log} 2>&1"
+
+
+rule build_review:
+    input:
+        config=CONFIG,
+        gate=rules.validate_assumption_gate.output.receipt,
+        mapping=rules.build_mapping.output.validation,
+        evidence=rules.consolidate_evidence.output.manifest,
+        cooccurrence=rules.consolidate_evidence.output.cooccurrence,
+        corroboration=rules.consolidate_evidence.output.corroboration,
+        decisions=rules.derive_decisions.output.parents,
+        technical=rules.audit_parents.output.technical,
+        doublets=rules.audit_parents.output.doublets,
+    output:
+        critic=RUN / "review" / "critic_packet.json",
+        findings=RUN / "review" / "critic_findings.tsv",
+        reconciliation=RUN / "review" / "critic_reconciliation.tsv",
+        report=RUN / "review" / "report.html",
+        manifest=RUN / "review" / "report.manifest.json",
+        checkpoint=RUN / "checkpoints" / FIRST_LEVEL / "ROOT.json",
+    log:
+        RUN / "logs" / "review.log",
+    benchmark:
+        RUN / "benchmarks" / "review.tsv",
+    conda:
+        "envs/cell-curator.yaml"
+    shell:
+        "cell-curator pipeline review --config {input.config} > {log} 2>&1"
+
+
+rule validate_finalization:
+    input:
+        config=CONFIG,
+        gate=rules.validate_assumption_gate.output.receipt,
+        report=rules.build_review.output.manifest,
+        mapping=rules.build_mapping.output.validation,
+        checkpoint=rules.build_review.output.checkpoint,
+    output:
+        provenance=RUN / "final_provenance.manifest.json",
+    log:
+        RUN / "logs" / "validation.log",
+    conda:
+        "envs/cell-curator.yaml"
+    shell:
+        "cell-curator run validate --config {input.config} > {log} 2>&1"
+
+
+rule freeze_review_packet:
+    input:
+        config=CONFIG,
+        final=rules.validate_finalization.output.provenance,
+    output:
+        manifest=RUN / "review_packet" / "review_packet.manifest.json",
+    log:
+        RUN / "logs" / "review_packet.log",
+    conda:
+        "envs/cell-curator.yaml"
+    shell:
+        "cell-curator pipeline packet --config {input.config} > {log} 2>&1"
+
+
+rule apply_approved_writeback:
+    input:
+        config=CONFIG,
+        final=rules.validate_finalization.output.provenance,
+        approval=RUN / "approval.json",
+    output:
+        annotated=RUN / "writeback" / f"annotated.{WRITEBACK_SUFFIX}",
+        receipt=RUN / "writeback" / "receipt.json",
+    log:
+        RUN / "logs" / "writeback.log",
+    conda:
+        "envs/cell-curator.yaml"
+    shell:
+        "cell-curator write-back apply --config {input.config} --approval {input.approval} "
+        "--output {output.annotated} > {log} 2>&1"

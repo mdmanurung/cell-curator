@@ -1,0 +1,24 @@
+{
+  "schema_version": 3,
+  "dataset": "10x-10k-human-pbmc-5prime-v2",
+  "modality": "rna",
+  "source_url": "https://www.10xgenomics.com/datasets/10-k-human-pbm-cs-5-v-2-0-chromium-x-2-standard-6-1-0",
+  "artifacts": [
+    {
+      "name": "filtered_feature_bc_matrix.h5",
+      "url": "https://cf.10xgenomics.com/samples/cell-vdj/6.1.0/10k_PBMC_5pv2_nextgem_Chromium_X_10k_PBMC_5pv2_nextgem_Chromium_X/10k_PBMC_5pv2_nextgem_Chromium_X_10k_PBMC_5pv2_nextgem_Chromium_X_count_sample_feature_bc_matrix.h5",
+      "sha256": "pending-after-download"
+    }
+  ],
+  "sha256": "pending-after-artifact-selection",
+  "license": "CC BY 4.0",
+  "status": "pending-external-resource",
+  "blocker": "The downloadable matrix, truth labels, and comparator prediction exports are not present locally.",
+  "reproduce": [
+    "mkdir -p benchmarks/data/10x-10k-human-pbmc-5prime-v2",
+    "curl -fL --retry 3 --output benchmarks/data/10x-10k-human-pbmc-5prime-v2/filtered_feature_bc_matrix.h5 https://cf.10xgenomics.com/samples/cell-vdj/6.1.0/10k_PBMC_5pv2_nextgem_Chromium_X_10k_PBMC_5pv2_nextgem_Chromium_X/10k_PBMC_5pv2_nextgem_Chromium_X_10k_PBMC_5pv2_nextgem_Chromium_X_count_sample_feature_bc_matrix.h5",
+    "sha256sum benchmarks/data/10x-10k-human-pbmc-5prime-v2/filtered_feature_bc_matrix.h5",
+    "Export truth labels and each system to benchmarks/neutral-format.schema.json.",
+    "cell-curator benchmark evaluate --predictions PREDICTIONS.tsv --system SYSTEM --dataset 10x-10k-human-pbmc-5prime-v2 --output RESULT.json"
+  ]
+}

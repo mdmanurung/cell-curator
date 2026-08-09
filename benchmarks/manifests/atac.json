@@ -1,0 +1,36 @@
+{
+  "schema_version": 3,
+  "dataset": "10x-10k-human-pbmc-atac-v2",
+  "modality": "atac",
+  "source_url": "https://www.10xgenomics.com/datasets/10k-human-pbmcs-atac-v2-chromium-controller-2-standard",
+  "artifacts": [
+    {
+      "name": "filtered_peak_bc_matrix.h5",
+      "url": "https://cf.10xgenomics.com/samples/cell-atac/2.1.0/10k_pbmc_ATACv2_nextgem_Chromium_Controller/10k_pbmc_ATACv2_nextgem_Chromium_Controller_filtered_peak_bc_matrix.h5",
+      "sha256": "pending-after-download"
+    },
+    {
+      "name": "filtered_tf_bc_matrix.h5",
+      "url": "https://cf.10xgenomics.com/samples/cell-atac/2.1.0/10k_pbmc_ATACv2_nextgem_Chromium_Controller/10k_pbmc_ATACv2_nextgem_Chromium_Controller_filtered_tf_bc_matrix.h5",
+      "sha256": "pending-after-download"
+    },
+    {
+      "name": "peak_annotation.tsv",
+      "url": "https://cf.10xgenomics.com/samples/cell-atac/2.1.0/10k_pbmc_ATACv2_nextgem_Chromium_Controller/10k_pbmc_ATACv2_nextgem_Chromium_Controller_peak_annotation.tsv",
+      "sha256": "pending-after-download"
+    }
+  ],
+  "sha256": "pending-after-artifact-selection",
+  "license": "CC BY 4.0",
+  "status": "pending-external-resource",
+  "blocker": "The peak matrix, peak-to-gene or motif mapping, truth labels, and comparator predictions are not present locally.",
+  "reproduce": [
+    "mkdir -p benchmarks/data/10x-10k-human-pbmc-atac-v2",
+    "curl -fL --retry 3 --output benchmarks/data/10x-10k-human-pbmc-atac-v2/filtered_peak_bc_matrix.h5 https://cf.10xgenomics.com/samples/cell-atac/2.1.0/10k_pbmc_ATACv2_nextgem_Chromium_Controller/10k_pbmc_ATACv2_nextgem_Chromium_Controller_filtered_peak_bc_matrix.h5",
+    "curl -fL --retry 3 --output benchmarks/data/10x-10k-human-pbmc-atac-v2/filtered_tf_bc_matrix.h5 https://cf.10xgenomics.com/samples/cell-atac/2.1.0/10k_pbmc_ATACv2_nextgem_Chromium_Controller/10k_pbmc_ATACv2_nextgem_Chromium_Controller_filtered_tf_bc_matrix.h5",
+    "curl -fL --retry 3 --output benchmarks/data/10x-10k-human-pbmc-atac-v2/peak_annotation.tsv https://cf.10xgenomics.com/samples/cell-atac/2.1.0/10k_pbmc_ATACv2_nextgem_Chromium_Controller/10k_pbmc_ATACv2_nextgem_Chromium_Controller_peak_annotation.tsv",
+    "sha256sum benchmarks/data/10x-10k-human-pbmc-atac-v2/filtered_peak_bc_matrix.h5 benchmarks/data/10x-10k-human-pbmc-atac-v2/filtered_tf_bc_matrix.h5 benchmarks/data/10x-10k-human-pbmc-atac-v2/peak_annotation.tsv",
+    "Export truth labels and each system to benchmarks/neutral-format.schema.json.",
+    "cell-curator benchmark evaluate --predictions PREDICTIONS.tsv --system SYSTEM --dataset 10x-10k-human-pbmc-atac-v2 --output RESULT.json"
+  ]
+}

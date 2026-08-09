@@ -1,0 +1,23 @@
+{
+  "schema_version": 3,
+  "dataset": "cell-curator-synthetic-edge-cases-v1",
+  "modality": "synthetic-multimodal",
+  "source_url": "local://benchmarks/fixtures/synthetic_predictions.tsv",
+  "local_path": "benchmarks/fixtures/synthetic_predictions.tsv",
+  "sha256": "529c980c239c84f830b367bce5a7be9bf8ed71d32581725fd521352979971807",
+  "license": "CC0-1.0",
+  "status": "available",
+  "scenarios": [
+    "ambiguous",
+    "hierarchical",
+    "mixed-doublet",
+    "technical",
+    "gradient",
+    "successful-split",
+    "retained-parent"
+  ],
+  "reproduce": [
+    "cell-curator benchmark validate-manifest --manifest benchmarks/manifests/synthetic.json",
+    "cell-curator benchmark evaluate --predictions benchmarks/fixtures/synthetic_predictions.tsv --system cell-curator-fixture --dataset cell-curator-synthetic-edge-cases-v1 --output benchmarks/results/synthetic.json"
+  ]
+}

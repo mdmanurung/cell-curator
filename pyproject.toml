@@ -1,0 +1,83 @@
+[build-system]
+requires = ["setuptools>=77", "wheel>=0.45"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cell-curator"
+version = "0.2.0"
+description = "Independent evidence-driven multimodal cell-type annotation"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{ name = "cell-curator contributors" }]
+dependencies = [
+  "anndata>=0.10",
+  "mudata>=0.3",
+  "networkx>=3.2",
+  "numpy>=1.26",
+  "pandas>=2.0",
+  "pydantic>=2.7",
+  "PyYAML>=6.0",
+  "scipy>=1.11",
+]
+
+[project.optional-dependencies]
+celltypist = ["celltypist>=1.6"]
+reference-models = ["scvi-tools>=1.2"]
+census = ["cellxgene-census>=1.16"]
+scimilarity = ["scimilarity>=0.4"]
+gpu = ["rapids-singlecell>=0.12"]
+workflow = ["snakemake>=8"]
+dev = [
+  "build>=1.2",
+  "mypy>=1.10",
+  "pytest>=8",
+  "ruff>=0.6",
+  "setuptools>=77",
+  "snakemake>=8",
+  "wheel>=0.45",
+]
+
+[project.scripts]
+cell-curator = "cell_curator.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+cell_curator = ["py.typed"]
+
+[tool.setuptools.data-files]
+"share/cell-curator" = ["SKILL.md"]
+"share/cell-curator/agents" = ["agents/openai.yaml"]
+"share/cell-curator/assets" = ["assets/*.yaml", "assets/*.md", "assets/*.tsv"]
+"share/cell-curator/references" = ["references/*.md"]
+"share/cell-curator/workflow" = ["workflow/Snakefile"]
+"share/cell-curator/workflow/config" = ["workflow/config/*.yaml"]
+"share/cell-curator/workflow/envs" = ["workflow/envs/*.yaml"]
+"share/cell-curator/workflow/profiles/slurm" = ["workflow/profiles/slurm/config.yaml"]
+"share/cell-curator/workflow/scripts" = ["workflow/scripts/*.py"]
+"share/cell-curator/benchmarks" = ["benchmarks/*.json"]
+"share/cell-curator/benchmarks/manifests" = ["benchmarks/manifests/*.json"]
+"share/cell-curator/benchmarks/fixtures" = ["benchmarks/fixtures/*.tsv"]
+"share/cell-curator/benchmarks/results" = ["benchmarks/results/*.json"]
+"share/cell-curator/schemas" = ["schemas/*.json"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 96
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+packages = ["cell_curator"]
+ignore_missing_imports = true
+warn_unused_ignores = true

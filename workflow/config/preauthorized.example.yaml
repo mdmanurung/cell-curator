@@ -1,0 +1,119 @@
+schema_version: 3
+
+# Replace the example input and marker paths before execution. This complete
+# configuration records the same context and gate audit as an interactive run.
+run:
+  run_id: workflow-example-v1
+  output_root: results/cell-curator-workflow
+  mode: annotation
+  immutable: true
+
+knowledge:
+  providers:
+    - kind: local_markers
+      path: workflow/example/markers.json
+      version: workflow-example-v1
+  require_local_grounding_for_labels: true
+  allow_optional_remote_enhancement: false
+
+input:
+  kind: h5ad
+  path: workflow/example/input.h5ad
+  assays:
+    transcriptome:
+      modality: root
+      kind: rna
+      feature_space: gene
+      feature_id_column: gene_symbol
+      capabilities: [identity, subtype, state]
+      graph_representations:
+        - {source: obsm, key: X_pca}
+      representations:
+        logcounts:
+          source: layer
+          key: logcounts
+          feature_space: gene
+          ranking_backend: scipy_mannwhitney
+          ontology_compatible: true
+          detection:
+            source: layer
+            key: counts
+            required: true
+            semantics: counts > 0
+  keys:
+    canonical_parent: canonical_cluster
+    scope: lineage
+    stored_resolutions: []
+    embedding: X_pca
+    spatial: ""
+    donor: ""
+    capture: ""
+    doublet_class: ""
+    doublet_score: ""
+    sex: ""
+    batch: ""
+
+canonical_partitions:
+  immune:
+    parent_key: canonical_cluster
+    expected_parent_count: 2
+
+adaptive:
+  outcomes: [ACCEPT SPLIT, RETAIN PARENT, DOUBLET/MIXED, TECHNICAL/UNRESOLVED]
+  eligibility:
+    min_cells: 2
+  audit: {}
+  stored_candidates: {}
+  parent_local:
+    enabled: false
+
+comparators:
+  roles: [parent_remainder, closest_sibling]
+  closest_sibling_strategy: embedding_centroid
+
+markers:
+  cpu_fallback: false
+
+evidence:
+  lanes:
+    - assay: transcriptome
+      representation: logcounts
+      required_for_acceptance: true
+
+review:
+  critic_passes:
+    - biological_coherence
+    - negative_markers_and_alternatives
+    - doublet_and_mixed
+    - technical_confounding
+    - ontology_hierarchy
+  require_reconciliation: true
+  require_explicit_human_approval: true
+  type_and_state_separate: true
+
+hpc:
+  cpu_resources:
+    cores: 4
+    memory_mb: 16000
+  gpu_resources: {}
+
+guidance:
+  interactive: false
+  preauthorized: true
+  reviewer: workflow-example-reviewer
+  pause_after_each_level: false
+  assumptions:
+    - The local marker vocabulary is appropriate for this organism and tissue.
+  hierarchy_levels: [L1]
+  context:
+    organism: human
+    tissue: example immune tissue
+    developmental_stage: adult
+    condition: healthy
+    technology: dissociated
+    experimental_context: synthetic offline workflow example
+    composition_covariates: []
+    vocabulary_contract: parent-scoped local marker vocabulary
+    reference_contract: local_only
+    visualization_key: X_pca
+    writeback_prefix: cell_curator
