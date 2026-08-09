@@ -41,6 +41,7 @@ from .models import (
     MarkerProgram,
     RunState,
 )
+from .session import CellCurator
 
 try:
     __version__ = version("cell-curator")
@@ -55,6 +56,7 @@ __all__ = [
     "BenchmarkResult",
     "Capability",
     "CapabilityLevel",
+    "CellCurator",
     "CellCuratorConfig",
     "EvidenceRecord",
     "MappingRecord",
