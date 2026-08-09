@@ -1,18 +1,44 @@
 # cell-curator
 
-`cell-curator` is an independent, local-first Python package and Codex skill for
-evidence-driven annotation of pre-clustered AnnData and MuData objects. It combines
-signed cell-type and cell-state programs, bottom-up markers, ontology validation,
-assay-aware multimodal evidence, deterministic uncertainty and `Unknown` calls,
-adaptive parent-local refinement, immutable provenance, human review, and guarded
-write-back.
+`cell-curator` is a Claude Code plugin and Codex skill for evidence-driven annotation
+of pre-clustered AnnData and MuData objects. The agent reads the biological request,
+chooses routes, explains gates, and guides review; the deterministic work — statistics,
+schema validation, hashing, provenance, GPU contract enforcement, report generation,
+and guarded write-back — runs in the `cell-curator` Python package that ships in this
+repository as the skill's execution engine.
 
-The package has no dependency on another annotation package, CLI, agent platform,
-MCP, atlas, or web service. Local marker, ontology, cached-table, and labeled-reference
-providers are sufficient for complete offline runs. Optional remote providers are
-checksum-pinned and cached.
+Together they combine signed cell-type and cell-state programs, bottom-up markers,
+ontology validation, assay-aware multimodal evidence, deterministic uncertainty and
+`Unknown` calls, adaptive parent-local refinement, immutable provenance, human review,
+and guarded write-back.
 
-## Installation
+Neither layer depends on another annotation package, CLI, agent platform, MCP, atlas,
+or web service. Local marker, ontology, cached-table, and labeled-reference providers
+are sufficient for complete offline runs. Optional remote providers are checksum-pinned
+and cached.
+
+## Install the skill
+
+The agent-facing surface lives in [`skills/cell-curator/`](skills/cell-curator/):
+`SKILL.md`, the one-level `references/` contracts, and the `assets/` templates.
+
+For Claude Code, add this repository as a plugin marketplace:
+
+```bash
+/plugin marketplace add https://github.com/mdmanurung/cell-curator
+/plugin install cell-curator@cell-curator
+```
+
+For Codex, link the skill directory into the skills path:
+
+```bash
+ln -s "$PWD/skills/cell-curator" ~/.codex/skills/cell-curator
+```
+
+Install the Python runtime below in either case — the skill invokes the `cell-curator`
+CLI for every deterministic step.
+
+## Install the Python runtime
 
 `cell-curator` requires Python 3.11 or newer. The current release is installed from
 source; no PyPI release is assumed.
@@ -59,7 +85,7 @@ Copy the strict template, then edit the input, assay representations, context,
 knowledge providers, and output run ID:
 
 ```bash
-cp assets/config.template.yaml config.yaml
+cp skills/cell-curator/assets/config.template.yaml config.yaml
 uv run cell-curator config validate --config config.yaml
 ```
 
@@ -251,9 +277,11 @@ These functions and the CLI call the same package implementation. The Snakemake 
 in [`workflow/Snakefile`](workflow/Snakefile) exposes separate `all_evidence`,
 `review_packet`, `finalization`, and `writeback` targets; write-back is not the default.
 
-See [`SKILL.md`](SKILL.md) for the agent workflow and the one-level
-[`references/`](references/) documents for input, assay, refinement, evidence,
-decision, artifact, compute, and validation contracts.
+See [`skills/cell-curator/SKILL.md`](skills/cell-curator/SKILL.md) for the agent
+workflow and the one-level
+[`skills/cell-curator/references/`](skills/cell-curator/references/) documents for
+input, assay, refinement, evidence, decision, artifact, compute, and validation
+contracts.
 
 ## Scientific boundaries
 

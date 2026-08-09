@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import yaml
+from conftest import SKILL_ROOT
 
 import cell_curator.hierarchy as hierarchy_module
 from cell_curator import execute_recursive_hierarchy_manifest as public_manifest_execute
@@ -24,8 +25,6 @@ from cell_curator.guided import (
 )
 from cell_curator.hierarchy import LABEL_COLUMNS, scaffold_labels_table
 from cell_curator.pipeline import execute_recursive_hierarchy, initialize
-
-REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _write_fixture(
@@ -82,7 +81,7 @@ def _write_fixture(
     markers = tmp_path / f"{run_id}.markers.json"
     markers.write_text(json.dumps(programs))
 
-    value = yaml.safe_load((REPOSITORY_ROOT / "assets/config.template.yaml").read_text())
+    value = yaml.safe_load((SKILL_ROOT / "assets/config.template.yaml").read_text())
     value["run"].update(
         {
             "run_id": run_id,

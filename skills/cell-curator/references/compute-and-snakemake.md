@@ -59,3 +59,40 @@ legacy login-shell Python by accident.
 `workflow/Snakefile` is the executable manifest-driven DAG. Supply the strict
 configuration with `--configfile`, retain its evidence/review/finalization/write-back
 boundaries, and use `workflow/profiles/slurm` for configured scheduler execution.
+
+## Real-hardware GPU validation status
+
+Validated on 2026-08-09 on an NVIDIA RTX PRO 6000 Blackwell Server Edition
+MIG `1g.24gb` slice (compute capability 12.0, driver 580.159.04, CUDA runtime
+13.2) with `rapids-singlecell` 0.13.4 and RAPIDS `cu13` 25.12.
+
+Confirmed working on that hardware:
+
+- the declared/observed contract check in `rank_markers_gpu.inspect_runtime`
+  validates version, distribution, CUDA major, single-device visibility, and
+  the device/compute-capability allowlist;
+- a deliberately wrong `allowed_gpu_contracts` entry is rejected on the live
+  device rather than merely parsed;
+- the Snakemake DAG requests a GPU for a RAPIDS lane (`evidence_gpu` returns 1).
+
+Confirmed blocked, and the reason the lane still cannot execute:
+
+- `rapids-singlecell` exposes no `tl.rank_genes_groups` and contains no
+  Wilcoxon implementation at all — `tl.rank_genes_groups_logreg` is the only
+  ranking entry point. `rank_markers_gpu.inspect_runtime` and
+  `evidence.compute_gpu_bottom_up_markers` bind `rsc.tl.rank_genes_groups`
+  with a scanpy-style signature, so both raise `AttributeError` on any real
+  GPU. The `BackendReceipt` contract additionally requires both native
+  `wilcoxon` and `logreg` marker methods, which that library cannot supply.
+
+Resolving this is a scientific decision, not a rename: either supply a GPU
+Wilcoxon (for example a CuPy implementation carrying its own tie and
+continuity correction) or restate the RAPIDS receipt contract around the
+methods the library actually provides. Until then the lane fails closed, which
+is the intended safety behaviour but is not the same as a working GPU path.
+
+Environment note for reproduction: `rapids-singlecell` 0.13.4 is the newest
+release supporting Python 3.11, and it is incompatible with RAPIDS 26.x
+(`cuml.thirdparty_adapters.check_array` was removed), so pin RAPIDS to 25.12.
+Newer `rapids-singlecell` needs Python 3.12+, where `scikit-misc` has no wheel
+and its CMake build fails on this cluster.

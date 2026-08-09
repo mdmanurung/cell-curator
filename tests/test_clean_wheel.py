@@ -28,16 +28,29 @@ def _run(command: list[str], *, cwd: Path, env: dict[str, str] | None = None) ->
     return completed.stdout
 
 
+def _distributable_only(directory: str, entries: list[str]) -> set[str]:
+    """Copy only what a fresh clone would carry into a build.
+
+    Naming transient directories one at a time is unsafe: every new dot-directory
+    (a second virtualenv, a tool cache, a scratch area) silently joins the copy
+    and can make this test fail for reasons unrelated to packaging, or race a
+    live writer mid-copy. Nothing under a dot-directory is a build input, so
+    exclude the whole class instead of enumerating members.
+    """
+
+    del directory
+    excluded = {"build", "dist", "__pycache__"}
+    return {
+        entry
+        for entry in entries
+        if entry.startswith(".") or entry in excluded or entry.endswith(".egg-info")
+    }
+
+
 def test_clean_wheel_install_import_cli_and_package_data(tmp_path: Path) -> None:
     repository = Path(__file__).resolve().parents[1]
     source_tree = tmp_path / "source-tree"
-    shutil.copytree(
-        repository,
-        source_tree,
-        ignore=shutil.ignore_patterns(
-            ".git", ".venv", "build", "*.egg-info", "__pycache__", ".pytest_cache"
-        ),
-    )
+    shutil.copytree(repository, source_tree, ignore=_distributable_only)
     distribution = tmp_path / "dist"
     distribution.mkdir()
     _run(

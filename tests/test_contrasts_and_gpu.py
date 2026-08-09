@@ -89,3 +89,27 @@ def test_integrated_gpu_receipt_requires_both_native_methods_and_no_fallback() -
         validate_backend_receipt(_receipt(marker_methods=["wilcoxon"]), capability)
     with pytest.raises(ContractError, match="prohibited CPU fallback"):
         validate_backend_receipt(_receipt(cpu_fallback_used=True), capability)
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("86", "8.6"),
+        ("75", "7.5"),
+        ("90", "9.0"),
+        # Blackwell sm_120: positional splitting would yield "1.2" and silently
+        # compare against allowed_gpu_contracts as a different device.
+        ("120", "12.0"),
+        ("100", "10.0"),
+        ((12, 0), "12.0"),
+        ("12.0", "12.0"),
+    ],
+)
+def test_compute_capability_formats_two_digit_majors(raw: object, expected: str) -> None:
+    assert rank_markers_gpu.format_compute_capability(raw) == expected
+
+
+@pytest.mark.parametrize("raw", ["", "x", "9", (1, 2, 3)])
+def test_compute_capability_rejects_unreadable_values(raw: object) -> None:
+    with pytest.raises(rank_markers_gpu.GpuContractError, match="unreadable compute capability"):
+        rank_markers_gpu.format_compute_capability(raw)
