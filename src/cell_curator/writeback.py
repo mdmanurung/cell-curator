@@ -18,7 +18,7 @@ from .ontology import (
     ontology_from_config,
     validate_durable_label_ontology,
 )
-from .provenance import atomic_replace, publish_json
+from .provenance import atomic_replace
 from .review import (
     check_report_completeness,
     hierarchy_level_sort_key,
@@ -136,6 +136,14 @@ def _approval(
         "mapping_sha256": preview["mapping_sha256"],
         "labels_sha256": preview["labels_sha256"],
         "diff_sha256": preview["diff_sha256"],
+        "assumptions_sha256": preview["assumptions_sha256"],
+        "report_manifest_sha256": preview["report_manifest_sha256"],
+        "report_sha256": preview["report_sha256"],
+        "critic_packet_sha256": preview["critic_packet_sha256"],
+        "critic_findings_sha256": preview["critic_findings_sha256"],
+        "critic_reconciliation_sha256": preview["critic_reconciliation_sha256"],
+        "output_path": preview["output_path"],
+        "in_place": preview["in_place"],
     }
     for key, expected_value in expected.items():
         if value.get(key) != expected_value:
@@ -148,9 +156,23 @@ def validate_writeback(
     run_root: Path,
     *,
     ontology: CellOntology | None = None,
+    output_path: Path | None = None,
+    in_place: bool = False,
 ) -> dict[str, Any]:
     ontology = ontology or ontology_from_config(config)
     source_path = Path(config.input.path)
+    target = output_path or (
+        source_path
+        if in_place
+        else run_root / "writeback" / f"annotated.{config.input.kind}"
+    )
+    source_resolved = source_path.resolve()
+    target_resolved = target.resolve()
+    if in_place != (target_resolved == source_resolved):
+        raise ContractError(
+            "write-back intent mismatch: --in-place must target the source and a preview "
+            "without --in-place must target a distinct output"
+        )
     source_sha256 = sha256(source_path)
     mapping_path = run_root / "mapping" / "parent_child_mapping.tsv"
     validation_path = run_root / "mapping" / "mapping.validation.json"
@@ -176,7 +198,13 @@ def validate_writeback(
     state = load_state(run_root)
     if state.input_sha256 != source_sha256:
         raise ContractError("source input changed after the guided run was frozen")
-    if not state.assumptions_approved or not state.approved_assumptions_sha256:
+    assumptions_path = run_root / "assumptions.json"
+    if (
+        not state.assumptions_approved
+        or not state.approved_assumptions_sha256
+        or not assumptions_path.is_file()
+        or sha256(assumptions_path) != state.approved_assumptions_sha256
+    ):
         raise ContractError("write-back requires the recorded assumptions gate")
     check_report_completeness(config, run_root, require_report=True)
     mapping = pd.read_csv(mapping_path, sep="\t", keep_default_na=False)
@@ -311,6 +339,18 @@ def validate_writeback(
     atomic_replace(diff_path, diff.to_csv(sep="\t", index=False).encode())
     resolved_types = pd.Series(durable_values["cell_type"], dtype="string")
     resolved_states = pd.Series(durable_values["cell_state"], dtype="string")
+    review_paths = {
+        "report_manifest_sha256": run_root / "review" / "report.manifest.json",
+        "report_sha256": run_root / "review" / "report.html",
+        "critic_packet_sha256": run_root / "review" / "critic_packet.json",
+        "critic_findings_sha256": run_root / "review" / "critic_findings.tsv",
+        "critic_reconciliation_sha256": run_root
+        / "review"
+        / "critic_reconciliation.tsv",
+    }
+    missing_review = [str(path) for path in review_paths.values() if not path.is_file()]
+    if missing_review:
+        raise ContractError(f"write-back review artifacts are absent: {missing_review}")
     return {
         "schema_version": 3,
         "artifact_kind": "cell_curator_writeback_preview",
@@ -327,6 +367,9 @@ def validate_writeback(
         "hierarchy_validation": hierarchy_validation,
         "critics_reconciled": reconciliation["all_reconciled"],
         "assumptions_sha256": state.approved_assumptions_sha256,
+        **{name: sha256(path) for name, path in review_paths.items()},
+        "output_path": str(target_resolved),
+        "in_place": in_place,
         "output_columns": output_columns,
         "changed_by_column": changed_by_column,
         "metadata_changed_by_column": metadata_changed_by_column,
@@ -346,12 +389,31 @@ def write_back(
     ontology: CellOntology | None = None,
     in_place: bool = False,
 ) -> Path:
-    preview = validate_writeback(config, run_root, ontology=ontology)
+    preview = validate_writeback(
+        config,
+        run_root,
+        ontology=ontology,
+        output_path=output_path,
+        in_place=in_place,
+    )
     _approval(config, run_root, approval_path, preview)
     source = Path(config.input.path)
     source_sha256 = sha256(source)
-    if output_path.resolve() == source.resolve() and not in_place:
-        raise ContractError("source mutation requires --in-place; a new output is the default")
+    receipt_path = run_root / "writeback" / "receipt.json"
+    if receipt_path.exists():
+        prior = json.loads(receipt_path.read_text())
+        if (
+            prior.get("output_path") == str(output_path.resolve())
+            and prior.get("in_place") is in_place
+            and output_path.is_file()
+            and prior.get("output_sha256") == sha256(output_path)
+            and prior.get("approval_sha256") == sha256(approval_path)
+            and all(prior.get(key) == preview.get(key) for key in preview)
+        ):
+            return output_path
+        raise ContractError(
+            "an immutable write-back receipt already exists for a different or drifted output"
+        )
     mapping = pd.read_csv(
         run_root / "mapping" / "parent_child_mapping.tsv",
         sep="\t",
@@ -361,7 +423,11 @@ def write_back(
     output_columns = list(preview["output_columns"])
     color_contract = preview.get("category_and_color_contract", {})
     partial = output_path.with_name(f".{output_path.name}.partial.{os.getpid()}")
+    receipt_partial = receipt_path.with_name(
+        f".{receipt_path.name}.partial.{os.getpid()}"
+    )
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    receipt_path.parent.mkdir(parents=True, exist_ok=True)
     if output_path.exists() and output_path.resolve() != source.resolve():
         raise ContractError(f"refusing to overwrite write-back output: {output_path}")
     try:
@@ -419,17 +485,21 @@ def write_back(
                 else:
                     obj.uns.pop(f"{output_column}_colors", None)
             obj.write_h5mu(partial)
+        receipt = {
+            **preview,
+            "artifact_kind": "cell_curator_writeback_receipt",
+            "output_path": str(output_path.resolve()),
+            "output_sha256": sha256(partial),
+            "approval_sha256": sha256(approval_path),
+        }
+        receipt_partial.write_text(
+            json.dumps(receipt, indent=2, sort_keys=True, default=str) + "\n"
+        )
         os.replace(partial, output_path)
+        os.replace(receipt_partial, receipt_path)
     finally:
         partial.unlink(missing_ok=True)
+        receipt_partial.unlink(missing_ok=True)
     if not in_place and sha256(source) != source_sha256:
         raise ContractError("write-back changed the immutable source input")
-    receipt = {
-        **preview,
-        "artifact_kind": "cell_curator_writeback_receipt",
-        "output_path": str(output_path.resolve()),
-        "output_sha256": sha256(output_path),
-        "approval_sha256": sha256(approval_path),
-    }
-    publish_json(run_root / "writeback" / "receipt.json", receipt)
     return output_path

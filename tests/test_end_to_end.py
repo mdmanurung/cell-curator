@@ -160,6 +160,14 @@ def _writeback_approval(preview: dict[str, object], *, reviewer: str) -> dict[st
         "mapping_sha256": preview["mapping_sha256"],
         "labels_sha256": preview["labels_sha256"],
         "diff_sha256": preview["diff_sha256"],
+        "assumptions_sha256": preview["assumptions_sha256"],
+        "report_manifest_sha256": preview["report_manifest_sha256"],
+        "report_sha256": preview["report_sha256"],
+        "critic_packet_sha256": preview["critic_packet_sha256"],
+        "critic_findings_sha256": preview["critic_findings_sha256"],
+        "critic_reconciliation_sha256": preview["critic_reconciliation_sha256"],
+        "output_path": preview["output_path"],
+        "in_place": preview["in_place"],
     }
 
 
@@ -240,7 +248,8 @@ def test_independent_end_to_end_and_guarded_writeback(tmp_path: Path) -> None:
     assert proposals.loc[1, "cell_type"] == "Type B"
     assert not proposals["abstained"].astype(bool).any()
 
-    preview = validate_writeback(config, root)
+    output = tmp_path / "annotated.h5ad"
+    preview = validate_writeback(config, root, output_path=output)
     invalid_approval = tmp_path / "invalid-approval.json"
     invalid_approval.write_text(json.dumps({"approved": True, "reviewer": "fixture-reviewer"}))
     with pytest.raises(ContractError, match="assumptions_approved"):
@@ -253,21 +262,8 @@ def test_independent_end_to_end_and_guarded_writeback(tmp_path: Path) -> None:
     assert not (tmp_path / "must-not-exist.h5ad").exists()
     approval = tmp_path / "approval.json"
     approval.write_text(
-        json.dumps(
-            {
-                "approved": True,
-                "assumptions_approved": True,
-                "critics_reconciled": True,
-                "reviewer": "fixture-reviewer",
-                "run_id": config.run.run_id,
-                "input_sha256": preview["input_sha256"],
-                "mapping_sha256": preview["mapping_sha256"],
-                "labels_sha256": preview["labels_sha256"],
-                "diff_sha256": preview["diff_sha256"],
-            }
-        )
+        json.dumps(_writeback_approval(preview, reviewer="fixture-reviewer"))
     )
-    output = tmp_path / "annotated.h5ad"
     write_back(
         config,
         root,
@@ -278,6 +274,54 @@ def test_independent_end_to_end_and_guarded_writeback(tmp_path: Path) -> None:
     assert sha256(source) == source_before
     annotated = ad.read_h5ad(output)
     assert set(annotated.obs["cell_curator_type"].astype(str)) == {"Type A", "Type B"}
+
+    second_output = tmp_path / "second-annotated.h5ad"
+    second_preview = validate_writeback(config, root, output_path=second_output)
+    second_approval = tmp_path / "second-approval.json"
+    second_approval.write_text(
+        json.dumps(_writeback_approval(second_preview, reviewer="fixture-reviewer"))
+    )
+    first_hash = sha256(output)
+    with pytest.raises(ContractError, match="immutable write-back receipt"):
+        write_back(
+            config,
+            root,
+            output_path=second_output,
+            approval_path=second_approval,
+        )
+    assert not second_output.exists()
+    assert sha256(output) == first_hash
+
+
+def test_writeback_approval_binds_review_and_target_intent(
+    tmp_path: Path,
+) -> None:
+    _, config, root = _completed_synthetic_run(tmp_path)
+    output = tmp_path / "bound-output.h5ad"
+    preview = validate_writeback(config, root, output_path=output)
+    fields = (
+        "assumptions_sha256",
+        "report_manifest_sha256",
+        "report_sha256",
+        "critic_packet_sha256",
+        "critic_findings_sha256",
+        "critic_reconciliation_sha256",
+        "output_path",
+        "in_place",
+    )
+    for field in fields:
+        approval = _writeback_approval(preview, reviewer="fixture-reviewer")
+        approval[field] = not approval[field] if field == "in_place" else "stale"
+        approval_path = tmp_path / f"stale-{field}.json"
+        approval_path.write_text(json.dumps(approval))
+        with pytest.raises(ContractError, match=field):
+            write_back(
+                config,
+                root,
+                output_path=output,
+                approval_path=approval_path,
+            )
+        assert not output.exists()
 
 
 def test_review_rebuild_preserves_manual_reasoning_and_detects_tampering(
@@ -363,7 +407,8 @@ is_a: CL:0000000 ! cell
     labels.to_csv(labels_path, sep="\t", index=False)
     _rebuild_strict_review(config, root)
 
-    preview = validate_writeback(config, root, ontology=ontology)
+    output = tmp_path / "reviewed.h5ad"
+    preview = validate_writeback(config, root, ontology=ontology, output_path=output)
     assert sha256(source) == source_before
     assert preview["n_cell_types"] == 2
     assert preview["labels_sha256"] == {"labels/L1.tsv": sha256(labels_path)}
@@ -408,12 +453,13 @@ is_a: CL:0000000 ! cell
         )
     assert not (tmp_path / "stale-must-not-exist.h5ad").exists()
 
-    current_preview = validate_writeback(config, root, ontology=ontology)
+    current_preview = validate_writeback(
+        config, root, ontology=ontology, output_path=output
+    )
     approval_path = tmp_path / "approval.json"
     approval_path.write_text(
         json.dumps(_writeback_approval(current_preview, reviewer="reviewer-one"))
     )
-    output = tmp_path / "reviewed.h5ad"
     write_back(
         config,
         root,
@@ -539,6 +585,10 @@ def test_stored_refinement_promotes_only_evidence_backed_children(
     profile = profile_refined_clusters(config_path)
     assert {"size", "qc", "composition"}.issubset(profile["panels"])
     assert Path(profile["profile_path"]).is_file()
+    registry = pd.read_csv(root / "discovery" / "candidate_registry.tsv", sep="\t")
+    assert registry["eligibility_counts_pass"].astype(bool).all()
+    assert registry["parent_purity"].eq(1.0).all()
+    assert registry["parent_fraction"].eq(0.5).all()
     manifest = pd.read_csv(root / "comparators" / "comparator_manifest.tsv", sep="\t")
     assert len(manifest) == 4
     assert manifest["lane_id"].nunique() == 4
@@ -579,3 +629,45 @@ def test_zero_applicable_lanes_complete_with_unknown_calls(tmp_path: Path) -> No
     assert receipt_manifest["zero_lane_run"] is True
     assert proposals["cell_type"].eq("Unknown").all()
     assert proposals["abstained"].astype(bool).all()
+
+
+def test_evidence_only_run_completes_review_with_unknown_labels(tmp_path: Path) -> None:
+    source = tmp_path / "evidence-only.h5ad"
+    _synthetic_input(source)
+    markers = tmp_path / "evidence-only-markers.json"
+    markers.write_text(
+        json.dumps({"Type A": {"positive": ["A1"]}, "Type B": {"positive": ["B1"]}})
+    )
+    config_path = _config(tmp_path, source, markers)
+    value = yaml.safe_load(config_path.read_text())
+    value["run"].update({"run_id": "evidence-only-v1", "mode": "evidence-only"})
+    config_path.write_text(yaml.safe_dump(value, sort_keys=False))
+
+    packet = run_annotation(config_path)
+    root = tmp_path / "results" / "evidence-only-v1"
+    proposals = pd.read_csv(root / "evidence/summary/annotation_proposals.tsv", sep="\t")
+    gate = json.loads((root / "checkpoints/L1/ROOT.json").read_text())
+    assert packet.is_dir()
+    assert proposals["cell_type"].eq("Unknown").all()
+    assert proposals["abstained"].astype(bool).all()
+    assert gate["status"] == "complete"
+    with pytest.raises(ContractError, match="evidence-only"):
+        validate_writeback(load_config(config_path), root)
+
+
+def test_standard_pipeline_rejects_multi_level_config_before_materialization(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "multi-level.h5ad"
+    _synthetic_input(source)
+    markers = tmp_path / "multi-level-markers.json"
+    markers.write_text(json.dumps({"Type A": {"positive": ["A1"]}}))
+    config_path = _config(tmp_path, source, markers)
+    value = yaml.safe_load(config_path.read_text())
+    value["run"]["run_id"] = "multi-level-v1"
+    value["guidance"]["hierarchy_levels"] = ["L1", "L2"]
+    config_path.write_text(yaml.safe_dump(value, sort_keys=False))
+
+    with pytest.raises(ContractError, match="score-manifest"):
+        run_annotation(config_path)
+    assert not (tmp_path / "results" / "multi-level-v1").exists()

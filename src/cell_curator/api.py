@@ -287,7 +287,11 @@ def build_review_artifacts(config_path: str | Path, *, strict: bool = True) -> P
 
 
 def preview_writeback(
-    config_path: str | Path, ontology_path: str | Path | None = None
+    config_path: str | Path,
+    ontology_path: str | Path | None = None,
+    *,
+    output_path: str | Path | None = None,
+    in_place: bool = False,
 ) -> dict[str, Any]:
     """Return a source-preserving write-back diff after computational checks."""
 
@@ -302,7 +306,13 @@ def preview_writeback(
         if ontology_path is not None
         else ontology_from_config(config)
     )
-    return validate_writeback(config, run_root(config), ontology=ontology)
+    return validate_writeback(
+        config,
+        run_root(config),
+        ontology=ontology,
+        output_path=Path(output_path) if output_path is not None else None,
+        in_place=in_place,
+    )
 
 
 def apply_writeback(

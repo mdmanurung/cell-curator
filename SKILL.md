@@ -217,11 +217,12 @@ read-only post-approval validation.
 Generate the complete diff first:
 
 ```bash
-cell-curator write-back preview --config config.yaml
+cell-curator write-back preview --config config.yaml --output annotated.h5ad
 ```
 
 After assumptions, hierarchy, reports, and critics pass, create the signed approval
-for the current run plus the source, mapping, durable-label, and preview-diff hashes.
+for the current run plus the source, mapping, durable-label, assumptions, report,
+critic, preview-diff, exact-output-path, and in-place-intent fields.
 Write atomically to a new file:
 
 ```bash

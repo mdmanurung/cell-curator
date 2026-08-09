@@ -11,7 +11,7 @@ from typing import Any
 import pandas as pd
 
 from . import __version__
-from .contracts import ContractError
+from .contracts import ContractError, require_safe_path_component
 
 LOG = logging.getLogger("cell_curator")
 
@@ -365,6 +365,8 @@ def build_parser() -> argparse.ArgumentParser:
     preview = write_sub.add_parser("preview")
     _config_argument(preview)
     preview.add_argument("--ontology", type=Path)
+    preview.add_argument("--output", type=Path)
+    preview.add_argument("--in-place", action="store_true")
     apply = write_sub.add_parser("apply")
     _config_argument(apply)
     apply.add_argument("--output", type=Path)
@@ -811,6 +813,7 @@ def dispatch(args: argparse.Namespace) -> Any:
 
         config = load_config(args.config)
         root = run_root(config)
+        args.level = require_safe_path_component(args.level, field="hierarchy level")
         require_label_gate(args.config, level=args.level, parent=args.parent)
         vocabulary_path = args.vocabulary or root / "plan" / "vocabulary.tsv"
         vocabulary = pd.read_csv(vocabulary_path, sep="\t", keep_default_na=False)
@@ -892,7 +895,13 @@ def dispatch(args: argparse.Namespace) -> Any:
             CellOntology.load(args.ontology) if args.ontology else ontology_from_config(config)
         )
         if args.action == "preview":
-            return validate_writeback(config, root, ontology=ontology)
+            return validate_writeback(
+                config,
+                root,
+                ontology=ontology,
+                output_path=args.output,
+                in_place=args.in_place,
+            )
         output = args.output
         if output is None:
             output = (
