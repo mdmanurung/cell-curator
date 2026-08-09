@@ -1,0 +1,10 @@
+executor: slurm
+jobs: 100
+latency-wait: 60
+rerun-incomplete: true
+keep-going: false
+printshellcmds: true
+default-resources:
+  mem_mb: 4000
+  runtime: 60
+  gpu: 0

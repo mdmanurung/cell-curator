@@ -1,0 +1,9 @@
+barcode	true_label	predicted_label	confidence	true_path	predicted_path	true_mixed	predicted_mixed	true_split_decision	predicted_split_decision	repeat_predicted_label	input_invariant	unsplit_parent_invariant	runtime_seconds	peak_memory_mb	artifact_complete	scenario
+c01	T cell	T cell	0.95	immune/lymphoid/T cell	immune/lymphoid/T cell	false	false	retain	retain	T cell	true	true	1.25	82	true	clear
+c02	B cell	B cell	0.92	immune/lymphoid/B cell	immune/lymphoid/B cell	false	false	split	split	B cell	true	true	1.25	82	true	hierarchical
+c03	Unknown	Unknown	0.88	immune	immune	false	false	retain	retain	Unknown	true	true	1.25	82	true	ambiguous
+c04	Unknown	Unknown	0.83	immune	immune	true	true	retain	retain	Unknown	true	true	1.25	82	true	mixed_doublet
+c05	Monocyte	Monocyte	0.90	immune/myeloid/Monocyte	immune/myeloid/Monocyte	false	false	split	split	Monocyte	true	true	1.25	82	true	successful_split
+c06	T cell	Unknown	0.42	immune/lymphoid/T cell	immune	false	false	retain	retain	Unknown	true	true	1.25	82	true	gradient
+c07	B cell	B cell	0.86	immune/lymphoid/B cell	immune/lymphoid/B cell	false	false	retain	retain	B cell	true	true	1.25	82	true	technical
+c08	Monocyte	Monocyte	0.89	immune/myeloid/Monocyte	immune/myeloid/Monocyte	false	false	retain	retain	Monocyte	true	true	1.25	82	true	retained_parent

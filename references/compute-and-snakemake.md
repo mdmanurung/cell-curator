@@ -50,12 +50,12 @@ configuration inputs. Do not hard-code a partition, model, account, or wall time
 Pin environments with a lockfile or immutable environment definition. Validate
 the runtime inside the allocated job, not only on the submission host. Record
 whether the environment was solved or reused. Keep CPU and GPU phases separate
-when their dependency stacks differ. The bundled utilities require Python
-3.10 or newer plus their declared scientific packages; do not run them with a
+when their dependency stacks differ. The package requires Python 3.11 or newer
+plus its locked scientific dependencies; do not run it with a
 legacy login-shell Python by accident.
 
-## Template
+## Workflow
 
-`assets/workflow-template/Snakefile` is a portable phase skeleton. Adapt paths,
-environment declarations, and resources; keep its evidence and finalization
-boundaries.
+`workflow/Snakefile` is the executable manifest-driven DAG. Supply the strict
+configuration with `--configfile`, retain its evidence/review/finalization/write-back
+boundaries, and use `workflow/profiles/slurm` for configured scheduler execution.

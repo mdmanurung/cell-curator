@@ -28,7 +28,8 @@ does not rescue failed candidates. Build mappings from accepted candidate IDs.
 
 Critics inspect raw tables for hierarchy, negative evidence, doublet/mixed
 explanations, technical/sample confounding, assay limitations, and ontology
-semantics. Before labels require signed Gate A, annotation mode, callable
-Knowledgebase, an ontology-compatible evidence path, completed gates,
-reconciled critics, semantic validity, separate type/state, and human approval.
-Keep label/CL fields blank in evidence-only mode.
+semantics. Before labels require signed Gate A, annotation mode, local grounding,
+an annotation-capable evidence path, completed gates, reconciled critics, separate
+type/state, and human approval. Validate every supplied CL ID against the configured
+local ontology; labels may remain CL-free when ontology evidence is unavailable and
+that limitation is recorded. Keep label/CL fields blank in evidence-only mode.

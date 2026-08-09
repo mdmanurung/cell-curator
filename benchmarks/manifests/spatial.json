@@ -1,0 +1,30 @@
+{
+  "schema_version": 3,
+  "dataset": "10x-human-lymph-node-visium-v1",
+  "modality": "spatial",
+  "source_url": "https://www.10xgenomics.com/datasets/human-lymph-node-1-standard-1-0-0",
+  "artifacts": [
+    {
+      "name": "filtered_feature_bc_matrix.h5",
+      "url": "https://cf.10xgenomics.com/samples/spatial-exp/1.0.0/V1_Human_Lymph_Node/V1_Human_Lymph_Node_filtered_feature_bc_matrix.h5",
+      "sha256": "pending-after-download"
+    },
+    {
+      "name": "spatial.tar.gz",
+      "url": "https://cf.10xgenomics.com/samples/spatial-exp/1.0.0/V1_Human_Lymph_Node/V1_Human_Lymph_Node_spatial.tar.gz",
+      "sha256": "pending-after-download"
+    }
+  ],
+  "sha256": "pending-after-artifact-selection",
+  "license": "CC BY 4.0",
+  "status": "pending-external-resource",
+  "blocker": "The processed matrix, spatial coordinates, truth labels, and comparator predictions are not present locally.",
+  "reproduce": [
+    "mkdir -p benchmarks/data/10x-human-lymph-node-visium-v1",
+    "curl -fL --retry 3 --output benchmarks/data/10x-human-lymph-node-visium-v1/filtered_feature_bc_matrix.h5 https://cf.10xgenomics.com/samples/spatial-exp/1.0.0/V1_Human_Lymph_Node/V1_Human_Lymph_Node_filtered_feature_bc_matrix.h5",
+    "curl -fL --retry 3 --output benchmarks/data/10x-human-lymph-node-visium-v1/spatial.tar.gz https://cf.10xgenomics.com/samples/spatial-exp/1.0.0/V1_Human_Lymph_Node/V1_Human_Lymph_Node_spatial.tar.gz",
+    "sha256sum benchmarks/data/10x-human-lymph-node-visium-v1/filtered_feature_bc_matrix.h5 benchmarks/data/10x-human-lymph-node-visium-v1/spatial.tar.gz",
+    "Export truth labels and each system to benchmarks/neutral-format.schema.json.",
+    "cell-curator benchmark evaluate --predictions PREDICTIONS.tsv --system SYSTEM --dataset 10x-human-lymph-node-visium-v1 --output RESULT.json"
+  ]
+}

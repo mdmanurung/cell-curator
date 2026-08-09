@@ -1,248 +1,239 @@
 ---
-name: adaptive-multimodal-cell-annotation
-description: Orchestrate evidence-gated annotation and adaptive nested subclustering of pre-clustered single-cell or spatial AnnData/MuData. Use for RNA-only, protein-only, ATAC-only, gene-activity, CITE-seq, multiome, or other assay combinations when canonical clusters must stay frozen, heterogeneous parents need bounded refinement, evidence must be assay-aware, or immutable Snakemake/HPC review packets and ontology-guided human approval are required.
+name: cell-curator
+description: Run independent, local-first, evidence-driven annotation of clustered AnnData or MuData with guided context confirmation, hierarchical parent-scoped labels, multimodal marker and reference cross-checks, adaptive refinement, human gates, critic reconciliation, self-contained reports, and guarded write-back. Use for offline or optionally enhanced single-cell and spatial cell-type annotation workflows.
 ---
 
-# Adaptive Multimodal Cell Annotation
+# Cell Curator
 
-Use this skill as the production-grade orchestration layer over
-`$cell-type-annotation`. The agent remains the annotator. Tools, classifiers,
-gates, and enrichment produce hypotheses and evidence.
+Run `cell-curator` independently. Keep local AnnData or MuData, marker files,
+ontology files, and labeled references sufficient for an offline run. Treat optional
+classifiers, atlases, foundation models, downloads, and web services as corroborating
+providers. Never require QuadBio, an MCP, or a particular agent platform.
 
-## Hold these contracts throughout
+## Preserve the invariants
 
-1. Freeze the canonical parent partition and input hashes before analysis.
-2. Create versioned outputs. Preserve source objects, canonical membership,
-   completed packets, and reviewed annotations.
-3. Make Snakemake authoritative for dependencies, staleness, phases, and resume.
-   Run heavy computation in deterministic scripts; keep notebooks read-only.
-4. Treat assays as configured capabilities, not a fixed RNA-plus-protein bundle.
-   Require only scientifically applicable evidence and record unavailable
-   capabilities as limitations or blockers.
-5. Require a real validated GPU for each evidence lane whose backend is
-   `rapids_singlecell`. Fail before data read or output creation when its
-   GPU/software contract fails. Provide no CPU replacement for that lane.
-6. Treat automated annotations and gates as overridable guides. Guide consensus
-   is not biological evidence.
-7. Keep `cell_type` and `cell_state` separate. `Unknown` is a successful outcome.
-8. Write no label or CL ID until Gate A, evidence completion, critic
-   reconciliation, Knowledgebase semantic validation, and explicit human
-   approval pass.
+1. Freeze the source hash, canonical working copy, and one parent membership per
+   cell. Never mutate the source during computation.
+2. Constrain every child vocabulary, score, refinement, and checkpoint to its
+   parent. Preserve frozen parents and fold rejected children into the correct
+   remainder.
+3. Keep `cell_type` and `cell_state` separate. Preserve marker, reference,
+   classifier, modality, and spatial disagreement. Accept `Unknown` as success.
+4. Treat missing panel features as unmeasured. Use a declared nonnegative matrix
+   for detection; use signed or corrected matrices only for valid means and effects.
+5. Validate a real GPU before every GPU route. Fail closed without CPU substitution.
+6. Require approved assumptions before biological labels. Record the same ledger,
+   decisions, checkpoints, and provenance in interactive and non-interactive runs.
+7. Keep labels tables durable. Reconcile critics and preview the complete diff before
+   approved atomic write-back.
+8. Let Snakemake own dependencies, staleness, and resume when executing the bundled
+   workflow.
 
-## Select the operating mode
+## Configure the run
 
-Verify the QuadBio Knowledgebase MCP before biological reasoning.
+Copy [config.template.yaml](assets/config.template.yaml). Declare the input, cluster
+and scope keys, embedding and visualization keys, assays, layers, representations,
+detection sources, organism, tissue, developmental stage, condition, technology,
+experimental context, composition covariates, vocabulary, references, compute
+limits, hierarchy levels, and write-back prefix.
 
-- `annotation`: the Knowledgebase is callable and at least one declared lane is
-  ontology-compatible. Labels may enter review after all gates.
-- `evidence-only`: compute label-free audits, markers, stability, technical
-  summaries, evidence cards, and blank review templates. Record missing
-  capabilities as blockers; leave labels and CL IDs blank and block write-back.
+Use `source: raw` for a declared `.raw` representation and `gene_mapping_path` for
+a local Ensembl-to-symbol mapping when automatic symbol detection is insufficient.
 
-An assay can also force an annotation run into an effectively evidence-only
-state. For example, peak-level ATAC without gene activity, peak-to-gene mapping,
-or a validated reference may reveal stable subpopulations but cannot alone
-justify gene-marker ontology labels.
+Register local signed marker JSON/TSV, local ontology, labeled AnnData/MuData
+references, or cached exports under `knowledge.providers`. Permit CL-free labels
+when ontology evidence is absent; validate every supplied CL identifier when it is
+present.
 
-## Route references by branch
+Read only the direct reference needed:
 
-- Assay selection and support matrix: [assay-routing.md](references/assay-routing.md)
-- Input and freeze checks: [input-contract.md](references/input-contract.md)
-- Candidate discovery/local splitting: [adaptive-subclustering.md](references/adaptive-subclustering.md)
-- Relative, absolute, and source evidence: [multimodal-evidence.md](references/multimodal-evidence.md)
-- Parent/child decisions and critics: [decision-gates.md](references/decision-gates.md)
-- Snakemake, HPC, backends, and immutability: [compute-and-snakemake.md](references/compute-and-snakemake.md)
-- Artifact column contracts: [artifact-schemas.md](references/artifact-schemas.md)
-- Completion and invariance checks: [validation.md](references/validation.md)
-- QuadBio reuse and extensions: [quadbio-integration.md](references/quadbio-integration.md)
-- Development parity and implementation backlog: [quadbio-parity.md](references/quadbio-parity.md)
+- Input, IDs, matrices, and QC: [input-contract.md](references/input-contract.md)
+- Assay and provider routing: [assay-routing.md](references/assay-routing.md)
+- Parent-local refinement: [adaptive-subclustering.md](references/adaptive-subclustering.md)
+- Signed and multimodal evidence: [multimodal-evidence.md](references/multimodal-evidence.md)
+- Assumptions, decisions, and critics: [decision-gates.md](references/decision-gates.md)
+- Durable artifacts: [artifact-schemas.md](references/artifact-schemas.md)
+- Compute and resume: [compute-and-snakemake.md](references/compute-and-snakemake.md)
+- Strict completion: [validation.md](references/validation.md)
+- Neutral capability mapping: [quadbio-parity.md](references/quadbio-parity.md)
 
-## Workflow
-
-### 1. Establish Gate A
-
-Invoke `$cell-type-annotation` and use its living assumptions ledger. Copy
-[assumptions.template.md](assets/assumptions.template.md) into the versioned run.
-Record biology, vocabulary, assay limitations, feature spaces, missing
-capabilities, canonical partition, covariates, QC/doublet keys, guide roles,
-thresholds, compute environment, and operating mode. Obtain explicit sign-off
-before proposing biological labels.
-
-Complete when assumptions are signed and inputs/configuration are frozen.
-
-### 2. Declare and inspect assay capabilities
-
-Start from [config.template.yaml](assets/config.template.yaml). Register each
-assay and each evidence representation. For every representation declare:
-
-- assay kind and feature space;
-- source matrix/layer and feature identifiers;
-- ranking backend;
-- whether it supports ontology-marker reasoning;
-- an optional nonnegative detection source and whether detection is required;
-- whether the lane is required for child acceptance.
-
-Run:
+Validate the configuration before loading data:
 
 ```bash
-python scripts/inspect_input_contract.py \
-  --config config.yaml --output-root RUN_ROOT
+cell-curator config validate --config config.yaml
+cell-curator environment detect --config config.yaml
+cell-curator data inspect --config config.yaml
+cell-curator ontology provision --config config.yaml
 ```
 
-Stop on missing or ambiguous matrices. Do not infer layers from names. A signed
-representation may support means/effects, but detection must come from a
-separately declared nonnegative source. Detection may be unavailable when the
-scientific gate does not require it.
+Stop on an ambiguous representation, invalid normalization fingerprint, duplicate
+feature identity, missing cluster/modality/embedding contract, mismatched cells,
+source-hash drift, scheduler ambiguity, or an unvalidated requested GPU.
 
-Complete when `context.md`, `run_state.json`, and the input manifest describe
-every assay, lane, limitation, hash, and blocker.
+## Stage 1: Set the scene
 
-### 3. Audit every canonical parent
-
-Export one label-free metadata table and run:
+Create the read-only inspection, canonical working copy, QC metrics, environment
+record, context, assumptions ledger, progress state, and compute profile:
 
 ```bash
-python scripts/audit_parents.py \
-  --config config.yaml --cells cells.tsv \
-  --output adaptive_parent_audit.tsv
+cell-curator data canonicalize --config config.yaml
+cell-curator data qc --config config.yaml
+cell-curator run scene --config config.yaml
+cell-curator progress status --config config.yaml
 ```
 
-Audit guide disagreement/entropy, meaningful minorities, incompatible programs,
-available doublet evidence, donor/capture dominance when present, and configured
-technical metrics. Missing donor, capture, RNA complexity, mitochondrial, or
-other study-specific fields are declared limitations rather than fabricated
-values. Flagging opens investigation; it never proves a split.
-
-Complete when every parent has one audit row.
-
-### 4. Discover bounded candidate children
-
-Screen stored higher-resolution membership first. Do not assume Leiden
-partitions are nested. Collapse equivalent children into persistent families by
-parent-restricted membership and require parent purity plus persistence.
-
-If stored partitions fail, permit one bounded parent-local pass using the frozen
-preprocessing, graph inputs, batch covariates, and assay representations. The
-local method may be WNN, a single-assay neighbor graph, or another declared
-study graph; reproduce the canonical construction rather than imposing WNN.
+For an interactive run, review `context.json`, correct every unresolved biological
+or write-back fact in a JSON response, and record the reviewer:
 
 ```bash
-python scripts/discover_candidates.py \
-  --config config.yaml --parents parent_membership.tsv \
-  --stored-memberships stored_membership_long.tsv \
-  --local-candidates parent_local_candidates.tsv \
-  --audit adaptive_parent_audit.tsv --output-dir discovery
-python scripts/validate_candidate_registry.py \
-  --config config.yaml --audit adaptive_parent_audit.tsv \
-  --registry discovery/candidate_registry.tsv \
-  --membership discovery/candidate_membership.tsv
+cell-curator run confirm-context --config config.yaml \
+  --input context-confirmation.json --reviewer REVIEWER
 ```
 
-Select the lowest stable biologically resolving partition. Reject stable
-one-cluster results, continuous gradients, and technical partitions. Keep local
-discoveries label-free until full evidence testing.
+For a pre-authorized non-interactive run, set `guidance.interactive: false`,
+`guidance.preauthorized: true`, a named reviewer, complete `guidance.context`, and
+recorded `guidance.assumptions`. Do not use non-interactive mode to bypass a missing
+context or gate.
 
-Complete when every flagged parent is routed to testing or documented rejection.
+## Stage 2: Build and approve the plan
 
-### 5. Build binary comparator lanes
-
-For each credible candidate construct two independent comparisons:
-
-1. candidate versus canonical-parent remainder;
-2. candidate versus closest biological or sibling comparator.
-
-Expand both comparisons over every configured evidence lane:
+Assemble a parent-scoped vocabulary, profile measured panels, compute cluster
+markers, score signed programs, and select one primary cross-check per hierarchy
+level:
 
 ```bash
-python scripts/build_candidate_contrasts.py \
-  --config config.yaml --cells cells.tsv \
-  --registry discovery/candidate_registry.tsv \
-  --membership discovery/candidate_membership.tsv \
-  --output-dir contrasts
+cell-curator markers assemble --config config.yaml
+cell-curator markers compute --config config.yaml --assay transcriptome \
+  --representation logcounts --group-key canonical_cluster
+cell-curator markers profile --config config.yaml --assay transcriptome \
+  --representation logcounts --group-key canonical_cluster
+cell-curator markers score --config config.yaml --assay transcriptome \
+  --representation logcounts --group-key canonical_cluster
+cell-curator route select --request route-request.json
+cell-curator run plan --config config.yaml
+cell-curator assumptions list --config config.yaml
 ```
 
-The lane count is `candidates x 2 x configured_lanes`; it is never hard-coded.
-A multinomial one-versus-rest coefficient satisfies neither binary comparison.
-
-### 6. Run assay-aware evidence through Snakemake
-
-Adapt [workflow-template](assets/workflow-template/) only for paths, registered
-backends, and resources. For each `rapids_singlecell` lane run native Wilcoxon
-and balanced binary logistic regression, then validate receipts:
+Resolve assumptions before labeling. Add newly discovered material assumptions and
+approve only the relevant scope:
 
 ```bash
-python scripts/rank_markers_gpu.py --help
-python scripts/validate_gpu_receipts.py \
-  --config config.yaml --lane-registry contrasts/comparator_manifest.tsv \
-  --receipts-root gpu_markers --output gpu_receipts.validated.json
+cell-curator assumptions add --config config.yaml --scope SCOPE \
+  --statement "MATERIAL ASSUMPTION"
+cell-curator assumptions approve --config config.yaml \
+  --scope SCOPE --reviewer REVIEWER
 ```
 
-Non-RAPIDS lanes use a declared project/backend plugin and their own immutable
-receipt contract. Never relabel a CPU result as RAPIDS evidence.
+Let a valid non-interactive configuration record pre-authorization automatically.
+Require renewed approval only when a later level introduces a materially new
+assumption.
 
-For every applicable lane report means, effect sizes, adjusted P values,
-positive-program coverage, expected-negative violations, and detection fractions
-when valid. Add source corroboration only where compatible: PanglaoDB ORA for
-gene or gene-activity spaces, peak/gene or motif methods for ATAC when declared,
-and panel-aware protein evidence for antibody assays. Also compute cell-level
-program co-occurrence, stability, available QC/doublet evidence, and technical
-composition summaries.
+## Stage 3: Execute recursively
 
-Summarize with `scripts/summarize_multimodal_evidence.py`, then consolidate
-configured candidate gates with `scripts/evaluate_candidate_evidence.py`.
-
-Complete when every required lane and source gate has a validated artifact, or
-the candidate is failed closed with a specific missing capability.
-
-### 7. Make one outcome per parent
-
-Assign exactly one reviewed outcome:
-
-- `ACCEPT SPLIT`
-- `RETAIN PARENT`
-- `DOUBLET/MIXED`
-- `TECHNICAL/UNRESOLVED`
-
-Accept a child only when all configured biological, assay, technical, diversity,
-doublet, stability, and comparator gates pass. Do not require an assay the study
-does not contain. Do require every lane declared necessary for the claims being
-made. Failed candidates fold into the correct remainder even when a sibling
-candidate passes.
-
-### 8. Critic review and interactive annotation
-
-Run independent critic passes over raw tables. Test biological coherence,
-positive and negative evidence, doublet explanations, technical confounding,
-assay limitations, and semantic hierarchy. Record each finding and resolution.
-
-Present one scope, parent, or candidate at a time. Show rejected alternatives,
-uncertainty, guide divergence, and type/state separately. Use the Knowledgebase
-to validate labels and CL IDs. Computational completion is not approval.
-
-### 9. Build the immutable packet and validate mapping
+Execute one level within one parent, checkpoint it, and continue only into accepted
+children. Inspect stored higher resolutions before one bounded parent-local
+subclustering pass. Profile ambiguity, technical association, low quality, cycling,
+stress, gradients, mixed/doublet state, composition, and spatial context before
+assigning a child or `Unknown`.
 
 ```bash
-python scripts/build_review_packet.py --config config.yaml --run-root RUN_ROOT
-python scripts/validate_final_mapping.py \
-  --config config.yaml --canonical parent_membership.tsv \
-  --decisions parent_decision_summary.tsv \
-  --registry discovery/candidate_registry.tsv \
-  --candidate-membership discovery/candidate_membership.tsv \
-  --mapping parent_child_mapping.tsv --build-mapping \
-  --output mapping.validation.json
+cell-curator run execute --config config.yaml
+cell-curator cluster subcluster --config config.yaml
+cell-curator cluster profile --config config.yaml
+cell-curator cluster confidence --margin 0.3 --specificity 0.8 \
+  --agreement 0.7 --coverage 0.9
+cell-curator hierarchy assign --config config.yaml --scores scores.tsv \
+  --level L1 --parent ROOT
+cell-curator hierarchy validate --labels results/RUN/labels/L1.tsv
+cell-curator run status --config config.yaml
 ```
 
-Build leaf IDs from accepted candidate IDs. Assign accepted children first and
-fold all remaining cells into a deterministic remainder. Preserve unsplit parent
-membership byte-for-byte.
+For an arbitrary-depth vocabulary, list each real parent-scoped score table in a
+schema-v3 JSON manifest and execute it through the same gate and checkpoint engine:
 
-Complete only when each cell maps once, parent counts conserve, leaf totals are
-correct, input/packet hashes are invariant, critics are reconciled, ontology
-semantics are valid, and human approval is recorded. Keep write-back separate;
-prohibit it in `evidence-only` mode.
+```json
+{
+  "schema_version": 3,
+  "score_tables": [
+    {"level": "L1", "parent_scope": "ROOT", "path": "scores/L1-ROOT.tsv"},
+    {"level": "L2", "parent_scope": "Immune", "path": "scores/L2-Immune.tsv"}
+  ]
+}
+```
 
-## Bundled utilities
+```bash
+cell-curator run execute --config config.yaml \
+  --score-manifest hierarchy-scores.json
+```
 
-Treat scripts as deterministic workflow components, not substitutes for
-biological review. Put marker panels, guide columns, assay names, feature spaces,
-thresholds, backend plugins, and HPC resources in `config.yaml`.
+Resolve manifest paths relative to the manifest. Retain an accepted parent as a
+leaf when its child score table is absent. Never borrow a sibling parent's scores.
+See [artifact-schemas.md](references/artifact-schemas.md) for the strict contract.
+
+Use `route select` to choose the primary cross-check. Invoke only applicable routes;
+inspect every `unavailable` receipt and remediation. Discover or run optional routes
+with their own help contracts:
+
+```bash
+cell-curator crosscheck obs-pred --help
+cell-curator crosscheck celltypist-discover --help
+cell-curator crosscheck celltypist-predict --help
+cell-curator crosscheck reference-knn --help
+cell-curator crosscheck azimuth --help
+cell-curator crosscheck scimilarity --help
+cell-curator reference acquire-census --help
+cell-curator reference train-scanvi --help
+cell-curator reference map-scarches --help
+```
+
+Treat all automated outputs as hypotheses. Keep CPU reference kNN available; permit
+GPU kNN, scVI/scANVI training, or scArches mapping only under their validated GPU
+contracts. Bound and checksum every acquisition.
+
+## Review, reconcile, and validate
+
+Scaffold evidence cards from raw values, preserve manual reasoning in labels tables,
+build a platform-neutral critic packet, import findings, and reconcile each finding
+as `RESOLVED` or `DISMISSED` with reviewer and rationale:
+
+```bash
+cell-curator evidence-card scaffold --config config.yaml
+cell-curator critic packet --config config.yaml
+cell-curator critic import-findings --config config.yaml --input critic-findings.tsv
+cell-curator critic reconcile --config config.yaml --input critic-reconciliation.tsv
+cell-curator critic validate --config config.yaml
+cell-curator report build --config config.yaml --strict
+cell-curator report check --config config.yaml --strict
+cell-curator run validate --config config.yaml
+```
+
+Require the self-contained report to include embeddings, marker dotplots, hierarchy,
+uncertainty, rejected alternatives, QC, spatial context when available, composition,
+categorical colors, provenance, and all approved levels. Use report checking as a
+read-only post-approval validation.
+
+## Preview and write back
+
+Generate the complete diff first:
+
+```bash
+cell-curator write-back preview --config config.yaml --output annotated.h5ad
+```
+
+After assumptions, hierarchy, reports, and critics pass, create the signed approval
+for the current run plus the source, mapping, durable-label, assumptions, report,
+critic, preview-diff, exact-output-path, and in-place-intent fields.
+Write atomically to a new file:
+
+```bash
+cell-curator write-back apply --config config.yaml \
+  --approval approval.json --output annotated.h5ad
+```
+
+Preserve category order and report colors. Mutate the source only through the
+explicit in-place option. Finish by checking both status surfaces:
+
+```bash
+cell-curator progress status --config config.yaml
+cell-curator run status --config config.yaml
+```

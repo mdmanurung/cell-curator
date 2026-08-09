@@ -2,7 +2,7 @@
 
 ## Structural and scientific
 
-- skill validator, script compilation, tests, and `--help` checks pass;
+- skill validator, package compilation/build, tests, and `--help` checks pass;
 - reusable logic contains no study paths, IDs, marker panels, or scheduler resources;
 - RNA-only, ATAC-only, and multimodal input contracts are tested;
 - absent/mismatched GPUs fail RAPIDS lanes with no CPU path;
@@ -10,7 +10,8 @@
 - optional detection is unavailable and required signed detection blocks;
 - stored/local candidate, one-cluster rejection, technical/doublet, positive and
   expected-negative, and evidence-only contracts are tested;
-- no label is reviewable without an ontology-compatible lane or validated reference.
+- every non-`Unknown` label has an executable evidence route; CL-free labels remain
+  valid when ontology evidence is unavailable and that limitation is recorded.
 
 ## Mapping
 

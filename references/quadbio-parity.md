@@ -1,231 +1,57 @@
-# Parity with QuadBio cell-type-annotation
+# Neutral capability-parity matrix
 
-This is a development assessment, not a claim of feature parity. It compares
-this repository with QuadBio
-[`cell-type-annotation`](https://github.com/quadbio/cell-type-annotation) at
-commit `b4381198b85b7fd422f6640c1d7a04c2978ace1d` (`cta` 0.1.0), the version
-pinned in [quadbio-integration.md](quadbio-integration.md).
+Use the public QuadBio `cell-type-annotation` surface only as a capability
+checklist. The mappings below identify independent `cell-curator` implementations;
+they do not import, invoke, vendor, or require QuadBio, its CLI, package, skill, MCP
+configuration, or artifacts. They make no comparative accuracy or performance
+claim.
 
-## Verdict
+Checklist source: the public QuadBio
+[`cell-type-annotation` skill](https://github.com/quadbio/cell-type-annotation/blob/main/skills/cell-type-annotation/SKILL.md),
+reviewed 2026-08-09. This link is documentation only and is never used at runtime.
 
-QuadBio is the stronger executable product for transcriptomic annotation today.
-This skill has the stronger design for immutable canonical partitions, adaptive
-nested subclustering, multimodal evidence, and strict HPC/GPU provenance. It is
-currently an orchestration and contract layer over QuadBio, not a feature-complete
-replacement.
-
-Use QuadBio as the annotation engine. Develop this package as its assay-aware,
-adaptive, production-workflow extension.
-
-## Current comparison
-
-| Capability | Stronger implementation | Assessment |
-|---|---|---|
-| RNA and spatial-transcriptomic annotation | QuadBio | Installable `cta` CLI, canonicalization, QC, marker computation, cross-check routing, reports, and guarded write-back are implemented. |
-| CITE-seq and multimodal decision design | This skill | Evidence lanes, representation-aware detection, nested children, binary comparators, and immutable mappings are explicit contracts. |
-| ATAC-only or protein-only annotation | Neither | This skill can declare these assays, but it does not yet ship differential-accessibility, motif, peak-to-gene, or protein-specific annotation backends. |
-| Frozen canonical partitions | This skill | Parents remain fixed and accepted children receive hierarchical leaf identities. |
-| Adaptive subclustering | This skill in design; QuadBio in executable availability | This skill specifies persistence and parent-local stability; QuadBio ships a simpler bounded Leiden command. The full adaptive engine is not yet implemented here. |
-| Automated annotation cross-checks | QuadBio | CellTypist, CellMapper, scANVI/scArches, Azimuth, SCimilarity, and environment-aware routing are concrete commands. |
-| HPC, immutable artifacts, and GPU provenance | This skill | Snakemake authority, versioned packets, RAPIDS receipts, and GPU fail-closed behavior are stronger contracts. |
-| Packaging and reproducibility | QuadBio | `pyproject.toml`, `pixi.toml`, committed lockfile, unified CLI, and broader tests are present. |
-| Interactive evidence review | QuadBio | Evidence-card scaffolding, HTML reports, completeness checks, hierarchy validation, and dry-run write-back are implemented. |
-| Parent/child accounting | This skill | Exactly one decision per parent, one leaf per cell, count conservation, and lineage/global leaf totals are explicit. |
-
-At the pinned versions, QuadBio contains about 8,022 Python source lines under
-`src/cta`, 12 test modules, and 64 test functions. This skill contains about
-2,853 Python lines under `scripts`, five test modules, and 22 test functions.
-These counts measure implementation surface, not scientific quality.
-
-## Capabilities this skill adds
-
-- Freeze and hash canonical cluster membership before refinement.
-- Represent accepted children with stable hierarchical IDs and conserve every
-  parent cell in an immutable one-row-per-cell mapping.
-- Distinguish `ACCEPT SPLIT`, `RETAIN PARENT`, `DOUBLET/MIXED`, and
-  `TECHNICAL/UNRESOLVED` as mutually exclusive reviewed parent outcomes.
-- Screen stored partitions for parent purity and membership persistence before
-  permitting one bounded parent-local clustering pass.
-- Require independent candidate-versus-parent-remainder and
-  candidate-versus-sibling binary comparisons.
-- Register arbitrary assays and representations without assuming every study
-  has RNA and ADT.
-- Separate signed corrected values used for means/effects from nonnegative
-  matrices used for detection fractions.
-- Treat donor, capture, doublet, QC, and technical structure as acceptance
-  gates rather than report-only metadata.
-- Fail closed when a configured `rapids_singlecell` lane lacks a validated GPU;
-  no CPU marker result may impersonate that lane.
-- Keep computational completion, biological review, ontology validation, human
-  approval, and write-back as separate states.
-
-## Material gaps and correctness risks
-
-### Evidence gates are not yet provenance-derived
-
-`evaluate_candidate_evidence.py` accepts boolean fields such as positive-marker,
-negative-marker, source-corroboration, and lane-pass gates from an input table.
-It does not derive those decisions from hashed marker, enrichment, QC, and
-stability artifacts. A malformed or optimistic upstream table can therefore
-produce a passing decision without a cryptographic and semantic path back to raw
-evidence.
-
-Replace free gate booleans with deterministic evaluators whose inputs are
-validated receipts and whose outputs include source hashes and threshold traces.
-
-### The Snakemake workflow is a skeleton
-
-The bundled workflow does not produce prepared cell tables, parent membership,
-stored-resolution membership, parent-local candidates, dynamic comparator jobs,
-source corroboration, program co-expression, technical summaries, critics,
-parent decisions, final mappings, or leaf totals. It also makes the review packet
-the `all_evidence` target even though the written contract says review packets
-and finalizers are outside default aggregate targets.
-
-Implement a checkpoint- or manifest-driven DAG and make evidence completion,
-review-packet construction, and finalization separate explicit targets.
-
-### Candidate discovery trusts external decisions
-
-Parent-local candidate input currently supplies `stable`,
-`biologically_resolving`, `technical_dominated`, and `eligible` booleans. The
-bundled code neither builds the local graph nor calculates resampling stability.
-The stored-resolution family matcher is greedy, is not mutual-best or one-to-one,
-and selects the lowest-resolution family member without proving it is the best
-representative. `closest_sibling` is also supplied rather than derived.
-
-Implement graph construction, adjacent-resolution persistence, resampling ARI,
-technical association tests, comparator selection, and deterministic candidate
-promotion inside the workflow.
-
-### Declared modality support exceeds executable support
-
-RNA-only, CITE-seq, ATAC-only, protein-only, gene-activity, and multiome inputs
-can be described by the configuration schema. Only RAPIDS marker lanes have a
-bundled ranking implementation, and that runner consumes prepared AnnData rather
-than extracting arbitrary MuData modalities. No ATAC accessibility, motif,
-peak-to-gene, or protein-specific backend is included.
-
-Report modality support at four levels:
-
-1. `annotation-capable`: complete identity evidence and ontology validation;
-2. `corroboration-only`: can support or refute another assay's identity claim;
-3. `qc-only`: usable only for technical assessment;
-4. `unavailable`: declared but not implemented for the run.
-
-Do not describe a modality as supported merely because it can be registered.
-
-### Parent decisions have a nullable-threshold bug
-
-`decide_parents` converts `adaptive.audit.doublet_fraction_max` directly with
-`float(...)`. The template permits that threshold to be null, causing
-`float(None)` in a default-config decision run. Tests currently avoid the bug by
-supplying a threshold.
-
-Define null as a disabled gate consistently and add a default-template regression
-test.
-
-### Review-packet completion is weaker than the contract
-
-Mapping validation is optional to the packet builder even though one-row-per-cell
-mapping and count conservation are completion requirements. The packet builder
-also expects a GPU receipt aggregate even when a study has no RAPIDS lanes, while
-the workflow does not define the zero-lane artifact path.
-
-Make mapping validation mandatory and define explicit zero-applicable-lane
-receipts for every optional backend family.
-
-### GPU receipts need stronger runtime checks
-
-The RAPIDS runner requires one visible validated device, but records the
-configured distribution string without confirming the installed distribution.
-It does not validate logistic-regression convergence or implement the documented
-retry behavior. Prepared matrix identity is not fully tied to comparator and
-feature manifests.
-
-Record observed package distribution, solver convergence, retry history, input
-matrix hash, feature order hash, group-membership hash, and comparator-manifest
-hash in each receipt.
-
-### Packaging and user-facing execution lag QuadBio
-
-This repository has no unified CLI, package metadata, locked environment, method
-router, HTML report renderer, canonicalization command, or ontology-aware
-write-back command. The scripts are useful workflow components but require
-project-specific glue.
-
-Create one installable CLI that wraps the deterministic scripts and delegates
-transcriptomic annotation functions to QuadBio rather than duplicating them.
-
-## Generalization target
-
-The portable abstraction is an evidence-capability graph, not an RNA-plus-ADT
-checklist:
-
-```text
-study input
-  -> assay representations
-  -> executable evidence capabilities
-  -> claims each capability may support or refute
-  -> candidate-specific required gates
-  -> reviewed type and state decisions
-```
-
-Examples:
-
-| Study | Valid route |
-|---|---|
-| RNA only | QuadBio RNA evidence plus adaptive parent/child, stability, technical, and mapping gates. |
-| CITE-seq | RNA identity evidence plus panel-aware protein corroboration; corrected protein detection requires a separate nonnegative source. |
-| Protein only | Annotation only when a sufficiently discriminative validated panel and ontology-compatible rules exist; otherwise evidence-only. |
-| ATAC only | Use accessibility, motif, gene-activity, and reference-mapping evidence when implemented; peak-level clustering alone cannot justify gene-marker labels. |
-| RNA plus ATAC | RNA supplies direct identity evidence; ATAC supplies regulatory corroboration or independently supported subtype evidence. |
-| New assay | Add a backend plugin, receipt validator, evidence schema, claim scope, and tests before marking it annotation-capable. |
-
-Missing modalities are not failures. Missing capabilities required for a claim
-are blockers. Acceptance gates must be assembled from the study's available,
-validated capabilities rather than from a universal modality checklist.
-
-## Development order toward genuine parity
-
-### P0: make decisions trustworthy
-
-1. Derive all gates from hashed raw artifacts.
-2. Fix nullable thresholds and require mapping validation.
-3. Separate evidence, packet, and finalization workflow targets.
-4. Define zero-lane behavior and fail closed on every required capability.
-
-### P1: make the workflow executable
-
-1. Implement input preparation for AnnData and MuData.
-2. Implement stored-child persistence and parent-local graph/resampling stability.
-3. Expand comparator lanes dynamically through Snakemake.
-4. Implement program co-expression, source corroboration, technical tests,
-   critics, mappings, and leaf totals as producing rules.
-5. Add a unified CLI, package metadata, and locked environments.
-
-### P2: become broadly multimodal
-
-1. Ship reference RNA, protein, ATAC, gene-activity, and multiome adapters.
-2. Add backend-specific receipt validators and capability routing.
-3. Reuse QuadBio cross-checks, reports, hierarchy checks, and write-back instead
-   of rebuilding them.
-4. Run end-to-end tests on RNA-only, CITE-seq, ATAC-only, multiome, real GPU,
-   evidence-only, doublet/mixed, and successful adaptive-split fixtures.
-
-## Readiness bar for the term "supercharged QuadBio"
-
-Use that description only after:
-
-- QuadBio's executable annotation paths remain available through this skill;
-- every advertised modality has at least one complete reference backend;
-- all acceptance gates are reproducible from immutable raw evidence;
-- the Snakemake workflow resumes end to end without project-specific glue;
-- the package has a locked environment and unified CLI;
-- real-data and synthetic forward tests cover accepted splits, retained
-  gradients, technical partitions, and mixed/doublet parents;
-- downstream invariance checks demonstrate that canonical inputs and unsplit
-  memberships remain unchanged.
-
-Until then, describe this repository as an adaptive multimodal orchestration
-layer over QuadBio.
+| QuadBio capability | `cell-curator` equivalent | Implementation file | CLI / API entry point | Test coverage |
+| --- | --- | --- | --- | --- |
+| Independently installable annotation skill | Build a typed wheel containing the CLI, skill, schema, workflow, references, and local-first Python package without QuadBio artifacts | [`pyproject.toml`](../pyproject.toml), [`__init__.py`](../src/cell_curator/__init__.py) | `cell-curator --version`, `cell-curator --help`; package imports | [`test_clean_wheel.py`](../tests/test_clean_wheel.py), [`test_package_core.py`](../tests/test_package_core.py) |
+| Three-stage guided workflow | Persist scene context, construct an executable plan, then execute parent-scoped levels | [`guided.py`](../src/cell_curator/guided.py), [`pipeline.py`](../src/cell_curator/pipeline.py) | `run scene`, `run plan`, `run execute`; `prepare_scene()`, `construct_plan()`, `run_annotation()` | [`test_end_to_end.py`](../tests/test_end_to_end.py), [`test_environment_routing.py`](../tests/test_environment_routing.py) |
+| Interactive context confirmation | Confirm or correct a complete biological and write-back context with a named reviewer | [`guided.py`](../src/cell_curator/guided.py) | `run confirm-context`; `confirm_context()` | [`test_end_to_end.py`](../tests/test_end_to_end.py) |
+| Pre-authorized non-interactive operation | Validate complete context, reviewer, assumptions, and pre-authorization; record the same gate trail | [`config.py`](../src/cell_curator/config.py), [`guided.py`](../src/cell_curator/guided.py) | `run scene`, `run plan`, `run execute`; `GuidanceConfig`, `approve_assumptions()` | [`test_environment_routing.py`](../tests/test_environment_routing.py), [`test_end_to_end.py`](../tests/test_end_to_end.py) |
+| Living assumptions and renewed gates | Add, list, hash, scope, approve, and re-check material assumptions before labels | [`guided.py`](../src/cell_curator/guided.py), [`models.py`](../src/cell_curator/models.py) | `assumptions list`, `assumptions add`, `assumptions approve`; `add_assumptions()`, `approve_assumptions()`, `require_label_gate()` | [`test_end_to_end.py`](../tests/test_end_to_end.py), [`test_mapping_and_packet.py`](../tests/test_mapping_and_packet.py) |
+| CPU, RAM, Apple Silicon, CUDA, scheduler, and resource-limit detection | Read-only structured environment detection with login-node ambiguity and real-GPU validation | [`environment.py`](../src/cell_curator/environment.py) | `environment detect`; `detect_environment()`, `validate_real_gpu()` | [`test_environment_routing.py`](../tests/test_environment_routing.py) |
+| Deterministic method routing per hierarchy level | Select one primary cross-check from biological context, technology, resources, memory, models, and references; retain every skip reason | [`routing.py`](../src/cell_curator/routing.py) | `route select`; `route_crosscheck()`, `route_hierarchy()` | [`test_environment_routing.py`](../tests/test_environment_routing.py) |
+| AnnData and MuData inspection | Validate cells, clusters, modalities, layers, raw, embeddings, visualization, spatial coordinates, representations, and colors | [`data.py`](../src/cell_curator/data.py) | `data inspect`; `inspect()` | [`test_data_parity.py`](../tests/test_data_parity.py), [`test_input_and_audit.py`](../tests/test_input_and_audit.py) |
+| Canonical resumable working copy | Freeze a source-preserving canonical copy and manifests with drift checks | [`data.py`](../src/cell_curator/data.py), [`provenance.py`](../src/cell_curator/provenance.py) | `data canonicalize`; `canonicalize()` | [`test_data_parity.py`](../tests/test_data_parity.py), [`test_input_and_audit.py`](../tests/test_input_and_audit.py) |
+| Read-only QC and cell-cycle metrics | Compute depth, detected features, mitochondrial, ribosomal, cell-cycle, phase, and feasible assay metrics without source mutation | [`data.py`](../src/cell_curator/data.py) | `data qc`; `compute_qc()` | [`test_data_parity.py`](../tests/test_data_parity.py) |
+| Representation and normalization safeguards | Fingerprint counts, log-normalized, corrected/signed, raw, layered, and detection-safe matrices; hard-stop ambiguity | [`data.py`](../src/cell_curator/data.py) | `data inspect`, `data canonicalize`, `data qc`; `normalization_fingerprint()`, `matrix_for()` | [`test_data_parity.py`](../tests/test_data_parity.py), [`test_absolute_and_decisions.py`](../tests/test_absolute_and_decisions.py) |
+| Gene-ID canonicalization | Detect symbols and Ensembl IDs, remove Ensembl versions, apply supplied mappings, and reject ambiguous identifiers | [`data.py`](../src/cell_curator/data.py), [`crosschecks.py`](../src/cell_curator/crosschecks.py) | `data canonicalize`; `gene_symbols()`, `load_gene_mapping()`, `harmonize_reference_genes()` | [`test_data_parity.py`](../tests/test_data_parity.py), [`test_crosschecks_hierarchy_focused.py`](../tests/test_crosschecks_hierarchy_focused.py) |
+| Targeted-panel and covariate awareness | Summarize panel capability and missingness, discover categorical covariates, and preserve categorical colors | [`data.py`](../src/cell_curator/data.py), [`review.py`](../src/cell_curator/review.py) | `data inspect`, `data qc`; `targeted_panel_summary()`, `categorical_covariate_inventory()` | [`test_data_parity.py`](../tests/test_data_parity.py) |
+| Marker-program assembly | Merge local signed lists, model-export tables, cached tables, and labeled references with strict parent filtering | [`markers.py`](../src/cell_curator/markers.py), [`knowledge.py`](../src/cell_curator/knowledge.py) | `markers assemble`; `assemble_marker_programs()`, `collect_programs()` | [`test_marker_parity.py`](../tests/test_marker_parity.py), [`test_package_core.py`](../tests/test_package_core.py) |
+| Bottom-up cluster-marker discovery | Compute one-cluster-versus-remainder markers and specificity filters without conflating condition-level DE | [`evidence.py`](../src/cell_curator/evidence.py), [`markers.py`](../src/cell_curator/markers.py) | `markers compute`; `compute_bottom_up_markers()`, `compute_de_marker_overlap()` | [`test_marker_parity.py`](../tests/test_marker_parity.py), [`test_multimodal_engine.py`](../tests/test_multimodal_engine.py) |
+| Top-down positive and negative panel profiling | Emit raw mean/detection matrices, panel gates, missing features, uncallable programs, and expected-negative violations | [`markers.py`](../src/cell_curator/markers.py) | `markers profile`; `profile_marker_panel()`, `negative_marker_violations()` | [`test_marker_parity.py`](../tests/test_marker_parity.py) |
+| AUCell, UCell, and DE-overlap cross-checks | Compute deterministic cell-rank enrichment and cluster-marker overlap for signed programs | [`markers.py`](../src/cell_curator/markers.py) | `markers score`; `score_aucell()`, `score_ucell()`, `compute_de_marker_overlap()` | [`test_marker_parity.py`](../tests/test_marker_parity.py) |
+| Consolidated marker evidence and plots | Preserve route components and disagreement in durable tables plus a data-backed self-contained SVG dotplot | [`markers.py`](../src/cell_curator/markers.py) | `markers score`; `consolidate_marker_crosschecks()`, `write_marker_artifacts()` | [`test_marker_parity.py`](../tests/test_marker_parity.py) |
+| Existing prediction columns | Convert existing labels into cell and cluster hypotheses with uncertainty rather than verdicts | [`crosschecks.py`](../src/cell_curator/crosschecks.py) | `crosscheck obs-pred`; `existing_prediction_hypothesis()` | [`test_crosschecks_hierarchy_focused.py`](../tests/test_crosschecks_hierarchy_focused.py) |
+| CellTypist discovery and prediction | Discover installed/cached models and run optional prediction with actionable unavailability | [`crosschecks.py`](../src/cell_curator/crosschecks.py) | `crosscheck celltypist-discover`, `crosscheck celltypist-predict`; `discover_celltypist_models()`, `celltypist_hypothesis()` | [`test_crosschecks_hierarchy_focused.py`](../tests/test_crosschecks_hierarchy_focused.py) |
+| Labeled-reference kNN | Harmonize genes, map by CPU kNN with uncertainty, and allow GPU kNN only after real-GPU validation | [`crosschecks.py`](../src/cell_curator/crosschecks.py), [`environment.py`](../src/cell_curator/environment.py) | `crosscheck reference-knn`; `reference_knn_hypothesis()` | [`test_crosschecks_hierarchy_focused.py`](../tests/test_crosschecks_hierarchy_focused.py), [`test_environment_routing.py`](../tests/test_environment_routing.py) |
+| scVI/scANVI reference training | Train an optional reference model under an explicit validated GPU contract | [`crosschecks.py`](../src/cell_curator/crosschecks.py) | `reference train-scanvi`; `train_scanvi_reference()` | [`test_optional_provider_contracts.py`](../tests/test_optional_provider_contracts.py), [`test_environment_routing.py`](../tests/test_environment_routing.py) |
+| scArches-style query mapping | Map queries through an optional compatible model and retain uncertainty | [`crosschecks.py`](../src/cell_curator/crosschecks.py) | `reference map-scarches`; `map_scarches_query()` | [`test_optional_provider_contracts.py`](../tests/test_optional_provider_contracts.py), [`test_environment_routing.py`](../tests/test_environment_routing.py) |
+| Curated human reference mapping | Run an optional Azimuth-compatible or equivalent curated human-reference hypothesis route | [`crosschecks.py`](../src/cell_curator/crosschecks.py) | `crosscheck azimuth`; `curated_human_reference_hypothesis()` | [`test_crosschecks_hierarchy_focused.py`](../tests/test_crosschecks_hierarchy_focused.py) |
+| Foundation-model cross-check | Run an optional SCimilarity-compatible route or return exact dependency/model remediation | [`crosschecks.py`](../src/cell_curator/crosschecks.py) | `crosscheck scimilarity`; `scimilarity_hypothesis()` | [`test_crosschecks_hierarchy_focused.py`](../tests/test_crosschecks_hierarchy_focused.py) |
+| Bounded CELLxGENE Census acquisition | Acquire a bounded optional subset with cache, version, timeout, checksum, and explicit failure state | [`crosschecks.py`](../src/cell_curator/crosschecks.py), [`knowledge.py`](../src/cell_curator/knowledge.py) | `reference acquire-census`; `fetch_census_reference()` | [`test_optional_provider_contracts.py`](../tests/test_optional_provider_contracts.py), [`test_environment_routing.py`](../tests/test_environment_routing.py) |
+| Multimodal evidence preservation | Score RNA, protein, gene activity, ATAC, and spatial routes according to declared capabilities and retain disagreement | [`evidence.py`](../src/cell_curator/evidence.py), [`capabilities.py`](../src/cell_curator/capabilities.py) | `run execute`; `run_lane()`, `aggregate_multimodal_evidence()` | [`test_multimodal_engine.py`](../tests/test_multimodal_engine.py), [`test_absolute_and_decisions.py`](../tests/test_absolute_and_decisions.py) |
+| Parent-local refinement and stored partitions | Inspect stored resolutions first, run one bounded local graph pass, and emit child markers, QC, composition, and spatial summaries | [`refinement.py`](../src/cell_curator/refinement.py), [`hierarchy.py`](../src/cell_curator/hierarchy.py) | `cluster subcluster`, `cluster profile`; `discover_refinement_candidates()`, `profile_refined_clusters()` | [`test_ontology_and_refinement.py`](../tests/test_ontology_and_refinement.py), [`test_discovery_registry.py`](../tests/test_discovery_registry.py) |
+| Ambiguity and parallel state profiling | Detect ambiguous, retained-parent, mixed/doublet, technical, cycling, stressed, gradient, and low-quality states independently of identity | [`hierarchy.py`](../src/cell_curator/hierarchy.py), [`audit_parents.py`](../src/cell_curator/audit_parents.py) | `cluster profile`; `profile_ambiguity()`, `classify_parallel_state()` | [`test_crosschecks_hierarchy_focused.py`](../tests/test_crosschecks_hierarchy_focused.py), [`test_input_and_audit.py`](../tests/test_input_and_audit.py) |
+| Advisory confidence | Combine evidence margin, specificity, agreement, and coverage without converting automation into a verdict | [`hierarchy.py`](../src/cell_curator/hierarchy.py) | `cluster confidence`; `advisory_confidence()` | [`test_crosschecks_hierarchy_focused.py`](../tests/test_crosschecks_hierarchy_focused.py) |
+| Recursive parent-scoped assignment | Execute arbitrary-depth exact parent scopes, preserve rejected alternatives and rationale, retain missing-child parents, hash checkpoints, and resume only valid scopes | [`pipeline.py`](../src/cell_curator/pipeline.py), [`hierarchy.py`](../src/cell_curator/hierarchy.py), [`guided.py`](../src/cell_curator/guided.py) | `run execute --score-manifest`; `execute_recursive_hierarchy()`, `execute_recursive_hierarchy_manifest()`, `checkpoint_level()` | [`test_recursive_hierarchy_execution.py`](../tests/test_recursive_hierarchy_execution.py), [`test_crosschecks_hierarchy_focused.py`](../tests/test_crosschecks_hierarchy_focused.py) |
+| Strict hierarchy and one-cell-one-leaf validation | Reject child reuse across parents, invalid nesting, overlapping children, duplicate cells, and blank leaves; permit `Unknown` | [`hierarchy.py`](../src/cell_curator/hierarchy.py), [`decisions.py`](../src/cell_curator/decisions.py) | `hierarchy validate`; `validate_hierarchy_nesting()`, `build_mapping()` | [`test_crosschecks_hierarchy_focused.py`](../tests/test_crosschecks_hierarchy_focused.py), [`test_mapping_and_packet.py`](../tests/test_mapping_and_packet.py) |
+| Durable labels and evidence cards | Use labels TSVs as source of truth, preserve manual reasoning, and scaffold cards from raw evidence values | [`hierarchy.py`](../src/cell_curator/hierarchy.py), [`review.py`](../src/cell_curator/review.py) | `evidence-card scaffold`; `scaffold_labels_table()`, `build_evidence_cards()` | [`test_mapping_and_packet.py`](../tests/test_mapping_and_packet.py), [`test_end_to_end.py`](../tests/test_end_to_end.py) |
+| Platform-neutral critic workflow | Build structured packets, import validated findings, and reconcile `RESOLVED` or `DISMISSED` dispositions with reviewer and rationale | [`review.py`](../src/cell_curator/review.py) | `critic packet`, `critic import-findings`, `critic reconcile`, `critic validate`; `build_critic_packet()`, `import_critic_findings()`, `import_reconciliation()` | [`test_package_core.py`](../tests/test_package_core.py), [`test_mapping_and_packet.py`](../tests/test_mapping_and_packet.py) |
+| Per-level and full-run HTML reporting | Build self-contained embeddings, dotplots, hierarchy, uncertainty, alternatives, QC, spatial, composition, color, and provenance panels | [`review.py`](../src/cell_curator/review.py) | `report build`; `build_html_report()` | [`test_end_to_end.py`](../tests/test_end_to_end.py), [`test_multimodal_engine.py`](../tests/test_multimodal_engine.py) |
+| Strict read-only report checking | Validate required labels, reasoning, panels, assumptions, and existing report without rebuilding approved artifacts | [`review.py`](../src/cell_curator/review.py) | `report check`; `check_report_completeness()`, `build_html_report(check_only=True)` | [`test_end_to_end.py`](../tests/test_end_to_end.py) |
+| Progress and next-action reporting | Report current stage, hierarchy level, parent, blockers, completed checkpoints, artifacts, and next action | [`guided.py`](../src/cell_curator/guided.py) | `progress status`, `run status`; `status()` | [`test_end_to_end.py`](../tests/test_end_to_end.py) |
+| Local Cell Ontology validation | Resolve names, synonyms, accessions, obsolete replacements, ancestors, and compatibility; reject invalid supplied mappings | [`ontology.py`](../src/cell_curator/ontology.py) | `ontology validate`, `hierarchy validate`; `CellOntology`, `validate_program_ontology()` | [`test_ontology_and_refinement.py`](../tests/test_ontology_and_refinement.py) |
+| Optional remote ontology enhancement | Provision a versioned, timeout-bounded, checksum-pinned ontology cache and record explicit unavailability while retaining CL-free operation | [`ontology.py`](../src/cell_curator/ontology.py), [`knowledge.py`](../src/cell_curator/knowledge.py) | `ontology provision`; `ontology_from_config()`, `RemoteTableProvider.provision()` | [`test_ontology_and_refinement.py`](../tests/test_ontology_and_refinement.py) |
+| CL-free annotation | Keep labels valid without ontology evidence while preventing unvalidated CL identifiers from entering write-back | [`ontology.py`](../src/cell_curator/ontology.py), [`pipeline.py`](../src/cell_curator/pipeline.py) | `run plan`, `run validate`; `ontology_from_config()` | [`test_ontology_and_refinement.py`](../tests/test_ontology_and_refinement.py), [`test_end_to_end.py`](../tests/test_end_to_end.py) |
+| Complete guarded write-back | Validate hierarchy and ontology, preview a complete diff, preserve category order and colors, require approval, and write atomically to a new file by default | [`writeback.py`](../src/cell_curator/writeback.py) | `write-back preview`, `write-back apply`; `validate_writeback()`, `write_back()` | [`test_end_to_end.py`](../tests/test_end_to_end.py), [`test_mapping_and_packet.py`](../tests/test_mapping_and_packet.py) |
+| Immutable provenance and resume | Hash inputs, configuration, mappings, receipts, and artifacts; resume valid checkpoints through the authoritative DAG | [`provenance.py`](../src/cell_curator/provenance.py), [`Snakefile`](../workflow/Snakefile) | `run status`, `run validate`; Snakemake targets `all_evidence`, `review_packet`, `finalization`, `writeback` | [`test_mapping_and_packet.py`](../tests/test_mapping_and_packet.py), [`test_end_to_end.py`](../tests/test_end_to_end.py) |
+| Discoverable unified CLI and shared Python logic | Expose command help while keeping commands thin over the same typed package APIs used by tests and workflows | [`cli.py`](../src/cell_curator/cli.py), [`api.py`](../src/cell_curator/api.py) | `cell-curator --help`; all command groups listed above | [`test_cli_and_manifests.py`](../tests/test_cli_and_manifests.py), [`test_package_core.py`](../tests/test_package_core.py) |

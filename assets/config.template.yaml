@@ -1,15 +1,16 @@
-schema_version: 2
+schema_version: 3
 run:
   run_id: replace-with-versioned-run-id
-  output_root: results/adaptive_annotation/v1
+  output_root: results/cell_curator
   mode: evidence-only  # annotation | evidence-only
   immutable: true
-  knowledgebase_required_for_labels: true
 
-knowledgebase:
-  available: false
-  provider: quadbio-knowledgebase-mcp
-  version_or_snapshot: ""
+knowledge:
+  # Local files are sufficient. Optional remote tables must be checksum-pinned.
+  # A remote_ontology provider declares url, cache_path, sha256, version, and timeout_seconds.
+  providers: []
+  require_local_grounding_for_labels: true
+  allow_optional_remote_enhancement: true
 
 input:
   kind: h5ad  # h5ad supports one root assay; h5mu supports one or more assays
@@ -21,15 +22,16 @@ input:
       kind: rna  # rna | protein | atac | gene_activity | spatial | other
       feature_space: gene
       feature_id_column: gene_symbol
+      gene_mapping_path: ""  # optional local CSV/TSV mapping for Ensembl or mixed IDs
       capabilities: [identity, subtype, state, ontology_markers, gene_set_ora]
       graph_representations:
         - {source: obsm, key: X_pca_harmony}
       representations:
         logcounts:
-          source: layer  # X | layer
+          source: layer  # X | raw | layer
           key: logcounts
           feature_space: gene
-          ranking_backend: rapids_singlecell
+          ranking_backend: scipy_mannwhitney
           ontology_compatible: true
           detection:
             source: layer
@@ -40,6 +42,8 @@ input:
     canonical_parent: canonical_cluster
     scope: lineage
     stored_resolutions: []
+    embedding: X_pca_harmony
+    spatial: ""
     donor: ""
     capture: ""
     doublet_class: ""
@@ -92,10 +96,12 @@ adaptive:
     reference_seeds: [0, 1, 2, 3, 4]
     reject_one_cluster: true
     select: lowest_stable_biologically_resolving
+    knn_k: 15
+    bootstrap_fraction: 0.80
 
 comparators:
   roles: [parent_remainder, closest_sibling]
-  closest_sibling_strategy: graph_then_biological_review
+  closest_sibling_strategy: embedding_centroid
 
 markers:
   rapids_singlecell_version: ""
@@ -124,11 +130,6 @@ evidence:
   adjusted_pvalue_max: 0.05
   require_both_marker_methods: true
   require_both_comparators: true
-  validated_reference:
-    available: false
-    ontology_validated: false
-    method: ""
-    snapshot: ""
   required_candidate_gates:
     - stability_pass
     - candidate_vs_parent_remainder_pass
@@ -137,19 +138,11 @@ evidence:
     - expected_negative_program_pass
     - cell_level_separation_pass
     - source_corroboration_pass
-  marker_programs: {}
-  # Configure source corroboration only for compatible feature spaces.
-  enrichment:
-    panglaodb:
-      applicable_feature_spaces: [gene, gene_activity]
-      required_when_applicable: true
-      organism: human
-      top_n: [50, 100, 200]
-      min_overlap: 5
-      background: measured_features
-  guides:
-    columns: []
-    evidence_role: overridable_hypotheses
+  min_positive_coverage: 0.35
+  max_negative_violation: 0.25
+  min_confidence: 0.55
+  min_margin: 0.10
+  max_normalized_entropy: 0.85
 
 review:
   critic_passes:
@@ -163,6 +156,28 @@ review:
   type_and_state_separate: true
 
 hpc:
-  snakemake_profile: ""
   cpu_resources: {}
   gpu_resources: {}
+
+guidance:
+  # Interactive runs stop after scene setting and at configured hierarchy gates.
+  # For unattended runs set interactive: false, preauthorized: true, name a
+  # reviewer, complete every context field, and record at least one assumption.
+  interactive: true
+  preauthorized: false
+  reviewer: ""
+  pause_after_each_level: true
+  assumptions: []
+  hierarchy_levels: [L1]
+  context:
+    organism: ""
+    tissue: ""
+    developmental_stage: ""
+    condition: ""
+    technology: other  # dissociated | whole_transcriptome_spatial | targeted_panel
+    experimental_context: ""
+    composition_covariates: []
+    vocabulary_contract: ""
+    reference_contract: local_only
+    visualization_key: X_pca_harmony
+    writeback_prefix: cell_curator

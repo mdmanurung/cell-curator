@@ -14,10 +14,13 @@ versioned output root, and operating mode. Register every actual assay with:
 
 An h5ad declares one root assay. An h5mu may declare any number of modalities.
 Names such as `rna`, `adt`, or `atac` are configuration, not logic.
+Declare `gene_mapping_path` for a local CSV/TSV Ensembl-to-symbol mapping when
+symbols are not already unambiguous. Representations and detection sources may use
+`X`, `.raw`, or a named layer; each is fingerprinted against its declared semantics.
 
 ## Freeze receipt
 
-Hash input, configuration, scripts/rules, and external guide/reference snapshots.
+Hash input, configuration, package/workflow code, and external guide/reference snapshots.
 Record object shape, ordered and sorted barcode hashes, parent counts, assay
 dimensions, representations, layers, stored resolutions, packages, and compute
 environment. Use the ordered hash for exact joins and the sorted hash for
@@ -30,8 +33,9 @@ membership invariance.
 3. Every representation and detection source exists and has cell-feature shape.
 4. A required detection source is nonnegative; signed sources block
    detection-dependent acceptance.
-5. At least one ontology-compatible lane or validated reference exists before
-   biological labels become reviewable.
+5. Every biological label has an executable local evidence route. Ontology and
+   labeled references improve validation but are optional; without adequate evidence,
+   retain the parent or emit `Unknown` and record the limitation.
 6. Optional metadata is either present or explicitly unavailable. Configure no
    donor/capture gate when the study lacks that axis.
 7. Guides remain hypotheses and source/completed packets remain read-only.

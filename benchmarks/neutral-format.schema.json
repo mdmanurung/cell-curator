@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cell-curator.local/schema/neutral-predictions-v3.json",
+  "title": "cell-curator neutral prediction table",
+  "type": "object",
+  "required": ["schema_version", "required_columns", "optional_columns"],
+  "properties": {
+    "schema_version": {"const": 3},
+    "required_columns": {
+      "const": ["barcode", "true_label", "predicted_label"]
+    },
+    "optional_columns": {
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  }
+}
