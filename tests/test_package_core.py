@@ -190,12 +190,42 @@ def test_neutral_benchmark_measures_abstention_and_calibration() -> None:
     assert result.n == 4
     assert result.coverage == 0.5
     assert result.unknown_precision == 0.5
-    assert result.brier_score is not None
-    assert result.hierarchy_error is not None
+    assert result.brier_score == pytest.approx(0.175)
+    assert result.expected_calibration_error == pytest.approx(0.35)
+    assert result.hierarchy_error == pytest.approx((1 / 3 + 1 / 2) / 4)
+    assert result.hierarchical_accuracy == pytest.approx(1 - (1 / 3 + 1 / 2) / 4)
     assert result.mixed_detection_f1 == 1.0
     assert result.split_decision_accuracy == 0.75
     assert result.repeat_reproducibility == 1.0
     assert result.artifact_completeness == 1.0
+
+
+@pytest.mark.parametrize("confidence", [[-0.1], [1.1], [float("nan")]])
+def test_benchmark_rejects_invalid_confidence(confidence: list[float]) -> None:
+    frame = pd.DataFrame(
+        {
+            "barcode": ["a"],
+            "true_label": ["A"],
+            "predicted_label": ["A"],
+            "confidence": confidence,
+        }
+    )
+    with pytest.raises(ContractError, match=r"within \[0, 1\]"):
+        evaluate_predictions(frame, system="fixture", dataset="invalid")
+
+
+def test_hierarchy_error_handles_exact_and_root_boundary_paths() -> None:
+    frame = pd.DataFrame(
+        {
+            "barcode": ["a", "b"],
+            "true_label": ["A", "A"],
+            "predicted_label": ["A", "B"],
+            "true_path": ["root/A", ""],
+            "predicted_path": ["root/A", "root/B"],
+        }
+    )
+    result = evaluate_predictions(frame, system="fixture", dataset="hierarchy-boundary")
+    assert result.hierarchy_error == pytest.approx(0.5)
 
 
 def test_critic_findings_and_reconciliation_import_atomically(tmp_path: Path) -> None:
