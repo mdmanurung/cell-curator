@@ -12,16 +12,65 @@ MCP, atlas, or web service. Local marker, ontology, cached-table, and labeled-re
 providers are sufficient for complete offline runs. Optional remote providers are
 checksum-pinned and cached.
 
-## Install and inspect
+## Installation
+
+`cell-curator` requires Python 3.11 or newer. The current release is installed from
+source; no PyPI release is assumed.
+
+### With uv (recommended)
 
 ```bash
-uv sync --frozen --extra dev --extra workflow
+git clone https://github.com/mdmanurung/cell-curator.git
+cd cell-curator
+uv sync --frozen --extra workflow
 uv run cell-curator --version
 uv run cell-curator --help
 ```
 
-Copy [`assets/config.template.yaml`](assets/config.template.yaml), declare the frozen
-input and local knowledge sources, and run the three guided stages:
+Add the development environment when contributing:
+
+```bash
+uv sync --frozen --extra dev --extra workflow
+```
+
+### With pip
+
+```bash
+git clone https://github.com/mdmanurung/cell-curator.git
+cd cell-curator
+python3.11 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install ".[workflow]"
+cell-curator --version
+```
+
+The core install omits optional knowledge providers and workflow execution. Install
+only the capabilities needed for the run, for example `.[celltypist]`,
+`.[reference-models]`, `.[census]`, `.[scimilarity]`, or combinations such as
+`.[workflow,celltypist]`. The `gpu` extra is not a portability mode: a configured
+RAPIDS lane also requires a compatible real NVIDIA GPU, driver, CUDA runtime, and
+declared RAPIDS contract. It fails closed when that contract is not met and never
+falls back to CPU.
+
+## Quick start
+
+Copy the strict template, then edit the input, assay representations, context,
+knowledge providers, and output run ID:
+
+```bash
+cp assets/config.template.yaml config.yaml
+uv run cell-curator config validate --config config.yaml
+```
+
+Every input must be pre-clustered and immutable for the duration of a run. Set
+`input.expected_sha256` when the input is supplied externally, use a new `run.run_id`
+for a changed input or configuration, and keep `run.immutable: true`.
+
+### Guided CLI run
+
+Interactive mode is the safest default. It deliberately stops before the first
+biological label until a reviewer has confirmed the context and assumptions:
 
 ```bash
 uv run cell-curator config validate --config config.yaml
@@ -55,6 +104,113 @@ uv run cell-curator write-back apply --config config.yaml \
 
 Bind `approval.json` to the run ID and the source, mapping, durable-label, and
 preview-diff hashes emitted by `write-back preview`.
+
+### Snakemake execution
+
+The DAG is authoritative for dependencies and resumability. Its default aggregate
+target stops at evidence; review, finalization, and write-back remain explicit:
+
+```bash
+uv run snakemake --snakefile workflow/Snakefile \
+  --configfile config.yaml all_evidence --cores 4
+uv run snakemake --snakefile workflow/Snakefile \
+  --configfile config.yaml review_packet --cores 4
+uv run snakemake --snakefile workflow/Snakefile \
+  --configfile config.yaml finalization --cores 4
+```
+
+Use `--dry-run` before scheduling a new configuration. For HPC execution, adapt
+[`workflow/profiles/slurm/config.yaml`](workflow/profiles/slurm/config.yaml) to the
+site rather than hard-coding cluster resources in the workflow. The separate
+`writeback` target remains blocked until its run-bound approval exists.
+
+## Use-case guide
+
+Choose the closest starting point below and encode only evidence the assay actually
+measures. In every case, `input.assays` names the modalities and representations,
+while `evidence.lanes` selects the representations allowed to support a decision.
+
+| Use case | Configuration starting point | Important boundary |
+| --- | --- | --- |
+| Clustered scRNA-seq (`.h5ad`) | `input.kind: h5ad`; one root `rna` assay; declare log-normalized values for ranking and counts for detection | Counts and log values are different evidence; missing genes are unmeasured, not negative |
+| CITE-seq or other multimodal data (`.h5mu`) | `input.kind: h5mu`; declare RNA and protein modalities as separate assays and evidence lanes | Preserve cross-modal disagreement for review instead of averaging it away |
+| scATAC-seq or multiome | Declare `atac` peak accessibility separately from any `gene_activity` representation | Peaks are direct accessibility evidence; gene activity is indirect and cannot silently become RNA expression |
+| Spatial transcriptomics | Declare the transcriptome assay and set `input.keys.spatial` to the coordinate representation | Spatial proximity is contextual evidence, not proof of cell identity |
+| Evidence-only audit | Set `run.mode: evidence-only` and provide frozen cluster assignments | Produces auditable evidence and uncertainty without forcing biological labels |
+| Hierarchical annotation and selective refinement | Declare `guidance.hierarchy_levels`; start from stored partitions and enable parent-local refinement only where gates pass | Every split is scoped to its parent and may validly retain the parent or remain unresolved |
+
+### 1. RNA-only cluster annotation
+
+Use this for a pre-clustered AnnData object with gene-level RNA measurements. Point
+the template's root assay at the actual expression and detection representations:
+
+```yaml
+input:
+  kind: h5ad
+  path: data/clustered.h5ad
+  assays:
+    transcriptome:
+      modality: root
+      kind: rna
+      feature_space: gene
+      representations:
+        logcounts:
+          source: layer
+          key: logcounts
+          feature_space: gene
+          ranking_backend: scipy_mannwhitney
+          ontology_compatible: true
+          detection:
+            source: layer
+            key: counts
+            required: true
+            semantics: counts > 0
+```
+
+Set `input.keys.canonical_parent` to the frozen cluster column and register local
+marker programs or ontology tables under `knowledge.providers`. Then run the guided
+CLI or the `all_evidence` DAG target.
+
+### 2. CITE-seq and multimodal annotation
+
+Use `h5mu` and declare each modality independently. RNA may support ontology markers;
+protein may provide orthogonal identity or state evidence. Each evidence lane must
+refer to a declared `(assay, representation)` pair. Do not copy RNA detection rules
+onto antibody-derived counts, and do not discard an RNA/protein conflict: it belongs
+in the critic and review artifacts.
+
+### 3. ATAC, multiome, and spatial evidence
+
+For ATAC or multiome data, declare peak accessibility and derived gene activity as
+different assays or representations with explicit feature spaces. Only a compatible
+gene-level representation may enter a gene-marker lane. For spatial data, set the
+spatial key and preserve coordinates in the canonical object, but keep neighborhood
+or location evidence separate from the cell-type and cell-state calls.
+
+### 4. Evidence-only review
+
+Set `run.mode: evidence-only` when the goal is to inspect marker coherence,
+alternatives, technical confounding, or split stability without assigning durable
+labels. This is useful for evaluating an existing clustering or preparing a review
+packet. `Unknown`, `RETAIN PARENT`, and technical/unresolved outcomes are successful,
+explicit results when the acceptance gates are not met.
+
+### 5. Hierarchical refinement
+
+List the hierarchy levels in `guidance.hierarchy_levels`. The normal execution path
+first audits compatible stored resolutions, then performs parent-local reclustering
+only for eligible scopes. For externally computed score tables, pass
+`--score-manifest hierarchy-scores.json` to `run execute`; each entry must identify
+its exact `(level, parent_scope)` and pass the same scope, evidence, and review gates.
+
+## Outputs and approval gates
+
+Artifacts are written beneath `run.output_root/run.run_id` with configuration,
+input, rule, and output hashes. The main milestones are evidence receipts, hierarchy
+decisions, critic reconciliation, the immutable review packet, final provenance, and
+the write-back preview. Annotation execution never mutates the source object. Only a
+separate approval bound to the preview and mapping hashes can authorize a new
+annotated `.h5ad` or `.h5mu` output.
 
 ## Stable Python API
 
