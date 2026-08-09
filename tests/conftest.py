@@ -5,12 +5,13 @@ from pathlib import Path
 import pytest
 import yaml
 
-SKILL = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SKILL_ROOT = REPO_ROOT / "skills" / "cell-curator"
 
 
 @pytest.fixture
 def config(tmp_path: Path) -> dict:
-    value = yaml.safe_load((SKILL / "assets/config.template.yaml").read_text())
+    value = yaml.safe_load((SKILL_ROOT / "assets/config.template.yaml").read_text())
     value["run"].update(
         {
             "run_id": "fixture-v1",

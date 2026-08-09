@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import yaml
+from conftest import SKILL_ROOT
 
 from cell_curator.config import CellCuratorConfig, load_config
 from cell_curator.contracts import ContractError, sha256
@@ -51,8 +52,7 @@ def _synthetic_input(path: Path) -> None:
 
 
 def _config(tmp_path: Path, source: Path, markers: Path) -> Path:
-    root = Path(__file__).resolve().parents[1]
-    value = yaml.safe_load((root / "assets" / "config.template.yaml").read_text())
+    value = yaml.safe_load((SKILL_ROOT / "assets" / "config.template.yaml").read_text())
     value["run"].update(
         {
             "run_id": "synthetic-v1",

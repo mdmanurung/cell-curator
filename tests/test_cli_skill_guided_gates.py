@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import yaml
+from conftest import REPO_ROOT, SKILL_ROOT
 
 import cell_curator.crosschecks as crosschecks_module
 import cell_curator.environment as environment_module
@@ -36,8 +37,8 @@ from cell_curator.routing import (
     Technology,
 )
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-SKILL_PATH = REPOSITORY_ROOT / "SKILL.md"
+REPOSITORY_ROOT = REPO_ROOT
+SKILL_PATH = SKILL_ROOT / "SKILL.md"
 README_PATH = REPOSITORY_ROOT / "README.md"
 DOCUMENTED_COMMAND_PATHS = sorted(
     {
@@ -90,7 +91,7 @@ def _write_interactive_fixture(tmp_path: Path) -> Path:
             }
         )
     )
-    value = yaml.safe_load((REPOSITORY_ROOT / "assets/config.template.yaml").read_text())
+    value = yaml.safe_load((SKILL_ROOT / "assets/config.template.yaml").read_text())
     value["run"].update(
         {
             "run_id": "interactive-gate-v1",
