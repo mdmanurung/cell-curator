@@ -209,9 +209,8 @@ def compute_gpu_bottom_up_markers(
         ),
         var=pd.DataFrame(index=features.astype(str)),
     )
-    from importlib.metadata import version as installed_version
-
     from .rank_markers_gpu import (
+        installed_rapids_version,
         native_ranking_callable,
         optional_ranking_requests,
         resolve_optional_ranking_option,
@@ -221,7 +220,7 @@ def compute_gpu_bottom_up_markers(
     rsc.get.anndata_to_GPU(gpu_input)
     native = native_ranking_callable(rsc)
     supported = supported_ranking_options(native)
-    rapids_version = installed_version("rapids-singlecell")
+    rapids_version = installed_rapids_version()
 
     # rank_genes_groups gained parameters over time. Passing one the installed
     # release does not declare would be absorbed by **kwds and silently ignored,
@@ -296,6 +295,7 @@ def compute_gpu_bottom_up_markers(
     positions = {str(feature): index for index, feature in enumerate(features)}
     group_values = groups.astype(str).to_numpy()
     rows: list[dict[str, Any]] = []
+    coverage: dict[str, list[str]] = {}
     for cluster_id in categories:
         target_mask = group_values == cluster_id
         reference_mask = ~target_mask
@@ -305,6 +305,15 @@ def compute_gpu_bottom_up_markers(
         reference_mean = np.asarray(reference.mean(axis=0)).ravel()
         for method, key in (("wilcoxon", wilcoxon_key), ("logreg", logreg_key)):
             result = gpu_input.uns[key]
+            reported = result["names"].dtype.names or ()
+            if cluster_id not in reported:
+                # A binary logistic regression fits one coefficient vector, so a
+                # two-group comparison reports a single group; the other group's
+                # ranking is that one reversed and is not published separately.
+                # Record the gap instead of inventing the missing ranking.
+                coverage.setdefault(method, [])
+                continue
+            coverage.setdefault(method, []).append(cluster_id)
             names = result["names"][cluster_id]
             for rank, feature in enumerate(names, 1):
                 feature = str(feature)
@@ -373,6 +382,12 @@ def compute_gpu_bottom_up_markers(
         )
         for row in result.itertuples(index=False)
     ]
+    # Which groups each method actually reported. A method that skipped a group
+    # cannot corroborate it, so method_concordant is false there; the receipt
+    # carries this so the gap is auditable rather than looking like disagreement.
+    result.attrs["ranking_group_coverage"] = {
+        method: sorted(groups_covered) for method, groups_covered in coverage.items()
+    }
     return result
 
 
@@ -1045,6 +1060,10 @@ def run_lane(
                 rsc=gpu_rsc,
                 marker_config=config.markers.model_dump(mode="json"),
             )
+            if gpu_runtime is not None:
+                gpu_runtime["ranking_group_coverage"] = bottom_up.attrs.get(
+                    "ranking_group_coverage", {}
+                )
         else:
             bottom_up = compute_bottom_up_markers(
                 matrix,
@@ -1230,6 +1249,10 @@ def run_candidate_lane(
                 rsc=gpu_rsc,
                 marker_config=config.markers.model_dump(mode="json"),
             )
+            if gpu_runtime is not None:
+                gpu_runtime["ranking_group_coverage"] = bottom_up.attrs.get(
+                    "ranking_group_coverage", {}
+                )
         else:
             bottom_up = compute_bottom_up_markers(matrix, groups, features, detection=detection)
         evidence = score_marker_programs(

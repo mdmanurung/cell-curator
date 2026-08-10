@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import numpy as np
+import pandas as pd
 import pytest
 
 from cell_curator import rank_markers_gpu
@@ -205,3 +207,84 @@ def test_a_supported_option_is_passed_through(config: dict) -> None:
         "use_continuity": False,
         "multi_gpu": False,
     }
+
+
+def test_a_method_that_skips_a_group_is_recorded_not_invented() -> None:
+    """Binary logreg reports one group; the parser must not fabricate the other.
+
+    rapids-singlecell returns per-group results as recarray fields. A binary
+    logistic regression fits a single coefficient vector, so a two-group
+    comparison yields one field. Indexing the absent group used to raise
+    "no field of name 1" and abort the lane.
+    """
+
+    from cell_curator.evidence import compute_gpu_bottom_up_markers
+
+    features = pd.Index(["A1", "A2", "B1"])
+    groups = pd.Series(
+        ["0"] * 4 + ["1"] * 4, index=[f"c{i}" for i in range(8)], name="grp"
+    )
+    matrix = np.vstack(
+        [np.tile([5.0, 4.0, 0.0], (4, 1)), np.tile([0.0, 0.0, 5.0], (4, 1))]
+    ).astype(np.float32)
+
+    def both_groups(names):
+        return np.rec.fromarrays(
+            [np.array(names, dtype="U50"), np.array(names, dtype="U50")],
+            names=["0", "1"],
+        )
+
+    def one_group(names):
+        return np.rec.fromarrays([np.array(names, dtype="U50")], names=["0"])
+
+    order = ["A1", "A2", "B1"]
+    scores = np.rec.fromarrays(
+        [np.array([2.0, 1.0, -1.0], dtype=float)], names=["0"]
+    )
+
+    class _Tools:
+        @staticmethod
+        def rank_genes_groups(adata, groupby, *, key_added, method, **kwds):
+            if method == "wilcoxon":
+                adata.uns[key_added] = {
+                    "names": both_groups(order),
+                    "scores": np.rec.fromarrays(
+                        [np.array([2.0, 1.0, -1.0])] * 2, names=["0", "1"]
+                    ),
+                    "pvals": np.rec.fromarrays(
+                        [np.array([0.01, 0.02, 0.9])] * 2, names=["0", "1"]
+                    ),
+                    "pvals_adj": np.rec.fromarrays(
+                        [np.array([0.02, 0.03, 0.95])] * 2, names=["0", "1"]
+                    ),
+                }
+            else:
+                adata.uns[key_added] = {"names": one_group(order), "scores": scores}
+
+    class _Get:
+        @staticmethod
+        def anndata_to_GPU(adata):
+            return None
+
+    class _Rsc:
+        tl = _Tools()
+        get = _Get()
+
+    frame = compute_gpu_bottom_up_markers(
+        matrix,
+        groups,
+        features,
+        detection=None,
+        rsc=_Rsc(),
+        marker_config={
+            "wilcoxon": {"tie_correct": True, "continuity_correct": False, "chunk_size": 512},
+            "logreg": {"C": 1.0, "tol": 1e-4, "retry_max_iter": 5000},
+        },
+    )
+
+    assert sorted(frame.attrs["ranking_group_coverage"]["wilcoxon"]) == ["0", "1"]
+    assert frame.attrs["ranking_group_coverage"]["logreg"] == ["0"]
+    # No fabricated logreg rows for the group the method never reported.
+    logreg_groups = set(frame.loc[frame["method"] == "logreg", "cluster_id"])
+    assert logreg_groups == {"0"}
+    assert set(frame.loc[frame["method"] == "wilcoxon", "cluster_id"]) == {"0", "1"}

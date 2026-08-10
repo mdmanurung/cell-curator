@@ -116,11 +116,20 @@ cannot honour it. The resolution is recorded in the receipt under
 `runtime.ranking_options`, and it runs before the input is opened so an
 unhonourable option fails fast.
 
-### Still open
+### Per-group method coverage
 
-Result parsing does not yet match 0.14.1's `uns` layout. For a two-group
-one-vs-rest comparison, `uns[key]["names"]` came back as a recarray with a single
-field `'0'` instead of one field per group, so reading group `'1'` raises
-`ValueError: no field of name 1`. The GPU-gated test carries this as a strict
-xfail so it flips to a failure once fixed. Diagnosing it needs a GPU debug run
-over the returned structure — and the ≥0.15 layout may differ again.
+`rank_genes_groups` returns per-group results as recarray fields. A binary
+logistic regression fits a single coefficient vector, so a two-group comparison
+publishes one field — the other group's ranking is that one reversed and is not
+emitted separately. Wilcoxon publishes every group.
+
+The lane therefore reads only the fields a method actually reported, and records
+what each covered in the receipt under `runtime.ranking_group_coverage`. Nothing
+is fabricated for a group a method skipped. A consequence worth knowing when
+reading evidence: `method_concordant` is false for a group logreg did not cover,
+because there is no second method to corroborate it — the coverage record is what
+distinguishes that from genuine methodological disagreement.
+
+Verified end to end on the Blackwell MIG slice: `wilcoxon: ["0", "1"]`,
+`logreg: ["0"]` for a two-cluster run, with the lane completing and its receipt
+satisfying the full RAPIDS contract.

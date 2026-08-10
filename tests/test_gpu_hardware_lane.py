@@ -167,19 +167,6 @@ def test_real_gpu_validates_the_declared_hardware_contract(tmp_path: Path) -> No
     assert major.isdigit() and len(minor) == 1
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "The lane now executes native GPU Wilcoxon and logreg, but result parsing "
-        "does not match rapids-singlecell 0.14.1's uns layout: for a two-group "
-        "one-vs-rest comparison, uns[key]['names'] came back as a recarray with a "
-        "single field '0' rather than one field per group, so reading group '1' "
-        "raises ValueError: no field of name 1. Observed on an RTX PRO 6000 "
-        "Blackwell MIG slice with rapids-singlecell 0.14.1 / RAPIDS cu13 25.12. "
-        "Needs a GPU debug run over the returned uns structure; the 0.16 layout may "
-        "differ again."
-    ),
-)
 def test_rapids_lane_executes_natively_and_publishes_a_gpu_receipt(tmp_path: Path) -> None:
     observed = _observed_runtime()
     config_path = _gpu_fixture(tmp_path, observed)
@@ -204,6 +191,12 @@ def test_rapids_lane_executes_natively_and_publishes_a_gpu_receipt(tmp_path: Pat
     assert int(runtime["cuda_major"]) == int(observed["cuda_major"])
     assert str(runtime["native_api"]).startswith("rapids_singlecell")
     assert runtime["cuda_driver_version"]
+    # Binary logreg reports one group for a two-group comparison; the receipt
+    # records what each method actually covered rather than leaving the gap
+    # to look like methodological disagreement.
+    coverage = runtime["ranking_group_coverage"]
+    assert sorted(coverage["wilcoxon"]) == ["0", "1"]
+    assert set(coverage["logreg"]).issubset({"0", "1"})
 
     # The published receipt must also satisfy the consumer-side contract that
     # every downstream reader applies before trusting the lane.
