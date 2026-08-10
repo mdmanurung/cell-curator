@@ -67,6 +67,10 @@ def _receipt(**updates) -> BackendReceipt:
             "cuda_runtime_version": 99000,
             "cuda_driver_version": 99000,
             "native_api": "rapids_singlecell.tl.rank_genes_groups",
+            "ranking_options": [
+                "use_continuity=False applied natively",
+                "multi_gpu=False applied natively",
+            ],
         },
     }
     value.update(updates)
@@ -113,3 +117,91 @@ def test_compute_capability_formats_two_digit_majors(raw: object, expected: str)
 def test_compute_capability_rejects_unreadable_values(raw: object) -> None:
     with pytest.raises(rank_markers_gpu.GpuContractError, match="unreadable compute capability"):
         rank_markers_gpu.format_compute_capability(raw)
+
+
+class _FakeTools:
+    """Stand-in for rapids_singlecell.tl with a controllable signature."""
+
+    def __init__(self, *, with_wilcoxon: bool, extra: tuple[str, ...] = ()) -> None:
+        if not with_wilcoxon:
+            return
+
+        if extra == ("use_continuity", "multi_gpu"):
+
+            def rank_genes_groups(  # type: ignore[no-redef]
+                adata, groupby, *, tie_correct=False, use_continuity=False,
+                multi_gpu=None, **kwds,
+            ): ...
+        else:
+
+            def rank_genes_groups(adata, groupby, *, tie_correct=False, **kwds): ...
+
+        self.rank_genes_groups = rank_genes_groups
+
+
+class _FakeRsc:
+    def __init__(self, tools: _FakeTools) -> None:
+        self.tl = tools
+
+
+def test_a_release_without_the_ranking_entry_point_names_itself() -> None:
+    """Better than a bare AttributeError from deep inside the lane."""
+
+    rsc = _FakeRsc(_FakeTools(with_wilcoxon=False))
+    with pytest.raises(
+        rank_markers_gpu.GpuContractError, match="rank_genes_groups is required"
+    ):
+        rank_markers_gpu.native_ranking_callable(rsc)
+
+
+def test_only_declared_parameters_count_as_supported() -> None:
+    """**kwds would swallow an unknown option without applying it."""
+
+    older = _FakeRsc(_FakeTools(with_wilcoxon=True))
+    supported = rank_markers_gpu.supported_ranking_options(older.tl.rank_genes_groups)
+    assert "tie_correct" in supported
+    assert "use_continuity" not in supported
+
+    newer = _FakeRsc(_FakeTools(with_wilcoxon=True, extra=("use_continuity", "multi_gpu")))
+    assert {"use_continuity", "multi_gpu"}.issubset(
+        rank_markers_gpu.supported_ranking_options(newer.tl.rank_genes_groups)
+    )
+
+
+def test_an_option_requested_off_is_satisfied_by_its_absence() -> None:
+    include, note = rank_markers_gpu.resolve_optional_ranking_option(
+        name="use_continuity",
+        requested=False,
+        supported=frozenset({"tie_correct"}),
+        installed_version="0.14.1",
+    )
+    assert include is False
+    assert "requested off" in note and "0.14.1" in note
+
+
+def test_an_option_requested_on_fails_closed_when_it_cannot_be_applied() -> None:
+    """Silently dropping it would produce statistics nobody asked for."""
+
+    with pytest.raises(rank_markers_gpu.GpuContractError, match="cannot be applied"):
+        rank_markers_gpu.resolve_optional_ranking_option(
+            name="use_continuity",
+            requested=True,
+            supported=frozenset({"tie_correct"}),
+            installed_version="0.14.1",
+        )
+
+
+def test_a_supported_option_is_passed_through(config: dict) -> None:
+    include, note = rank_markers_gpu.resolve_optional_ranking_option(
+        name="use_continuity",
+        requested=True,
+        supported=frozenset({"use_continuity"}),
+        installed_version="0.16.1",
+    )
+    assert include is True
+    assert "applied natively" in note
+    # The configuration's own request feeds the same resolution path.
+    assert dict(rank_markers_gpu.optional_ranking_requests(config["markers"])) == {
+        "use_continuity": False,
+        "multi_gpu": False,
+    }

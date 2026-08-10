@@ -64,6 +64,7 @@ def validate_backend_receipt(receipt: Any, capability: Capability) -> None:
         "cuda_runtime_version",
         "cuda_driver_version",
         "native_api",
+        "ranking_options",
     }
     missing = required_runtime.difference(receipt.runtime)
     if missing or int(receipt.runtime.get("device_count", 0)) != 1:
@@ -208,9 +209,38 @@ def compute_gpu_bottom_up_markers(
         ),
         var=pd.DataFrame(index=features.astype(str)),
     )
+    from importlib.metadata import version as installed_version
+
+    from .rank_markers_gpu import (
+        native_ranking_callable,
+        optional_ranking_requests,
+        resolve_optional_ranking_option,
+        supported_ranking_options,
+    )
+
     rsc.get.anndata_to_GPU(gpu_input)
+    native = native_ranking_callable(rsc)
+    supported = supported_ranking_options(native)
+    rapids_version = installed_version("rapids-singlecell")
+
+    # rank_genes_groups gained parameters over time. Passing one the installed
+    # release does not declare would be absorbed by **kwds and silently ignored,
+    # so each optional switch is resolved against the real signature: applied
+    # when available, accepted as a no-op only when it was requested off, and
+    # refused outright when it was requested on and cannot be honoured.
+    optional: dict[str, Any] = {}
+    for name, requested in optional_ranking_requests(marker_config):
+        include, _ = resolve_optional_ranking_option(
+            name=name,
+            requested=requested,
+            supported=supported,
+            installed_version=rapids_version,
+        )
+        if include:
+            optional[name] = requested
+
     wilcoxon_key = "cell_curator_native_rapids_wilcoxon"
-    rsc.tl.rank_genes_groups(
+    native(
         gpu_input,
         groupby="cell_curator_group",
         groups=categories,
@@ -222,16 +252,18 @@ def compute_gpu_bottom_up_markers(
         method="wilcoxon",
         corr_method="benjamini-hochberg",
         tie_correct=bool(marker_config["wilcoxon"]["tie_correct"]),
-        use_continuity=bool(marker_config["wilcoxon"]["continuity_correct"]),
         use_raw=False,
         layer=None,
         chunk_size=int(marker_config["wilcoxon"]["chunk_size"]),
-        multi_gpu=False,
+        **optional,
     )
     logreg_key = "cell_curator_native_rapids_logreg"
     with warnings.catch_warnings(record=True) as observed_warnings:
         warnings.simplefilter("always")
-        rsc.tl.rank_genes_groups(
+        # class_weight/penalty/C/solver and friends are estimator arguments that
+        # rank_genes_groups forwards to cuml through **kwds; they are not
+        # parameters of the entry point itself.
+        native(
             gpu_input,
             groupby="cell_curator_group",
             groups=categories,

@@ -62,37 +62,65 @@ boundaries, and use `workflow/profiles/slurm` for configured scheduler execution
 
 ## Real-hardware GPU validation status
 
-Validated on 2026-08-09 on an NVIDIA RTX PRO 6000 Blackwell Server Edition
-MIG `1g.24gb` slice (compute capability 12.0, driver 580.159.04, CUDA runtime
-13.2) with `rapids-singlecell` 0.13.4 and RAPIDS `cu13` 25.12.
+Validated on an NVIDIA RTX PRO 6000 Blackwell Server Edition MIG `1g.24gb` slice
+(compute capability 12.0, driver 580.159.04, CUDA runtime 13.2).
 
 Confirmed working on that hardware:
 
 - the declared/observed contract check in `rank_markers_gpu.inspect_runtime`
-  validates version, distribution, CUDA major, single-device visibility, and
-  the device/compute-capability allowlist;
+  validates version, distribution, CUDA major, single-device visibility, and the
+  device/compute-capability allowlist;
 - a deliberately wrong `allowed_gpu_contracts` entry is rejected on the live
   device rather than merely parsed;
-- the Snakemake DAG requests a GPU for a RAPIDS lane (`evidence_gpu` returns 1).
+- the Snakemake DAG requests a GPU for a RAPIDS lane (`evidence_gpu` returns 1);
+- **native GPU Wilcoxon and logreg both execute** through
+  `rapids_singlecell.tl.rank_genes_groups`.
 
-Confirmed blocked, and the reason the lane still cannot execute:
+### Choosing a rapids-singlecell release
 
-- `rapids-singlecell` exposes no `tl.rank_genes_groups` and contains no
-  Wilcoxon implementation at all — `tl.rank_genes_groups_logreg` is the only
-  ranking entry point. `rank_markers_gpu.inspect_runtime` and
-  `evidence.compute_gpu_bottom_up_markers` bind `rsc.tl.rank_genes_groups`
-  with a scanpy-style signature, so both raise `AttributeError` on any real
-  GPU. The `BackendReceipt` contract additionally requires both native
-  `wilcoxon` and `logreg` marker methods, which that library cannot supply.
+`tl.rank_genes_groups` — the single entry point for both `method="wilcoxon"` and
+`method="logreg"` — arrived in **0.14**. Releases before it expose only
+`rank_genes_groups_logreg` and contain no Wilcoxon at all, so the lane cannot
+satisfy its receipt contract on them; `native_ranking_callable` fails closed with
+the installed version named.
 
-Resolving this is a scientific decision, not a rename: either supply a GPU
-Wilcoxon (for example a CuPy implementation carrying its own tie and
-continuity correction) or restate the RAPIDS receipt contract around the
-methods the library actually provides. Until then the lane fails closed, which
-is the intended safety behaviour but is not the same as a working GPU path.
+Version selection is a real constraint, not a formality:
 
-Environment note for reproduction: `rapids-singlecell` 0.13.4 is the newest
-release supporting Python 3.11, and it is incompatible with RAPIDS 26.x
-(`cuml.thirdparty_adapters.check_array` was removed), so pin RAPIDS to 25.12.
-Newer `rapids-singlecell` needs Python 3.12+, where `scikit-misc` has no wheel
-and its CMake build fails on this cluster.
+| Release | Ships | Python | Notes |
+| --- | --- | --- | --- |
+| ≤ 0.13.x | wheel | ≥ 3.11 | no `rank_genes_groups`, no Wilcoxon — unusable for this lane |
+| 0.14.0–0.14.1 | wheel | ≥ 3.12 | has Wilcoxon; **no** `use_continuity` or `multi_gpu` |
+| ≥ 0.15 | sdist only | ≥ 3.12 | full signature, but building it needs a complete CUDA toolkit (`nvcc`, `cuda_runtime.h`, `crt/host_config.h`); the fragmented pip CUDA wheels do not satisfy CMake's toolkit detection |
+
+Working wheel-only environment, no `nvcc` required:
+
+```bash
+uv venv --python 3.12 .venv-gpu
+uv pip install --python .venv-gpu \
+  --extra-index-url https://pypi.nvidia.com --index-strategy unsafe-best-match \
+  "rapids-singlecell[rapids13]==0.14.1" \
+  "cudf-cu13==25.12.*" "cuml-cu13==25.12.*" "cuvs-cu13==25.12.*" "cugraph-cu13==25.12.*"
+```
+
+Pin RAPIDS to 25.12: `rapids-singlecell` 0.13/0.14 are incompatible with RAPIDS
+26.x, which removed `cuml.thirdparty_adapters.check_array`.
+
+### Optional statistical switches are resolved against the real signature
+
+`rank_genes_groups` gained parameters over time and also accepts `**kwds`, which
+would swallow an unknown name without applying it. So each optional switch is
+checked against the installed signature: applied when declared, accepted as a
+no-op only when it was requested *off* (absent means not applied, which is the
+same result), and refused outright when requested *on* against a release that
+cannot honour it. The resolution is recorded in the receipt under
+`runtime.ranking_options`, and it runs before the input is opened so an
+unhonourable option fails fast.
+
+### Still open
+
+Result parsing does not yet match 0.14.1's `uns` layout. For a two-group
+one-vs-rest comparison, `uns[key]["names"]` came back as a recarray with a single
+field `'0'` instead of one field per group, so reading group `'1'` raises
+`ValueError: no field of name 1`. The GPU-gated test carries this as a strict
+xfail so it flips to a failure once fixed. Diagnosing it needs a GPU debug run
+over the returned structure — and the ≥0.15 layout may differ again.

@@ -170,12 +170,14 @@ def test_real_gpu_validates_the_declared_hardware_contract(tmp_path: Path) -> No
 @pytest.mark.xfail(
     strict=True,
     reason=(
-        "rapids-singlecell exposes no rank_genes_groups and no Wilcoxon "
-        "implementation at all (only tl.rank_genes_groups_logreg), so "
-        "rank_markers_gpu.inspect_runtime and evidence.compute_gpu_bottom_up_markers "
-        "bind a non-existent API and the lane cannot execute. Confirmed on an "
-        "RTX PRO 6000 Blackwell MIG slice with rapids-singlecell 0.13.4 / RAPIDS "
-        "25.12. Flip to a pass once the GPU marker path targets the real API."
+        "The lane now executes native GPU Wilcoxon and logreg, but result parsing "
+        "does not match rapids-singlecell 0.14.1's uns layout: for a two-group "
+        "one-vs-rest comparison, uns[key]['names'] came back as a recarray with a "
+        "single field '0' rather than one field per group, so reading group '1' "
+        "raises ValueError: no field of name 1. Observed on an RTX PRO 6000 "
+        "Blackwell MIG slice with rapids-singlecell 0.14.1 / RAPIDS cu13 25.12. "
+        "Needs a GPU debug run over the returned uns structure; the 0.16 layout may "
+        "differ again."
     ),
 )
 def test_rapids_lane_executes_natively_and_publishes_a_gpu_receipt(tmp_path: Path) -> None:

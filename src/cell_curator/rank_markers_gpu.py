@@ -54,6 +54,101 @@ def validate_runtime_contract_values(
     )
 
 
+def installed_rapids_version() -> str:
+    """Report the installed rapids-singlecell version for diagnostics.
+
+    Used only in messages, so a missing distribution must not mask the error it
+    is describing.
+    """
+
+    from importlib.metadata import PackageNotFoundError
+
+    try:
+        return version("rapids-singlecell")
+    except PackageNotFoundError:
+        return "not installed"
+
+
+def native_ranking_callable(rsc: Any) -> Any:
+    """Return ``rapids_singlecell.tl.rank_genes_groups``, or explain its absence.
+
+    Native GPU Wilcoxon and logreg both come from this one entry point. It was
+    introduced in rapids-singlecell 0.14; releases before that expose only
+    ``rank_genes_groups_logreg`` and contain no Wilcoxon implementation, so the
+    lane cannot satisfy its receipt contract on them. Fail with the installed
+    version named rather than with a bare ``AttributeError``.
+    """
+
+    native = getattr(rsc.tl, "rank_genes_groups", None)
+    if native is None:
+        installed = installed_rapids_version()
+        raise GpuContractError(
+            "rapids_singlecell.tl.rank_genes_groups is required for native GPU "
+            f"Wilcoxon and logreg, but rapids-singlecell {installed} does not "
+            "provide it (that entry point arrived in 0.14). Install "
+            "rapids-singlecell>=0.14, which needs Python 3.12 or newer."
+        )
+    return native
+
+
+def supported_ranking_options(native: Any) -> frozenset[str]:
+    """Return the keyword parameters the installed ranking entry point declares.
+
+    Only declared parameters count. The entry point also takes ``**kwds``, which
+    would swallow an unknown name without applying it — exactly the silent
+    behaviour this contract exists to prevent.
+    """
+
+    parameters = inspect.signature(native).parameters
+    return frozenset(
+        name
+        for name, item in parameters.items()
+        if item.kind
+        in {inspect.Parameter.KEYWORD_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD}
+    )
+
+
+def optional_ranking_requests(marker: dict[str, Any]) -> tuple[tuple[str, bool], ...]:
+    """The optional ranking switches this configuration asks for.
+
+    One definition, used both by the pre-flight contract check and by the call
+    that builds the keyword arguments, so the two cannot disagree.
+    """
+
+    return (
+        ("use_continuity", bool(marker["wilcoxon"]["continuity_correct"])),
+        ("multi_gpu", False),
+    )
+
+
+def resolve_optional_ranking_option(
+    *,
+    name: str,
+    requested: bool,
+    supported: frozenset[str],
+    installed_version: str,
+) -> tuple[bool, str]:
+    """Decide whether an optional statistical switch can be honoured.
+
+    Returns ``(pass_it, note)``. A switch the installed version does not declare
+    is only acceptable when it was requested off, because absent means "not
+    applied" — that is the same result, and the note records it. Requesting it on
+    against a version that cannot apply it fails closed instead of silently
+    producing statistics the configuration did not ask for.
+    """
+
+    if name in supported:
+        return True, f"{name}={requested} applied natively"
+    if requested:
+        raise GpuContractError(
+            f"markers requests {name}=True, but rapids-singlecell "
+            f"{installed_version} does not expose that parameter, so the option "
+            "cannot be applied. Install a release that supports it, or set the "
+            "option to false."
+        )
+    return False, f"{name} unavailable in {installed_version}; requested off, so not applied"
+
+
 def format_compute_capability(raw: Any) -> str:
     """Render CuPy's packed compute capability as ``major.minor``.
 
@@ -112,7 +207,20 @@ def inspect_runtime(config: dict[str, Any]) -> tuple[Any, Any, dict[str, Any]]:
         observed_cuda_major=cuda_major,
         expected_cuda_major=int(marker["cuda_major"]),
     )
-    native = rsc.tl.rank_genes_groups
+    native = native_ranking_callable(rsc)
+    # Resolve the optional statistical switches here, before the potentially
+    # large input is opened, so an unhonourable option fails closed early and the
+    # decision is recorded in the receipt rather than inferred later.
+    supported = supported_ranking_options(native)
+    ranking_options = [
+        resolve_optional_ranking_option(
+            name=name,
+            requested=requested,
+            supported=supported,
+            installed_version=observed_version,
+        )[1]
+        for name, requested in optional_ranking_requests(marker)
+    ]
     return (
         cp,
         rsc,
@@ -128,6 +236,7 @@ def inspect_runtime(config: dict[str, Any]) -> tuple[Any, Any, dict[str, Any]]:
             "cuda_driver_version": int(cp.cuda.runtime.driverGetVersion()),
             "native_api": f"{native.__module__}.{native.__name__}",
             "native_api_signature": str(inspect.signature(native)),
+            "ranking_options": ranking_options,
             "hostname": socket.gethostname(),
             "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
             "cuda_visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES"),
