@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import csv
+import json
 import re
 import xml.etree.ElementTree as ET
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -408,4 +410,55 @@ def validate_durable_label_ontology(
         "n_supplied_cl_ids": int(supplied.sum()),
         "n_unique_cl_ids": len(set(frame.loc[supplied, "cl_id"])),
         "n_validated_parent_links": validated_parent_links,
+    }
+
+
+def validate_terms(
+    ontology_path: str | Path,
+    terms: Sequence[str],
+    *,
+    expected_names: Sequence[str | None] | None = None,
+) -> dict[str, Any]:
+    """Validate ontology accessions against a local ontology file.
+
+    Shared by the CLI and the Python API so both apply the same semantic checks
+    rather than each assembling their own.
+    """
+
+    ontology = CellOntology.load(ontology_path)
+    expected = list(expected_names) if expected_names is not None else [None] * len(terms)
+    if len(expected) != len(terms):
+        raise ContractError(
+            "expected_names must have exactly one entry per term when provided"
+        )
+    return {
+        "status": "complete",
+        "source": ontology.source,
+        "n_terms": len(ontology.terms),
+        "terms": [
+            ontology.validate_term(term, expected_name=name)
+            for term, name in zip(terms, expected, strict=True)
+        ],
+    }
+
+
+def provision_from_config(config: CellCuratorConfig) -> dict[str, Any]:
+    """Report the configured ontology provider's provisioning status.
+
+    A recorded status file always wins: provisioning is an immutable run
+    artifact, so a later read must not re-derive a different answer.
+    """
+
+    ontology = ontology_from_config(config)
+    root = Path(config.run.output_root) / config.run.run_id
+    status_path = root / "knowledge" / "ontology_provider_status.json"
+    if status_path.is_file():
+        value = json.loads(status_path.read_text())
+        return dict(value) if isinstance(value, dict) else {"status": "unknown"}
+    return {
+        "schema_version": 3,
+        "status": "unavailable" if ontology is None else "complete",
+        "reason": "no ontology provider is configured" if ontology is None else "",
+        "remediation": "Configure a local ontology or remote_ontology provider.",
+        "n_terms": len(ontology.terms) if ontology is not None else 0,
     }

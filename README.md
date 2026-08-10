@@ -243,7 +243,92 @@ the write-back preview. Annotation execution never mutates the source object. On
 separate approval bound to the preview and mapping hashes can authorize a new
 annotated `.h5ad` or `.h5mu` output.
 
-## Stable Python API
+## Python API
+
+### Guided object (`CellCurator`)
+
+`CellCurator` builds the strict configuration from keyword arguments and delegates
+every step to the same functions the CLI and the Snakemake DAG call. It adds
+convenience, never science.
+
+```python
+from cell_curator import CellCurator
+
+cur = CellCurator(
+    adata=adata,                     # or path="pancreas.h5ad"
+    organism="human",
+    tissue="pancreas",
+    cluster_key="leiden_1",
+    markers="pancreas_markers.json", # or a {label: {pos, neg}} mapping
+    run_id="pancreas-v1",
+    output_root="/abs/path/results",
+    mode="annotation",
+    # The gates are declared, not skipped. An unattended run states its answers
+    # up front; drop these to run interactively and confirm each one in turn.
+    preauthorized=True,
+    reviewer="your-name",
+    assumptions=["The signed marker programs define the L1 vocabulary."],
+    # Context the package refuses to guess. Omit any of these and prepare()
+    # stops with the scene unresolved.
+    developmental_stage="adult",
+    condition="healthy",
+    experimental_context="pancreas atlas v1",
+)
+
+cur.inspect()                        # structure and keys; changes nothing
+cur.prepare()                        # freeze + hash the input, then scene and plan
+evidence, bottom_up = cur.evidence()  # the tables you reason over
+packet = cur.annotate()              # remaining phases; freezes a review packet
+cur.validate_run()
+```
+
+`annotate()` is idempotent, so calling it after the granular steps resumes rather
+than repeats. It writes no labels into your object — that is `write_back()`, and
+it requires an explicit approval file.
+
+A runnable version of this, on synthetic data, is in
+[`examples/quickstart_synthetic.ipynb`](examples/quickstart_synthetic.ipynb); the
+test suite executes it, so it cannot drift.
+
+Relative paths are anchored to the configuration file's directory rather than the
+process working directory, so a `chdir` or a kernel restart will not break a run.
+An absolute `output_root` still makes the intent unambiguous.
+
+Long phases are silent by default. To watch progress from a notebook:
+
+```python
+import logging
+logging.getLogger("cell_curator").setLevel(logging.INFO)
+logging.getLogger("cell_curator").addHandler(logging.StreamHandler())
+```
+
+Adaptive refinement — cluster impurity is investigated, not assumed:
+
+```python
+cur.audit_parents()        # per-parent impurity signals: donor/capture dominance,
+                           # doublet and incompatible-program fractions, QC outliers
+cur.propose_subclusters()  # bounded candidates: reuse a stored higher-resolution
+                           # clustering if one matches, else one parent-local pass
+cur.decide_subclusters()   # ACCEPT SPLIT | RETAIN PARENT | DOUBLET/MIXED |
+                           # TECHNICAL/UNRESOLVED, from frozen evidence
+cur.refine_clusters()      # all four of the above, in order
+```
+
+Canonical parents stay frozen throughout: refinement proposes candidates that must
+clear `evidence.required_candidate_gates` and reviewer sign-off. A parent whose
+impurity turns out to be technical or doublet-driven is reported as such rather than
+carved into subtypes.
+
+Two deliberate differences from LLM-annotator packages: an in-memory `AnnData` is
+written to the run directory and hashed before anything reads it, and there is no
+method that returns finished labels. Evidence is computed for you; deciding what it
+means is the reviewer's job — a person, or the Claude/Codex agent driving the skill.
+Nothing here contacts a third-party inference service.
+
+Anything not exposed as a keyword argument can be set through `overrides=`, which is
+deep-merged onto the template last.
+
+### Stable function API
 
 ```python
 from cell_curator import (

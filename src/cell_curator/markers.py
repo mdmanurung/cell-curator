@@ -8,6 +8,7 @@ biological verdict.
 from __future__ import annotations
 
 import json
+import logging
 import math
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
@@ -35,6 +36,9 @@ from .provenance import atomic_publish, publish_json
 
 class _ProgramSource(Protocol):
     def programs(self) -> list[MarkerProgram]: ...
+
+
+LOG = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -256,6 +260,51 @@ def filter_marker_programs(
                 continue
         selected.append(program)
     return sorted(selected, key=lambda item: (item.axis, item.parent or "", item.label))
+
+
+def assemble_marker_programs_from_config(
+    config_path: str | Path,
+    *,
+    source: Iterable[str | Path] = (),
+    parent_scope: str | None = None,
+    parent_cl_id: str | None = None,
+    include_unscoped: bool = False,
+    axis: str | None = None,
+    feature_space: str | None = None,
+    output_path: str | Path | None = None,
+) -> tuple[list[MarkerProgram], Path]:
+    """Assemble the signed marker vocabulary declared by a configuration.
+
+    Combines the configured knowledge providers with any extra local sources and
+    publishes the result under the run directory. Shared by the CLI and the
+    Python API so the vocabulary is assembled one way only.
+    """
+
+    from .pipeline import run_root
+    from .provenance import publish_json
+
+    config = load_config(config_path)
+    programs = assemble_marker_programs(
+        [
+            *providers_from_config(
+                config.knowledge.providers,
+                allow_remote_enhancement=config.knowledge.allow_optional_remote_enhancement,
+            ),
+            *source,
+        ],
+        parent_scope=parent_scope,
+        parent_cl_id=parent_cl_id,
+        include_unscoped=include_unscoped,
+        axis=axis,
+        feature_space=feature_space,
+    )
+    output = (
+        Path(output_path)
+        if output_path is not None
+        else run_root(config) / "markers" / "assembled_programs.json"
+    )
+    publish_json(output, [item.model_dump(mode="json") for item in programs])
+    return programs, output
 
 
 def assemble_marker_programs(

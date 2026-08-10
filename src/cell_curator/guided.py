@@ -35,7 +35,10 @@ def _state_path(root: Path) -> Path:
 def load_state(root: Path) -> RunState:
     path = _state_path(root)
     if not path.is_file():
-        raise ContractError("run state is missing; execute `cell-curator run scene` first")
+        raise ContractError(
+            "run state is missing; call prepare_annotation_scene(config_path) "
+            "(CLI: `cell-curator run scene`) first"
+        )
     return RunState.model_validate_json(path.read_text())
 
 
@@ -172,6 +175,12 @@ def add_assumptions(
             }
     rows = list(existing.values())
     return rows, _write_assumptions(root, rows)
+
+
+def list_assumptions(config_path: str | Path) -> dict[str, Any]:
+    """Return the living assumptions ledger for a configured run."""
+
+    return {"assumptions": load_assumptions(run_directory(load_config(config_path)))}
 
 
 def record_assumption(
@@ -504,7 +513,8 @@ def construct_plan(config_path: str | Path) -> dict[str, Any]:
     state = load_state(root)
     if not state.context_complete:
         raise ContractError(
-            "cannot plan with unresolved scene context; inspect `cell-curator run status`"
+            "cannot plan with unresolved scene context; inspect "
+            "annotation_progress(config_path) (CLI: `cell-curator run status`)"
         )
     programs = collect_programs(
         providers_from_config(

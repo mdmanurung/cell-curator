@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import shutil
 from collections.abc import Mapping
@@ -16,7 +17,12 @@ import pandas as pd
 from .audit_parents import build_audit
 from .benchmark import write_pending_status
 from .config import CellCuratorConfig, load_config
-from .contracts import ContractError, safe_path_component, sha256
+from .contracts import (
+    ContractError,
+    require_safe_path_component,
+    safe_path_component,
+    sha256,
+)
 from .decisions import (
     build_comparator_manifest,
     build_mapping,
@@ -35,6 +41,8 @@ from .review import (
     build_html_report,
     validate_reconciliation,
 )
+
+LOG = logging.getLogger(__name__)
 
 
 def run_root(config: CellCuratorConfig) -> Path:
@@ -860,6 +868,65 @@ def refine(config_path: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]
     return result
 
 
+def assign_hierarchy_level(
+    config_path: str | Path,
+    *,
+    scores_path: str | Path,
+    level: str,
+    parent: str,
+    vocabulary_path: str | Path | None = None,
+    state_path: str | Path | None = None,
+    output_path: str | Path | None = None,
+) -> dict[str, Any]:
+    """Assign one parent-scoped hierarchy level and checkpoint the labels table.
+
+    Shared by the CLI and the Python API. The level is validated as a safe path
+    component here rather than at the CLI boundary, because it is interpolated
+    into the output filename — a caller reaching this directly must not be able
+    to skip that check.
+    """
+
+    from .guided import checkpoint_level, require_label_gate
+    from .hierarchy import assign_parent_scoped_level, scaffold_labels_table
+
+    level = require_safe_path_component(level, field="hierarchy level")
+    config = load_config(config_path)
+    root = run_root(config)
+    require_label_gate(config_path, level=level, parent=parent)
+    vocabulary = pd.read_csv(
+        Path(vocabulary_path)
+        if vocabulary_path is not None
+        else root / "plan" / "vocabulary.tsv",
+        sep="\t",
+        keep_default_na=False,
+    )
+    scores = pd.read_csv(Path(scores_path), sep="\t", keep_default_na=False)
+    state_by_cluster = (
+        json.loads(Path(state_path).read_text()) if state_path is not None else None
+    )
+    assigned = assign_parent_scoped_level(
+        scores,
+        vocabulary,
+        level=level,
+        parent_scope=parent,
+        minimum_confidence=config.evidence.min_confidence,
+        minimum_margin=config.evidence.min_margin,
+        state_by_cluster=state_by_cluster,
+    )
+    output = (
+        Path(output_path) if output_path is not None else root / "labels" / f"{level}.tsv"
+    )
+    labels = scaffold_labels_table(output, assigned)
+    checkpoint_level(
+        config_path,
+        level=level,
+        parent=parent,
+        artifacts={"labels": str(output), "scores": str(Path(scores_path))},
+        next_action="review and reconcile this hierarchy level",
+    )
+    return {"assigned": assigned, "labels": labels, "output": output}
+
+
 def evidence_lane(
     config_path: Path,
     *,
@@ -1255,29 +1322,46 @@ def run_annotation(config_path: str | Path) -> Path:
     config = load_config(path)
     if len(config.guidance.hierarchy_levels) != 1:
         raise ContractError(
-            "the standard pipeline supports exactly one hierarchy level; "
-            "use `cell-curator run execute --score-manifest MANIFEST.json` "
+            "the standard pipeline supports exactly one hierarchy level; call "
+            "execute_recursive_hierarchy_manifest(config_path, manifest_path) "
+            "(CLI: `cell-curator run execute --score-manifest MANIFEST.json`) "
             "for recursive multi-level annotation"
         )
+    LOG.info(
+        "run_annotation starting: run_id=%s mode=%s",
+        config.run.run_id,
+        config.run.mode.value,
+    )
     existing_packet = run_root(config) / "review_packet" / "review_packet.manifest.json"
     if existing_packet.is_file():
+        LOG.info("run_annotation: review packet already exists, returning it")
         return build_review_packet(path)
+    LOG.info("run_annotation: initializing run")
     initialize(path)
     state = load_state(run_root(config))
     if not state.plan_complete:
         if config.guidance.interactive:
             raise ContractError(
-                "interactive run is paused after scene setting; run `cell-curator run plan`, "
-                "review/approve assumptions, then retry execute"
+                "interactive run is paused after scene setting; construct the plan with "
+                "plan_annotation(config_path) (CLI: `cell-curator run plan`), approve "
+                "assumptions with approve_annotation_assumptions(config_path, "
+                "reviewer=...), then retry annotate(config_path)"
             )
         construct_plan(path)
     require_assumption_gate(path, level=config.guidance.hierarchy_levels[0], parent="ROOT")
+    LOG.info("run_annotation: auditing parent clusters")
     audit(path)
+    LOG.info("run_annotation: discovering subcluster candidates")
     refine(path)
+    LOG.info("run_annotation: computing evidence lanes")
     evidence_all(path)
+    LOG.info("run_annotation: deciding parent outcomes")
     decide(path)
+    LOG.info("run_annotation: mapping cells to labels")
     map_cells(path)
+    LOG.info("run_annotation: building review artifacts")
     review(path, strict=True)
+    LOG.info("run_annotation: validating the run")
     validate(path)
     benchmarks = run_root(config) / "benchmarks"
     for modality in ("rna", "spatial", "cite-seq", "atac", "multiome"):

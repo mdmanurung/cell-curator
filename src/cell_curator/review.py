@@ -1065,15 +1065,9 @@ def build_html_report(
     *,
     strict: bool = False,
     level: str | None = None,
-    check_only: bool = False,
 ) -> Path:
     if level is not None:
         level = require_safe_path_component(level, field="report level")
-    if check_only:
-        if not strict:
-            raise ContractError("report --check-only requires --strict")
-        result = check_report_completeness(config, run_root, level=level, require_report=True)
-        return Path(result["report"])
     all_labels_paths = sorted((run_root / "labels").glob("*.tsv"))
     labels_paths = [run_root / "labels" / f"{level}.tsv"] if level else all_labels_paths
     if labels_paths and all(path.is_file() for path in labels_paths):
