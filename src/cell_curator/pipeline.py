@@ -16,7 +16,12 @@ import pandas as pd
 from .audit_parents import build_audit
 from .benchmark import write_pending_status
 from .config import CellCuratorConfig, load_config
-from .contracts import ContractError, safe_path_component, sha256
+from .contracts import (
+    ContractError,
+    require_safe_path_component,
+    safe_path_component,
+    sha256,
+)
 from .decisions import (
     build_comparator_manifest,
     build_mapping,
@@ -858,6 +863,65 @@ def refine(config_path: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]
     profile_refined_clusters(config_path)
     _advance(run_root(config), "CANDIDATES_DISCOVERED")
     return result
+
+
+def assign_hierarchy_level(
+    config_path: str | Path,
+    *,
+    scores_path: str | Path,
+    level: str,
+    parent: str,
+    vocabulary_path: str | Path | None = None,
+    state_path: str | Path | None = None,
+    output_path: str | Path | None = None,
+) -> dict[str, Any]:
+    """Assign one parent-scoped hierarchy level and checkpoint the labels table.
+
+    Shared by the CLI and the Python API. The level is validated as a safe path
+    component here rather than at the CLI boundary, because it is interpolated
+    into the output filename — a caller reaching this directly must not be able
+    to skip that check.
+    """
+
+    from .guided import checkpoint_level, require_label_gate
+    from .hierarchy import assign_parent_scoped_level, scaffold_labels_table
+
+    level = require_safe_path_component(level, field="hierarchy level")
+    config = load_config(config_path)
+    root = run_root(config)
+    require_label_gate(config_path, level=level, parent=parent)
+    vocabulary = pd.read_csv(
+        Path(vocabulary_path)
+        if vocabulary_path is not None
+        else root / "plan" / "vocabulary.tsv",
+        sep="\t",
+        keep_default_na=False,
+    )
+    scores = pd.read_csv(Path(scores_path), sep="\t", keep_default_na=False)
+    state_by_cluster = (
+        json.loads(Path(state_path).read_text()) if state_path is not None else None
+    )
+    assigned = assign_parent_scoped_level(
+        scores,
+        vocabulary,
+        level=level,
+        parent_scope=parent,
+        minimum_confidence=config.evidence.min_confidence,
+        minimum_margin=config.evidence.min_margin,
+        state_by_cluster=state_by_cluster,
+    )
+    output = (
+        Path(output_path) if output_path is not None else root / "labels" / f"{level}.tsv"
+    )
+    labels = scaffold_labels_table(output, assigned)
+    checkpoint_level(
+        config_path,
+        level=level,
+        parent=parent,
+        artifacts={"labels": str(output), "scores": str(Path(scores_path))},
+        next_action="review and reconcile this hierarchy level",
+    )
+    return {"assigned": assigned, "labels": labels, "output": output}
 
 
 def evidence_lane(

@@ -174,6 +174,12 @@ def add_assumptions(
     return rows, _write_assumptions(root, rows)
 
 
+def list_assumptions(config_path: str | Path) -> dict[str, Any]:
+    """Return the living assumptions ledger for a configured run."""
+
+    return {"assumptions": load_assumptions(run_directory(load_config(config_path)))}
+
+
 def record_assumption(
     config_path: str | Path,
     *,
