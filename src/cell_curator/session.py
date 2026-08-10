@@ -31,7 +31,6 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
 import yaml
 
 from .contracts import ContractError
@@ -250,6 +249,8 @@ class CellCurator:
                 )
             adata.write_h5ad(destination)
             return destination.resolve(), scope_key
+
+        import pandas as pd
 
         resolved_scope = self.DEFAULT_SCOPE_KEY
         if resolved_scope in adata.obs:
