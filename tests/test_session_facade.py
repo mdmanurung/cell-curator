@@ -186,3 +186,68 @@ def test_generated_config_is_plain_yaml_a_reviewer_can_read(tmp_path: Path) -> N
     # Gates are preserved, not silently disabled by the convenience layer.
     assert value["review"]["require_explicit_human_approval"] is True
     assert value["knowledge"]["require_local_grounding_for_labels"] is True
+
+
+def test_annotate_reaches_a_frozen_review_packet(tmp_path: Path) -> None:
+    """The object must be able to finish a run, not just start one.
+
+    The granular methods stop at decide_subclusters(); before annotate() existed
+    the only way to a review packet was to drop down to the function API.
+    """
+
+    curator = _unattended(tmp_path, mode="annotation")
+    packet = curator.annotate()
+    assert packet.is_dir()
+    assert curator.validate_run()["status"] == "complete"
+
+
+def test_annotate_refuses_a_multi_level_run_with_a_useful_message(tmp_path: Path) -> None:
+    curator = _unattended(
+        tmp_path,
+        mode="annotation",
+        hierarchy_levels=("L1", "L2"),
+    )
+    with pytest.raises(ContractError, match="execute_hierarchy_manifest"):
+        curator.annotate()
+
+
+def test_the_added_methods_all_delegate_and_exist(tmp_path: Path) -> None:
+    """Guard against a method being documented but never wired."""
+
+    curator = _curator(tmp_path)
+    for name in (
+        "map_cells",
+        "freeze_review_packet",
+        "annotate",
+        "execute_hierarchy_manifest",
+        "run_evidence_lane",
+        "profile_refined_clusters",
+        "assign_labels",
+        "confirm_context",
+        "list_assumptions",
+        "add_assumption",
+        "list_capabilities",
+        "validate_knowledge",
+        "provision_ontology",
+        "assemble_markers",
+        "build_evidence_cards",
+        "build_report",
+        "check_report",
+        "build_critic_packet",
+        "import_critic_findings",
+        "import_critic_reconciliation",
+        "validate_critic_reconciliation",
+    ):
+        assert callable(getattr(curator, name)), name
+
+
+def test_capability_and_knowledge_inspection_work_without_running_anything(
+    tmp_path: Path,
+) -> None:
+    curator = _curator(tmp_path)
+    capabilities = curator.list_capabilities()
+    assert capabilities and all(item.assay == "transcriptome" for item in capabilities)
+
+    knowledge = curator.validate_knowledge()
+    assert knowledge["status"] == "complete"
+    assert sorted(knowledge["labels"]) == ["Type A", "Type B"]

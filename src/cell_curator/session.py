@@ -121,6 +121,7 @@ class CellCurator:
         if (adata is None) == (path is None):
             raise ContractError("provide exactly one of adata= or path=")
         self.run_id = run_id
+        self.hierarchy_levels = tuple(hierarchy_levels)
         # Absolute up front: self.config_path is cached on the instance and read
         # by later method calls, before load_config's own anchoring can apply.
         self.output_root = Path(output_root).resolve()
@@ -402,9 +403,9 @@ class CellCurator:
         thresholds live under ``adaptive.audit`` in the configuration.
         """
 
-        from .pipeline import audit
+        from .api import audit_parent_clusters
 
-        return audit(self.config_path)
+        return audit_parent_clusters(self.config_path)
 
     def propose_subclusters(self) -> tuple[Any, Any, Any]:
         """Discover bounded subcluster candidates for flagged parents.
@@ -423,16 +424,16 @@ class CellCurator:
         ``evidence.required_candidate_gates`` and reviewer sign-off.
         """
 
-        from .pipeline import refine
+        from .api import discover_subcluster_candidates
 
-        return refine(self.config_path)
+        return discover_subcluster_candidates(self.config_path)
 
     def candidate_evidence(self, lane_id: str) -> Path:
         """Run one candidate-versus-comparator evidence lane by manifest id."""
 
-        from .pipeline import candidate_evidence_lane
+        from .api import run_candidate_evidence_lane
 
-        return candidate_evidence_lane(self.config_path, comparison_lane_id=lane_id)
+        return run_candidate_evidence_lane(self.config_path, lane_id=lane_id)
 
     def decide_subclusters(self) -> tuple[Any, Any]:
         """Derive split/retain outcomes for every candidate from frozen evidence.
@@ -509,6 +510,200 @@ class CellCurator:
         from .api import apply_writeback
 
         return apply_writeback(self.config_path, *args, **kwargs)
+
+    def map_cells(self) -> Any:
+        """Derive the durable cell-to-label mapping from frozen decisions."""
+
+        from .api import map_annotated_cells
+
+        return map_annotated_cells(self.config_path)
+
+    def freeze_review_packet(self) -> Path:
+        """Freeze the immutable review packet directory for human sign-off."""
+
+        from .api import freeze_review_packet
+
+        return freeze_review_packet(self.config_path)
+
+    def annotate(self) -> Path:
+        """Run every computational phase and freeze a review packet.
+
+        This is the whole pipeline: initialize, plan, audit, refine, evidence,
+        decide, map, review, validate. It is idempotent, so calling it after the
+        granular methods resumes rather than repeats. Labels still are not
+        written back to any object — that stays behind :meth:`write_back`.
+        """
+
+        if len(self.hierarchy_levels) != 1:
+            raise ContractError(
+                "annotate() runs the standard single-level pipeline, but this run "
+                f"declares {len(self.hierarchy_levels)} hierarchy levels "
+                f"({', '.join(self.hierarchy_levels)}). Use "
+                "execute_hierarchy_manifest(manifest_path) for recursive "
+                "multi-level annotation."
+            )
+        from .api import annotate
+
+        return annotate(self.config_path)
+
+    def execute_hierarchy_manifest(self, manifest_path: str | Path) -> dict[str, Any]:
+        """Execute arbitrary-depth parent-scoped annotation from a score manifest."""
+
+        from .api import execute_recursive_hierarchy_manifest
+
+        return execute_recursive_hierarchy_manifest(self.config_path, manifest_path)
+
+    def run_evidence_lane(self, *, assay: str, representation: str) -> Path:
+        """Execute one immutable assay/representation evidence lane."""
+
+        from .api import run_evidence_lane
+
+        return run_evidence_lane(
+            self.config_path, assay=assay, representation=representation
+        )
+
+    def profile_refined_clusters(self) -> dict[str, Any]:
+        """Summarize refined-child QC, composition, and spatial context."""
+
+        from .api import profile_refined_clusters
+
+        return profile_refined_clusters(self.config_path)
+
+    def assign_labels(
+        self,
+        *,
+        scores_path: str | Path,
+        level: str,
+        parent: str,
+        vocabulary_path: str | Path | None = None,
+        state_path: str | Path | None = None,
+        output_path: str | Path | None = None,
+    ) -> dict[str, Any]:
+        """Assign one parent-scoped hierarchy level and checkpoint the labels."""
+
+        from .api import assign_hierarchy_level
+
+        return assign_hierarchy_level(
+            self.config_path,
+            scores_path=scores_path,
+            level=level,
+            parent=parent,
+            vocabulary_path=vocabulary_path,
+            state_path=state_path,
+            output_path=output_path,
+        )
+
+    # -- context, assumptions, and capability -----------------------------------
+
+    def confirm_context(self, *, input_path: str | Path, reviewer: str) -> dict[str, Any]:
+        """Confirm or correct the biological context recorded in Stage 1."""
+
+        from .api import confirm_annotation_context
+
+        return confirm_annotation_context(
+            self.config_path, input_path=input_path, reviewer=reviewer
+        )
+
+    def list_assumptions(self) -> dict[str, Any]:
+        """Return the living assumptions ledger."""
+
+        from .api import list_annotation_assumptions
+
+        return list_annotation_assumptions(self.config_path)
+
+    def add_assumption(
+        self, *, statement: str, scope: str = "global", material: bool = True
+    ) -> dict[str, Any]:
+        """Append one assumption to the living ledger."""
+
+        from .api import record_annotation_assumption
+
+        return record_annotation_assumption(
+            self.config_path, scope=scope, statement=statement, material=material
+        )
+
+    def list_capabilities(self) -> list[Any]:
+        """Return the assay-aware capability registry this configuration resolves to."""
+
+        from .api import list_capabilities
+
+        return list_capabilities(self.config_path)
+
+    def validate_knowledge(self) -> dict[str, Any]:
+        """Validate the configured knowledge providers and any ontology."""
+
+        from .api import validate_knowledge_providers
+
+        return validate_knowledge_providers(self.config_path)
+
+    def provision_ontology(self) -> dict[str, Any]:
+        """Report the configured ontology provider's provisioning status."""
+
+        from .api import provision_ontology
+
+        return provision_ontology(self.config_path)
+
+    def assemble_markers(self, **kwargs: Any) -> tuple[list[Any], Path]:
+        """Assemble and publish the signed marker vocabulary."""
+
+        from .api import build_marker_vocabulary
+
+        return build_marker_vocabulary(self.config_path, **kwargs)
+
+    # -- report and critic ------------------------------------------------------
+
+    def build_evidence_cards(self) -> list[Path]:
+        """Scaffold one evidence card per proposed label."""
+
+        from .api import build_evidence_cards
+
+        return build_evidence_cards(self.config_path)
+
+    def build_report(self, *, strict: bool = False, level: str | None = None) -> Path:
+        """Build the self-contained HTML report only.
+
+        Distinct from :meth:`review_packet`, which also builds the evidence cards
+        and critic packet that surround it.
+        """
+
+        from .api import build_html_report
+
+        return build_html_report(self.config_path, strict=strict, level=level)
+
+    def check_report(self, *, level: str | None = None) -> dict[str, Any]:
+        """Validate report completeness read-only, after approval."""
+
+        from .api import check_review_report
+
+        return check_review_report(self.config_path, level=level)
+
+    def build_critic_packet(self) -> Path:
+        """Build the platform-neutral critic packet for adversarial review."""
+
+        from .api import build_critic_packet
+
+        return build_critic_packet(self.config_path)
+
+    def import_critic_findings(self, input_path: str | Path) -> dict[str, Any]:
+        """Validate and atomically import structured critic findings."""
+
+        from .api import import_critic_findings
+
+        return import_critic_findings(self.config_path, input_path)
+
+    def import_critic_reconciliation(self, input_path: str | Path) -> dict[str, Any]:
+        """Validate and atomically import reviewer dispositions."""
+
+        from .api import import_critic_reconciliation
+
+        return import_critic_reconciliation(self.config_path, input_path)
+
+    def validate_critic_reconciliation(self) -> dict[str, Any]:
+        """Enforce that every critic finding carries a reviewer disposition."""
+
+        from .api import validate_critic_reconciliation
+
+        return validate_critic_reconciliation(self.config_path)
 
     def __repr__(self) -> str:
         return f"CellCurator(run_id={self.run_id!r}, config={str(self.config_path)!r})"
