@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import shutil
 from collections.abc import Mapping
@@ -40,6 +41,8 @@ from .review import (
     build_html_report,
     validate_reconciliation,
 )
+
+LOG = logging.getLogger(__name__)
 
 
 def run_root(config: CellCuratorConfig) -> Path:
@@ -1319,29 +1322,46 @@ def run_annotation(config_path: str | Path) -> Path:
     config = load_config(path)
     if len(config.guidance.hierarchy_levels) != 1:
         raise ContractError(
-            "the standard pipeline supports exactly one hierarchy level; "
-            "use `cell-curator run execute --score-manifest MANIFEST.json` "
+            "the standard pipeline supports exactly one hierarchy level; call "
+            "execute_recursive_hierarchy_manifest(config_path, manifest_path) "
+            "(CLI: `cell-curator run execute --score-manifest MANIFEST.json`) "
             "for recursive multi-level annotation"
         )
+    LOG.info(
+        "run_annotation starting: run_id=%s mode=%s",
+        config.run.run_id,
+        config.run.mode.value,
+    )
     existing_packet = run_root(config) / "review_packet" / "review_packet.manifest.json"
     if existing_packet.is_file():
+        LOG.info("run_annotation: review packet already exists, returning it")
         return build_review_packet(path)
+    LOG.info("run_annotation: initializing run")
     initialize(path)
     state = load_state(run_root(config))
     if not state.plan_complete:
         if config.guidance.interactive:
             raise ContractError(
-                "interactive run is paused after scene setting; run `cell-curator run plan`, "
-                "review/approve assumptions, then retry execute"
+                "interactive run is paused after scene setting; construct the plan with "
+                "plan_annotation(config_path) (CLI: `cell-curator run plan`), approve "
+                "assumptions with approve_annotation_assumptions(config_path, "
+                "reviewer=...), then retry annotate(config_path)"
             )
         construct_plan(path)
     require_assumption_gate(path, level=config.guidance.hierarchy_levels[0], parent="ROOT")
+    LOG.info("run_annotation: auditing parent clusters")
     audit(path)
+    LOG.info("run_annotation: discovering subcluster candidates")
     refine(path)
+    LOG.info("run_annotation: computing evidence lanes")
     evidence_all(path)
+    LOG.info("run_annotation: deciding parent outcomes")
     decide(path)
+    LOG.info("run_annotation: mapping cells to labels")
     map_cells(path)
+    LOG.info("run_annotation: building review artifacts")
     review(path, strict=True)
+    LOG.info("run_annotation: validating the run")
     validate(path)
     benchmarks = run_root(config) / "benchmarks"
     for modality in ("rna", "spatial", "cite-seq", "atac", "multiome"):

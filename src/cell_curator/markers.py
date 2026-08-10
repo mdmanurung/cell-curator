@@ -8,6 +8,7 @@ biological verdict.
 from __future__ import annotations
 
 import json
+import logging
 import math
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
@@ -35,6 +36,9 @@ from .provenance import atomic_publish, publish_json
 
 class _ProgramSource(Protocol):
     def programs(self) -> list[MarkerProgram]: ...
+
+
+LOG = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)

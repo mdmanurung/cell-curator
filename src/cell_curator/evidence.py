@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 import warnings
 from dataclasses import dataclass
@@ -36,6 +37,9 @@ class LaneResult:
     evidence: pd.DataFrame
     bottom_up: pd.DataFrame
     receipt_path: Path
+
+
+LOG = logging.getLogger(__name__)
 
 
 def validate_backend_receipt(receipt: Any, capability: Capability) -> None:
@@ -981,6 +985,12 @@ def run_lane(
         )
     if any(completed):
         raise ContractError(f"evidence lane is partially materialized and cannot resume: {key}")
+    LOG.info(
+        "evidence lane starting: key=%s assay=%s representation=%s",
+        key,
+        assay_id,
+        representation_name,
+    )
     gpu_runtime: dict[str, Any] | None = None
     gpu_rsc: Any | None = None
     if capability.requires_gpu:
@@ -1054,6 +1064,7 @@ def run_lane(
             convergence_validated=True if capability.requires_gpu else None,
         )
         publish_json(receipt_path, receipt.model_dump(mode="json"))
+        LOG.info("evidence lane complete: key=%s n_rows=%d", key, len(evidence))
         return LaneResult(key, evidence, bottom_up, receipt_path)
     finally:
         close_input(loaded)
