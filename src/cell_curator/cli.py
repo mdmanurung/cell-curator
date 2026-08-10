@@ -11,7 +11,7 @@ from typing import Any
 import pandas as pd
 
 from . import __version__
-from .contracts import ContractError, require_safe_path_component
+from .contracts import ContractError
 
 LOG = logging.getLogger("cell_curator")
 
@@ -507,61 +507,27 @@ def dispatch(args: argparse.Namespace) -> Any:
         result = canonicalize(config, config_path=args.config, run_root=root)
         return result["qc"]
     if args.command == "knowledge":
-        from .config import load_config
-        from .knowledge import collect_programs, providers_from_config
-        from .ontology import ontology_from_config, validate_program_ontology
+        from .api import validate_knowledge_providers
 
-        config = load_config(args.config)
-        programs = collect_programs(
-            providers_from_config(
-                config.knowledge.providers,
-                allow_remote_enhancement=config.knowledge.allow_optional_remote_enhancement,
-            )
-        )
-        ontology = ontology_from_config(config)
-        if ontology is not None:
-            validate_program_ontology(programs, ontology)
-        return {
-            "status": "complete",
-            "external_service_required": False,
-            "n_programs": len(programs),
-            "labels": [item.label for item in programs],
-            "ontology_status": "validated" if ontology is not None else "unavailable",
-            "ontology_terms": len(ontology.terms) if ontology is not None else 0,
-        }
+        return validate_knowledge_providers(args.config)
     if args.command == "ontology":
-        from .ontology import CellOntology, ontology_from_config
-
         if args.action == "provision":
-            from .config import load_config
+            from .api import provision_ontology
 
-            config = load_config(args.config)
-            ontology = ontology_from_config(config)
-            root = Path(config.run.output_root) / config.run.run_id
-            status_path = root / "knowledge" / "ontology_provider_status.json"
-            if status_path.is_file():
-                return json.loads(status_path.read_text())
-            return {
-                "schema_version": 3,
-                "status": "unavailable" if ontology is None else "complete",
-                "reason": "no ontology provider is configured" if ontology is None else "",
-                "remediation": "Configure a local ontology or remote_ontology provider.",
-                "n_terms": len(ontology.terms) if ontology is not None else 0,
-            }
+            return provision_ontology(args.config)
 
-        ontology = CellOntology.load(args.ontology)
+        from .api import validate_ontology_terms
+
+        # A flag-worded arity check belongs to the CLI presentation; the shared
+        # implementation carries its own argument-worded equivalent.
         if args.expected_name and len(args.expected_name) != len(args.term):
             raise ContractError("--expected-name must be repeated once per --term")
-        expected = args.expected_name or [None] * len(args.term)
-        return {
-            "status": "complete",
-            "source": ontology.source,
-            "n_terms": len(ontology.terms),
-            "terms": [
-                ontology.validate_term(term, expected_name=name).__dict__
-                for term, name in zip(args.term, expected, strict=True)
-            ],
-        }
+        result = validate_ontology_terms(
+            args.ontology,
+            args.term,
+            expected_names=args.expected_name or [None] * len(args.term),
+        )
+        return {**result, "terms": [term.__dict__ for term in result["terms"]]}
     if args.command == "run":
         from .config import load_config
         from .guided import confirm_context, construct_plan, prepare_scene
@@ -587,19 +553,16 @@ def dispatch(args: argparse.Namespace) -> Any:
         load_config(args.config)
         return validate(args.config)
     if args.command == "assumptions":
-        from .config import load_config
-        from .guided import (
-            approve_assumptions,
-            load_assumptions,
-            record_assumption,
-            run_directory,
-        )
+        from .guided import approve_assumptions
 
-        config = load_config(args.config)
         if args.action == "list":
-            return {"assumptions": load_assumptions(run_directory(config))}
+            from .api import list_annotation_assumptions
+
+            return list_annotation_assumptions(args.config)
         if args.action == "add":
-            return record_assumption(
+            from .api import record_annotation_assumption
+
+            return record_annotation_assumption(
                 args.config,
                 scope=args.scope,
                 statement=args.statement,
@@ -657,29 +620,18 @@ def dispatch(args: argparse.Namespace) -> Any:
     if args.command == "markers":
         if args.action != "assemble":
             return _marker_run(args)
-        from .config import load_config
-        from .knowledge import providers_from_config
-        from .markers import assemble_marker_programs
-        from .pipeline import run_root
-        from .provenance import publish_json
+        from .api import build_marker_vocabulary
 
-        config = load_config(args.config)
-        programs = assemble_marker_programs(
-            [
-                *providers_from_config(
-                    config.knowledge.providers,
-                    allow_remote_enhancement=config.knowledge.allow_optional_remote_enhancement,
-                ),
-                *args.source,
-            ],
+        programs, output = build_marker_vocabulary(
+            args.config,
+            source=args.source,
             parent_scope=args.parent,
             parent_cl_id=args.parent_cl_id,
             include_unscoped=args.include_unscoped,
             axis=args.axis,
             feature_space=args.feature_space,
+            output_path=args.output,
         )
-        output = args.output or run_root(config) / "markers" / "assembled_programs.json"
-        publish_json(output, [item.model_dump(mode="json") for item in programs])
         return {"status": "complete", "n_programs": len(programs), "output": str(output)}
     if args.command == "crosscheck":
         from .crosschecks import (
@@ -792,8 +744,6 @@ def dispatch(args: argparse.Namespace) -> Any:
         return profile_refined_clusters(args.config)
     if args.command == "hierarchy":
         from .hierarchy import (
-            assign_parent_scoped_level,
-            scaffold_labels_table,
             validate_hierarchy_nesting,
         )
 
@@ -807,59 +757,38 @@ def dispatch(args: argparse.Namespace) -> Any:
                 else None
             )
             return validate_hierarchy_nesting(frames, cell_membership=membership)
-        from .config import load_config
-        from .guided import checkpoint_level, require_label_gate
-        from .pipeline import run_root
+        from .api import assign_hierarchy_level
 
-        config = load_config(args.config)
-        root = run_root(config)
-        args.level = require_safe_path_component(args.level, field="hierarchy level")
-        require_label_gate(args.config, level=args.level, parent=args.parent)
-        vocabulary_path = args.vocabulary or root / "plan" / "vocabulary.tsv"
-        vocabulary = pd.read_csv(vocabulary_path, sep="\t", keep_default_na=False)
-        scores = pd.read_csv(args.scores, sep="\t", keep_default_na=False)
-        state_by_cluster = json.loads(args.state_json.read_text()) if args.state_json else None
-        assigned = assign_parent_scoped_level(
-            scores,
-            vocabulary,
-            level=args.level,
-            parent_scope=args.parent,
-            minimum_confidence=config.evidence.min_confidence,
-            minimum_margin=config.evidence.min_margin,
-            state_by_cluster=state_by_cluster,
-        )
-        output = args.output or root / "labels" / f"{args.level}.tsv"
-        scaffold_labels_table(output, assigned)
-        checkpoint_level(
+        result = assign_hierarchy_level(
             args.config,
+            scores_path=args.scores,
             level=args.level,
             parent=args.parent,
-            artifacts={"labels": str(output), "scores": str(args.scores)},
-            next_action="review and reconcile this hierarchy level",
+            vocabulary_path=args.vocabulary,
+            state_path=args.state_json,
+            output_path=args.output,
         )
-        return {"status": "complete", "n_labels": len(assigned), "output": str(output)}
+        return {
+            "status": "complete",
+            "n_labels": len(result["assigned"]),
+            "output": str(result["output"]),
+        }
     if args.command == "evidence-card":
-        from .config import load_config
-        from .pipeline import run_root
-        from .review import build_evidence_cards
+        from .api import build_evidence_cards
 
-        config = load_config(args.config)
-        outputs = build_evidence_cards(config, run_root(config))
+        outputs = build_evidence_cards(args.config)
         return {"status": "complete", "n_cards": len(outputs), "cards": list(map(str, outputs))}
     if args.command == "report":
-        from .config import load_config
-        from .pipeline import run_root
-        from .review import build_html_report
+        if args.action == "check":
+            from .api import check_review_report
 
-        config = load_config(args.config)
-        path = build_html_report(
-            config,
-            run_root(config),
-            strict=args.strict if args.action == "build" else True,
-            level=args.level,
-            check_only=args.action == "check",
-        )
-        return {"status": "complete", "report": str(path), "check_only": args.action == "check"}
+            # The completeness dict is the real result; the previous CLI shape
+            # discarded everything but the report path.
+            return check_review_report(args.config, level=args.level)
+        from .api import build_html_report
+
+        path = build_html_report(args.config, strict=args.strict, level=args.level)
+        return {"status": "complete", "report": str(path)}
     if args.command == "critic":
         from .config import load_config
         from .pipeline import run_root
