@@ -501,6 +501,74 @@ class CellCuratorConfig(StrictModel):
         return self
 
 
+def anchor_relative_paths(
+    config: CellCuratorConfig, *, config_dir: Path
+) -> CellCuratorConfig:
+    """Resolve relative run, input, and provider paths against ``config_dir``.
+
+    Relative paths would otherwise be resolved against the process working
+    directory at the moment each artifact is opened. That is invisible in a
+    terminal, where the cwd rarely moves, but it breaks scripts run from
+    elsewhere and notebooks whose cwd differs between cells or across a kernel
+    restart — surfacing as a misleading "input object does not exist" rather
+    than as a path problem.
+
+    This rewrites only the in-memory model. The configuration file's bytes are
+    never touched, so every ``sha256(config_path)`` recorded for provenance and
+    compared on resume keeps matching regardless of the caller's cwd.
+    """
+
+    from .contracts import ContractError
+
+    updates: dict[str, Any] = {}
+
+    output_root = Path(config.run.output_root)
+    if not output_root.is_absolute():
+        anchored = (config_dir / output_root).resolve()
+        legacy = output_root.resolve()  # what cwd-relative resolution would pick
+        if anchored != legacy:
+            anchored_state = anchored / config.run.run_id / "run_state.json"
+            legacy_state = legacy / config.run.run_id / "run_state.json"
+            if legacy_state.is_file() and not anchored_state.is_file():
+                raise ContractError(
+                    "run.output_root is relative and ambiguous: an existing run is "
+                    f"recorded under {legacy_state.parent} (resolved against the current "
+                    f"working directory) but not under {anchored_state.parent} (resolved "
+                    "against the configuration file's own directory, which is the anchor "
+                    "used from this version onward). Set run.output_root to an absolute "
+                    "path to state unambiguously which run to resume."
+                )
+        updates["run"] = config.run.model_copy(update={"output_root": str(anchored)})
+
+    input_path = Path(config.input.path)
+    if not input_path.is_absolute():
+        updates["input"] = config.input.model_copy(
+            update={"path": str((config_dir / input_path).resolve())}
+        )
+
+    anchored_providers = []
+    provider_changed = False
+    for provider in config.knowledge.providers:
+        provider_updates: dict[str, Any] = {}
+        if provider.path and not Path(provider.path).is_absolute():
+            provider_updates["path"] = str((config_dir / provider.path).resolve())
+        if provider.cache_path and not Path(provider.cache_path).is_absolute():
+            provider_updates["cache_path"] = str(
+                (config_dir / provider.cache_path).resolve()
+            )
+        if provider_updates:
+            provider_changed = True
+            anchored_providers.append(provider.model_copy(update=provider_updates))
+        else:
+            anchored_providers.append(provider)
+    if provider_changed:
+        updates["knowledge"] = config.knowledge.model_copy(
+            update={"providers": anchored_providers}
+        )
+
+    return config.model_copy(update=updates) if updates else config
+
+
 def load_config(path: str | Path) -> CellCuratorConfig:
     source = Path(path)
     try:
@@ -510,9 +578,10 @@ def load_config(path: str | Path) -> CellCuratorConfig:
     if not isinstance(value, dict):
         raise ValueError("configuration must be a YAML mapping")
     try:
-        return CellCuratorConfig.model_validate(value)
+        config = CellCuratorConfig.model_validate(value)
     except ValidationError as exc:
         raise ValueError(f"invalid cell-curator configuration: {exc}") from exc
+    return anchor_relative_paths(config, config_dir=source.resolve().parent)
 
 
 def configuration_schema() -> dict[str, Any]:

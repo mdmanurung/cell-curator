@@ -121,7 +121,9 @@ class CellCurator:
         if (adata is None) == (path is None):
             raise ContractError("provide exactly one of adata= or path=")
         self.run_id = run_id
-        self.output_root = Path(output_root)
+        # Absolute up front: self.config_path is cached on the instance and read
+        # by later method calls, before load_config's own anchoring can apply.
+        self.output_root = Path(output_root).resolve()
         self.workspace = self.output_root / run_id
         self.workspace.mkdir(parents=True, exist_ok=True)
 
