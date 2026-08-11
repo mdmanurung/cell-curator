@@ -1,0 +1,48 @@
+name: ci
+
+# The CPU suite only. The RAPIDS lane in tests/test_gpu_hardware_lane.py skips
+# itself without a contract-satisfying NVIDIA device, so a green run here says
+# nothing about the GPU path — that one is validated by hand on a RAPIDS node.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      # --frozen resolves nothing: the job runs the environment uv.lock pins, so a
+      # dependency that drifts fails here as a lockfile change rather than silently
+      # in someone's install.
+      - name: Sync the locked environment
+        run: uv sync --frozen --extra dev --extra workflow
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Type-check
+        run: uv run mypy
+
+      - name: Test
+        run: uv run pytest -q
