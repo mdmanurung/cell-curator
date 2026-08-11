@@ -9,6 +9,7 @@ thing standing between a version bump and that.
 from __future__ import annotations
 
 import json
+import re
 import tomllib
 from pathlib import Path
 
@@ -67,6 +68,24 @@ def test_readme_quickstart_paths_exist() -> None:
     assert (SKILL_ROOT / "assets" / "config.template.yaml").is_file()
     assert (REPO_ROOT / "workflow" / "Snakefile").is_file()
     assert (REPO_ROOT / "workflow" / "profiles" / "slurm" / "config.yaml").is_file()
+
+
+def test_readme_command_group_count_matches_the_parser() -> None:
+    """A hardcoded count in prose is a fact with an expiry date unless something checks it."""
+
+    import argparse
+
+    from cell_curator.cli import build_parser
+
+    groups = [
+        action
+        for action in build_parser()._actions
+        if isinstance(action, argparse._SubParsersAction)
+    ]
+    assert len(groups) == 1
+    claimed = re.search(r"lists all (\d+) command groups", (REPO_ROOT / "README.md").read_text())
+    assert claimed is not None, "the README no longer states a command-group count"
+    assert int(claimed.group(1)) == len(groups[0].choices)
 
 
 def test_no_tracked_path_the_manifests_promise_is_git_ignored() -> None:

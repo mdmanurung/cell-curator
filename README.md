@@ -31,13 +31,17 @@ uv sync --frozen --extra workflow
 uv run cell-curator --version
 ```
 
-Or install the built wheel from the
-[latest release](https://github.com/mdmanurung/cell-curator/releases/latest) without
-cloning (not on PyPI):
+Or install the built wheel without cloning (not on PyPI — see
+[releases](https://github.com/mdmanurung/cell-curator/releases/latest)):
 
 ```bash
-uv pip install cell_curator-0.2.0-py3-none-any.whl
+uv pip install https://github.com/mdmanurung/cell-curator/releases/download/v0.2.0/cell_curator-0.2.0-py3-none-any.whl
 ```
+
+A wheel install still ships the config template, skill, and workflow — the commands
+below say `skills/…` and `workflow/…` because they assume a clone, but from a wheel
+the same files live under `<prefix>/share/cell-curator/` (`SKILL.md`, `assets/`,
+`references/`, `agents/`, `workflow/`, `schemas/`, `benchmarks/`).
 
 **2. The agent skill.** For Claude Code:
 
