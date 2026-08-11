@@ -56,8 +56,31 @@ html_title = f"cell-curator {release}"
 html_theme_options = {
     "source_repository": "https://github.com/mdmanurung/cell-curator",
     "source_branch": "main",
-    "source_directory": "docs/",
+    "source_view_link": f"{_sync.BLOB_BASE}/docs/{{filename}}",
 }
+
+
+def _view_source_at_its_real_origin(app, pagename, templatename, context, doctree):
+    """Point "View this page" at the file a reader can actually edit.
+
+    Furo derives the link from the page's own path, which for a generated page
+    is ``docs/_generated/...`` — ignored by git, so the link 404s. Every page
+    here has a real origin; :data:`_sync.PAGES` knows where.
+    """
+
+    del app, templatename, doctree
+    origins = {f"_generated/{page[:-3]}": source for source, page in _sync.PAGES.items()}
+    origins["_generated/api"] = "docs/_sync.py"
+
+    if pagename in origins:
+        context["theme_source_view_link"] = f"{_sync.BLOB_BASE}/{origins[pagename]}"
+    elif pagename.startswith("_generated/_api/"):
+        # An autosummary stub has no source file of its own to view.
+        context["theme_source_view_link"] = ""
+
+
+def setup(app):
+    app.connect("html-page-context", _view_source_at_its_real_origin)
 
 # The generated tree carries GitHub URLs for files that are not pages here.
 # Checking them on every build would make the docs depend on network reachability.

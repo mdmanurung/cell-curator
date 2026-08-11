@@ -72,7 +72,9 @@ def rewrite_link(target: str, *, source: str) -> str:
         return os.path.relpath(there, here) + suffix
 
     if resolved.exists():
-        return f"{BLOB_BASE}/{repo_relative}{suffix}"
+        # GitHub serves directories under /tree and redirects /blob to it.
+        kind = "tree" if resolved.is_dir() else "blob"
+        return f"{BLOB_BASE.replace('/blob', f'/{kind}')}/{repo_relative}{suffix}"
 
     raise UnclassifiableLink(
         f"{source} links to {target}, which is neither a documentation page "
