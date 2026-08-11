@@ -63,6 +63,29 @@ def test_every_public_export_appears_in_the_api_page() -> None:
     assert not missing, f"exported but undocumented: {missing}"
 
 
+def test_every_generated_page_is_reachable_from_the_toctree() -> None:
+    """Three lists have to agree; this is the pairing the other tests miss.
+
+    `PAGES`, the `index.md` toctree, and the reference directory on disk are
+    independent. A page generated but left out of the toctree still builds — it
+    is simply orphaned, reachable only by search.
+    """
+
+    # Exact entries, not a substring search: "reference/validation" is a
+    # substring of a typo'd "reference/validation-x", so a containment check
+    # passes on precisely the breakage this is meant to catch.
+    entries = set()
+    for line in (REPO_ROOT / "docs" / "index.md").read_text().splitlines():
+        entry = line.strip()
+        if entry.startswith("_generated/"):
+            entries.add(entry)
+        elif entry.endswith(">") and "<" in entry:  # the "Title <target>" form
+            entries.add(entry.rsplit("<", 1)[1].rstrip(">"))
+
+    orphaned = [page for page in _sync.PAGES.values() if f"_generated/{page[:-3]}" not in entries]
+    assert not orphaned, f"generated but not in any toctree: {orphaned}"
+
+
 def test_every_reference_document_is_published() -> None:
     """A new contract file must not be able to exist without reaching the site."""
 
