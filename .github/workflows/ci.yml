@@ -26,9 +26,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Pinned, not merely floor-checked. Left to pick a default, the runner built a
+      # 3.12 environment while [tool.mypy] declares python_version 3.11, so mypy read
+      # 3.12-built anndata under 3.11 syntax rules and died on PEP 695 generics in a
+      # dependency. The interpreter has to be the one the config and lockfile assume.
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
+          python-version: "3.11"
           enable-cache: true
           cache-dependency-glob: uv.lock
 
