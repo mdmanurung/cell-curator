@@ -12,6 +12,7 @@ import anndata as ad
 import numpy as np
 import pandas as pd
 import yaml
+from test_distribution_manifests import _project_version
 
 
 def _run(command: list[str], *, cwd: Path, env: dict[str, str] | None = None) -> str:
@@ -122,7 +123,7 @@ def test_clean_wheel_install_import_cli_and_package_data(tmp_path: Path) -> None
         env=clean_env,
     )
     installed = json.loads(probe)
-    assert installed["version"] == "0.2.0"
+    assert installed["version"] == _project_version()
     assert str(environment) in installed["module"]
     files = installed["files"]
     expected_families = (
