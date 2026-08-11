@@ -11,3 +11,6 @@ build/
 dist/
 .gpu-validation/
 .venv-gpu/
+
+docs/_build/
+docs/_generated/
