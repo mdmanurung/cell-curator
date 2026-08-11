@@ -1,30 +1,47 @@
 # cell-curator
 
-`cell-curator` is a Claude Code plugin and Codex skill for evidence-driven annotation
-of pre-clustered AnnData and MuData objects. The agent reads the biological request,
-chooses routes, explains gates, and guides review; the deterministic work — statistics,
-schema validation, hashing, provenance, GPU contract enforcement, report generation,
-and guarded write-back — runs in the `cell-curator` Python package that ships in this
-repository as the skill's execution engine.
+Evidence-driven cell-type annotation for **pre-clustered** AnnData and MuData — as a
+Claude Code plugin, a Codex skill, a Python API, and a CLI.
 
-Together they combine signed cell-type and cell-state programs, bottom-up markers,
-ontology validation, assay-aware multimodal evidence, deterministic uncertainty and
-`Unknown` calls, adaptive parent-local refinement, immutable provenance, human review,
-and guarded write-back.
+It does not hand you labels. It computes the evidence a reviewer needs to assign
+them: signed marker programs, bottom-up markers, ontology checks, multimodal
+cross-checks, and calibrated uncertainty — then holds the run at explicit gates until
+a person signs off. `Unknown` is a valid answer.
 
-Neither layer depends on another annotation package, CLI, agent platform, MCP, atlas,
-or web service. Local marker, ontology, cached-table, and labeled-reference providers
-are sufficient for complete offline runs. Optional remote providers are checksum-pinned
-and cached.
+- **Local-first.** Local markers, ontology, and labeled references are enough for a
+  complete offline run. Nothing contacts a third-party inference service.
+- **Nothing mutates your data.** Labels reach your object only through a separate,
+  hash-bound write-back approval.
+- **Auditable.** Every run records config, input, rule, and output hashes.
+- **No lock-in.** No dependency on another annotation package, agent platform, MCP,
+  atlas, or web service.
 
-## Install the skill
+Requires Python 3.11+ and clusters you already trust — cell-curator annotates a
+clustering, it does not produce one.
 
-The agent-facing surface lives in [`skills/cell-curator/`](skills/cell-curator/):
-`SKILL.md`, the one-level `references/` contracts, and the `assets/` templates.
+## Install
 
-For Claude Code, add this repository as a plugin marketplace:
+**1. The Python runtime** — required in every case, including for the plugin, which
+shells out to the `cell-curator` CLI for all deterministic work.
 
 ```bash
+git clone https://github.com/mdmanurung/cell-curator.git
+cd cell-curator
+uv sync --frozen --extra workflow
+uv run cell-curator --version
+```
+
+Or install the built wheel from the
+[latest release](https://github.com/mdmanurung/cell-curator/releases/latest) without
+cloning (not on PyPI):
+
+```bash
+uv pip install cell_curator-0.2.0-py3-none-any.whl
+```
+
+**2. The agent skill.** For Claude Code:
+
+```
 /plugin marketplace add https://github.com/mdmanurung/cell-curator
 /plugin install cell-curator@cell-curator
 ```
@@ -35,144 +52,114 @@ For Codex, link the skill directory into the skills path:
 ln -s "$PWD/skills/cell-curator" ~/.codex/skills/cell-curator
 ```
 
-Install the Python runtime below in either case — the skill invokes the `cell-curator`
-CLI for every deterministic step.
-
-## Install the Python runtime
-
-`cell-curator` requires Python 3.11 or newer. The current release is installed from
-source; no PyPI release is assumed.
-
-### With uv (recommended)
+<details>
+<summary>pip instead of uv, and optional extras</summary>
 
 ```bash
-git clone https://github.com/mdmanurung/cell-curator.git
-cd cell-curator
-uv sync --frozen --extra workflow
-uv run cell-curator --version
-uv run cell-curator --help
-```
-
-Add the development environment when contributing:
-
-```bash
-uv sync --frozen --extra dev --extra workflow
-```
-
-### With pip
-
-```bash
-git clone https://github.com/mdmanurung/cell-curator.git
-cd cell-curator
-python3.11 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
+python3.11 -m venv .venv && source .venv/bin/activate
 python -m pip install ".[workflow]"
-cell-curator --version
 ```
 
-The core install omits optional knowledge providers and workflow execution. Install
-only the capabilities needed for the run, for example `.[celltypist]`,
-`.[reference-models]`, `.[census]`, `.[scimilarity]`, or combinations such as
-`.[workflow,celltypist]`. The `gpu` extra is not a portability mode: a configured
-RAPIDS lane also requires a compatible real NVIDIA GPU, driver, CUDA runtime, and
-declared RAPIDS contract. It fails closed when that contract is not met and never
-falls back to CPU.
+The core install omits optional knowledge providers and workflow execution. Add only
+what a run needs: `celltypist`, `reference-models`, `census`, `scimilarity`,
+`workflow`, or combinations such as `.[workflow,celltypist]`.
 
-## Quick start
+`gpu` is not a portability mode. A configured RAPIDS lane also requires a real
+NVIDIA GPU, driver, CUDA runtime, and declared RAPIDS contract. It fails closed when
+that contract is unmet and never falls back to CPU.
+</details>
 
-Copy the strict template, then edit the input, assay representations, context,
-knowledge providers, and output run ID:
+## Quick start — drive it with Claude
+
+Install the plugin and the runtime, then describe the job in plain language. The
+agent picks routes, explains each gate, and asks you to confirm before it labels
+anything:
+
+> Annotate `data/pancreas_clustered.h5ad` with cell-curator. Human pancreas, adult,
+> healthy donors, 10x 3' dissociated. Clusters are in `obs["leiden_1"]`, log-normalized
+> values in `layers["logcounts"]` and raw counts in `layers["counts"]`. Use my marker
+> programs in `markers/pancreas.json`. Start evidence-only — I want to see marker
+> coherence and uncertainty before we commit to labels.
+
+Useful follow-ups once it is running:
+
+> Which clusters came back `Unknown`, and what was missing for each?
+
+> Cluster 7 looks impure. Audit it for donor dominance and doublets before we split it.
+
+> Build the review packet and show me the diff you would write back.
+
+The agent reads [`skills/cell-curator/SKILL.md`](skills/cell-curator/SKILL.md) and the
+contracts in [`references/`](skills/cell-curator/references/). It cannot skip a gate
+by running non-interactively — that mode requires the answers declared up front, and
+records the same ledger.
+
+## Quick start — drive it from Python
+
+Same engine, no agent. `CellCurator` builds the strict configuration from keyword
+arguments and calls the same functions the CLI and Snakemake DAG call:
+
+```python
+from cell_curator import CellCurator
+
+cur = CellCurator(
+    adata=adata,                      # or path="pancreas.h5ad"
+    organism="human",
+    tissue="pancreas",
+    cluster_key="leiden_1",
+    markers="markers/pancreas.json",  # or a {label: {positive, negative}} mapping
+    run_id="pancreas-v1",
+    output_root="/abs/path/results",
+    mode="annotation",                # or "evidence-only"
+    # Context the package refuses to guess. Omit any and prepare() stops.
+    developmental_stage="adult",
+    condition="healthy",
+    experimental_context="pancreas atlas v1",
+    # Gates are declared, not skipped. Drop these two to confirm interactively.
+    preauthorized=True,
+    reviewer="your-name",
+    assumptions=["The signed marker programs define the L1 vocabulary."],
+)
+
+cur.inspect()                          # structure and keys; changes nothing
+cur.prepare()                          # freeze + hash the input, then scene and plan
+evidence, bottom_up = cur.evidence()   # the tables you reason over
+packet = cur.annotate()                # remaining phases; freezes a review packet
+cur.validate_run()
+```
+
+`annotate()` is idempotent — calling it after the granular steps resumes rather than
+repeats — and writes nothing into your object. That is `write_back()`, and it requires
+an approval file.
+
+A runnable version on synthetic data is in
+[`examples/quickstart_synthetic.ipynb`](examples/quickstart_synthetic.ipynb). The test
+suite executes it, so it cannot drift.
+
+## Configure for your data
+
+Every route starts from one strict config. Copy the template and validate it before
+loading anything:
 
 ```bash
 cp skills/cell-curator/assets/config.template.yaml config.yaml
 uv run cell-curator config validate --config config.yaml
 ```
 
-Every input must be pre-clustered and immutable for the duration of a run. Set
-`input.expected_sha256` when the input is supplied externally, use a new `run.run_id`
-for a changed input or configuration, and keep `run.immutable: true`.
+`input.assays` names the modalities and representations present; `evidence.lanes`
+selects which of them may support a decision. Encode only evidence the assay actually
+measures:
 
-### Guided CLI run
-
-Interactive mode is the safest default. It deliberately stops before the first
-biological label until a reviewer has confirmed the context and assumptions:
-
-```bash
-uv run cell-curator config validate --config config.yaml
-uv run cell-curator environment detect --config config.yaml
-uv run cell-curator data inspect --config config.yaml
-uv run cell-curator data canonicalize --config config.yaml
-uv run cell-curator data qc --config config.yaml
-uv run cell-curator run scene --config config.yaml
-uv run cell-curator run confirm-context --config config.yaml \
-  --input context-confirmation.json --reviewer REVIEWER
-uv run cell-curator run plan --config config.yaml
-uv run cell-curator assumptions approve --config config.yaml --reviewer REVIEWER
-uv run cell-curator run execute --config config.yaml
-```
-
-Interactive runs stop before the first biological label until the context and
-assumptions are approved. A non-interactive run must declare complete context and
-pre-authorization in configuration; it records the same gate and decision history.
-`run execute` runs the configured evidence/refinement pipeline and builds review
-artifacts. Supply `--score-manifest hierarchy-scores.json` to execute arbitrary-depth
-exact `(level, parent_scope)` score tables with scope gates, retained-parent leaves,
-and content-hashed resume. Neither route writes labels back to the source object.
-Reconcile critics and run strict read-only validation before the separate write-back
-approval:
-
-```bash
-uv run cell-curator write-back preview --config config.yaml --output annotated.h5ad
-uv run cell-curator write-back apply --config config.yaml \
-  --approval approval.json --output annotated.h5ad
-```
-
-Bind `approval.json` to every field emitted for approval by `write-back preview`:
-the run, source, mapping, durable labels, assumptions, report, critic artifacts,
-diff, exact output path, and in-place intent.
-
-### Snakemake execution
-
-The DAG is authoritative for dependencies and resumability. Its default aggregate
-target stops at evidence; review, finalization, and write-back remain explicit:
-
-```bash
-uv run snakemake --snakefile workflow/Snakefile all_evidence \
-  --configfile config.yaml --cores 4
-uv run snakemake --snakefile workflow/Snakefile review_packet \
-  --configfile config.yaml --cores 4
-uv run snakemake --snakefile workflow/Snakefile finalization \
-  --configfile config.yaml --cores 4
-```
-
-Use `--dry-run` before scheduling a new configuration. For HPC execution, adapt
-[`workflow/profiles/slurm/config.yaml`](workflow/profiles/slurm/config.yaml) to the
-site rather than hard-coding cluster resources in the workflow. The DAG uses the
-locked environment that invoked Snakemake, which keeps an installed wheel independent
-of a source-tree `-e .` path. RAPIDS lanes request one `gpu` resource and validate the
-real device at runtime. The separate `writeback` target remains blocked until its
-run-bound approval exists.
-
-## Use-case guide
-
-Choose the closest starting point below and encode only evidence the assay actually
-measures. In every case, `input.assays` names the modalities and representations,
-while `evidence.lanes` selects the representations allowed to support a decision.
-
-| Use case | Configuration starting point | Important boundary |
+| Your data | Start from | Boundary that matters |
 | --- | --- | --- |
-| Clustered scRNA-seq (`.h5ad`) | `input.kind: h5ad`; one root `rna` assay; declare log-normalized values for ranking and counts for detection | Counts and log values are different evidence; missing genes are unmeasured, not negative |
-| CITE-seq or other multimodal data (`.h5mu`) | `input.kind: h5mu`; declare RNA and protein modalities as separate assays and evidence lanes | Preserve cross-modal disagreement for review instead of averaging it away |
-| scATAC-seq or multiome | Declare `atac` peak accessibility separately from any `gene_activity` representation | Peaks are direct accessibility evidence; gene activity is indirect and cannot silently become RNA expression |
-| Spatial transcriptomics | Declare the transcriptome assay and set `input.keys.spatial` to the coordinate representation | Spatial proximity is contextual evidence, not proof of cell identity |
-| Evidence-only audit | Set `run.mode: evidence-only` and provide frozen cluster assignments | Produces auditable evidence and uncertainty without forcing biological labels |
-| Hierarchical annotation and selective refinement | Declare `guidance.hierarchy_levels`; start from stored partitions and enable parent-local refinement only where gates pass | Every split is scoped to its parent and may validly retain the parent or remain unresolved |
+| Clustered scRNA-seq (`.h5ad`) | `input.kind: h5ad`, one root `rna` assay; log-normalized values for ranking, counts for detection | Counts and log values are different evidence; a missing gene is unmeasured, not negative |
+| CITE-seq / multimodal (`.h5mu`) | `input.kind: h5mu`, RNA and protein as separate assays and lanes | Preserve cross-modal disagreement for review instead of averaging it away |
+| scATAC-seq or multiome | `atac` peak accessibility declared separately from any `gene_activity` representation | Peaks are direct accessibility evidence; gene activity is indirect and never silently becomes RNA |
+| Spatial transcriptomics | The transcriptome assay plus `input.keys.spatial` | Proximity is context, not identity |
+| Any assay, no labels yet | `run.mode: evidence-only` with frozen clusters | Auditable evidence and uncertainty without forcing a biological label |
+| Hierarchical annotation | `guidance.hierarchy_levels`; enable parent-local refinement only where gates pass | Every split is scoped to its parent and may validly retain it or stay unresolved |
 
-### 1. RNA-only cluster annotation
-
-Use this for a pre-clustered AnnData object with gene-level RNA measurements. Point
-the template's root assay at the actual expression and detection representations:
+Minimal RNA assay block — point it at your actual layers:
 
 ```yaml
 input:
@@ -197,104 +184,103 @@ input:
             semantics: counts > 0
 ```
 
-Set `input.keys.canonical_parent` to the frozen cluster column and register local
-marker programs or ontology tables under `knowledge.providers`. Then run the guided
-CLI or the `all_evidence` DAG target.
+Set `input.keys.canonical_parent` to the frozen cluster column, register marker or
+ontology tables under `knowledge.providers`, and keep `run.immutable: true`. Use a new
+`run.run_id` whenever the input or configuration changes, and set
+`input.expected_sha256` when the input arrives from elsewhere.
 
-### 2. CITE-seq and multimodal annotation
+Per-assay rules — which evidence each modality may support, and what stays blocked —
+are in [assay-routing.md](skills/cell-curator/references/assay-routing.md).
 
-Use `h5mu` and declare each modality independently. RNA may support ontology markers;
-protein may provide orthogonal identity or state evidence. Each evidence lane must
-refer to a declared `(assay, representation)` pair. Do not copy RNA detection rules
-onto antibody-derived counts, and do not discard an RNA/protein conflict: it belongs
-in the critic and review artifacts.
+**Two or more hierarchy levels.** The standard pipeline accepts one declared level so
+it cannot finalize a partial hierarchy. For deeper vocabularies, pass
+`--score-manifest hierarchy-scores.json` to `run execute`; each entry names its exact
+`(level, parent_scope)` and clears the same scope, evidence, and review gates.
 
-### 3. ATAC, multiome, and spatial evidence
+## What a run produces
 
-For ATAC or multiome data, declare peak accessibility and derived gene activity as
-different assays or representations with explicit feature spaces. Only a compatible
-gene-level representation may enter a gene-marker lane. For spatial data, set the
-spatial key and preserve coordinates in the canonical object, but keep neighborhood
-or location evidence separate from the cell-type and cell-state calls.
+Artifacts land under `run.output_root/run.run_id`, hashed at each step: evidence
+receipts, hierarchy decisions, critic reconciliation, an immutable review packet,
+final provenance, and a write-back preview.
 
-### 4. Evidence-only review
+Annotation never touches the source object. A new annotated `.h5ad`/`.h5mu` requires a
+separate approval bound to the preview and mapping hashes:
 
-Set `run.mode: evidence-only` when the goal is to inspect marker coherence,
-alternatives, technical confounding, or split stability without assigning durable
-labels. This is useful for evaluating an existing clustering or preparing a review
-packet. `Unknown`, `RETAIN PARENT`, and technical/unresolved outcomes are successful,
-explicit results when the acceptance gates are not met.
+```bash
+uv run cell-curator write-back preview --config config.yaml --output annotated.h5ad
+uv run cell-curator write-back apply --config config.yaml \
+  --approval approval.json --output annotated.h5ad
+```
 
-### 5. Hierarchical refinement
+`approval.json` must bind every field `write-back preview` emits — run, source,
+mapping, durable labels, assumptions, report, critics, diff, exact output path, and
+in-place intent. Schemas are in
+[artifact-schemas.md](skills/cell-curator/references/artifact-schemas.md).
 
-List the hierarchy levels in `guidance.hierarchy_levels`. The normal execution path
-first audits compatible stored resolutions, then performs parent-local reclustering
-only for eligible scopes. The standard pipeline intentionally accepts one declared
-level so it cannot finalize a partial hierarchy. For two or more levels, pass
-`--score-manifest hierarchy-scores.json` to `run execute`; each entry must identify
-its exact `(level, parent_scope)` and pass the same scope, evidence, and review gates.
+## Command line and Snakemake
 
-## Outputs and approval gates
+The guided CLI is the safest unattended route. It stops before the first biological
+label until context and assumptions are confirmed:
 
-Artifacts are written beneath `run.output_root/run.run_id` with configuration,
-input, rule, and output hashes. The main milestones are evidence receipts, hierarchy
-decisions, critic reconciliation, the immutable review packet, final provenance, and
-the write-back preview. Annotation execution never mutates the source object. Only a
-separate approval bound to the preview and mapping hashes can authorize a new
-annotated `.h5ad` or `.h5mu` output.
+```bash
+uv run cell-curator config validate      --config config.yaml
+uv run cell-curator environment detect   --config config.yaml
+uv run cell-curator data inspect         --config config.yaml
+uv run cell-curator data canonicalize    --config config.yaml
+uv run cell-curator data qc              --config config.yaml
+uv run cell-curator run scene            --config config.yaml
+uv run cell-curator run confirm-context  --config config.yaml \
+  --input context-confirmation.json --reviewer REVIEWER
+uv run cell-curator run plan             --config config.yaml
+uv run cell-curator assumptions approve  --config config.yaml --reviewer REVIEWER
+uv run cell-curator run execute          --config config.yaml
+```
+
+`cell-curator --help` lists all 21 command groups.
+
+For a resumable DAG, Snakemake owns dependencies and staleness. Its default aggregate
+target stops at evidence; the later stages stay explicit:
+
+```bash
+uv run snakemake --snakefile workflow/Snakefile all_evidence \
+  --configfile config.yaml --cores 4
+uv run snakemake --snakefile workflow/Snakefile review_packet \
+  --configfile config.yaml --cores 4
+uv run snakemake --snakefile workflow/Snakefile finalization \
+  --configfile config.yaml --cores 4
+```
+
+`--dry-run` first on a new configuration. The `writeback` target stays blocked until
+its run-bound approval exists. For HPC, adapt
+[`workflow/profiles/slurm/config.yaml`](workflow/profiles/slurm/config.yaml) rather than
+hard-coding cluster resources into the workflow. RAPIDS lanes request one `gpu`
+resource and validate the real device at runtime.
 
 ## Python API
 
-### Guided object (`CellCurator`)
-
-`CellCurator` builds the strict configuration from keyword arguments and delegates
-every step to the same functions the CLI and the Snakemake DAG call. It adds
-convenience, never science.
+Beyond the quick start, the object exposes each phase. Refinement is the part worth
+knowing — cluster impurity is investigated, not assumed:
 
 ```python
-from cell_curator import CellCurator
-
-cur = CellCurator(
-    adata=adata,                     # or path="pancreas.h5ad"
-    organism="human",
-    tissue="pancreas",
-    cluster_key="leiden_1",
-    markers="pancreas_markers.json", # or a {label: {pos, neg}} mapping
-    run_id="pancreas-v1",
-    output_root="/abs/path/results",
-    mode="annotation",
-    # The gates are declared, not skipped. An unattended run states its answers
-    # up front; drop these to run interactively and confirm each one in turn.
-    preauthorized=True,
-    reviewer="your-name",
-    assumptions=["The signed marker programs define the L1 vocabulary."],
-    # Context the package refuses to guess. Omit any of these and prepare()
-    # stops with the scene unresolved.
-    developmental_stage="adult",
-    condition="healthy",
-    experimental_context="pancreas atlas v1",
-)
-
-cur.inspect()                        # structure and keys; changes nothing
-cur.prepare()                        # freeze + hash the input, then scene and plan
-evidence, bottom_up = cur.evidence()  # the tables you reason over
-packet = cur.annotate()              # remaining phases; freezes a review packet
-cur.validate_run()
+cur.audit_parents()        # per-parent impurity: donor/capture dominance,
+                           # doublet and incompatible-program fractions, QC outliers
+cur.propose_subclusters()  # bounded candidates: reuse a matching stored resolution,
+                           # else one parent-local pass
+cur.decide_subclusters()   # ACCEPT SPLIT | RETAIN PARENT | DOUBLET/MIXED |
+                           # TECHNICAL/UNRESOLVED, from frozen evidence
+cur.refine_clusters()      # all four, in order
 ```
 
-`annotate()` is idempotent, so calling it after the granular steps resumes rather
-than repeats. It writes no labels into your object — that is `write_back()`, and
-it requires an explicit approval file.
+Canonical parents stay frozen throughout. A parent whose impurity turns out to be
+technical or doublet-driven is reported as such rather than carved into subtypes.
 
-A runnable version of this, on synthetic data, is in
-[`examples/quickstart_synthetic.ipynb`](examples/quickstart_synthetic.ipynb); the
-test suite executes it, so it cannot drift.
+Three things worth knowing in a notebook: an in-memory `AnnData` is written to the run
+directory and hashed before anything reads it; relative paths anchor to the config
+file's directory rather than the process working directory, so a `chdir` or kernel
+restart will not break a run; and anything without a keyword argument can be set
+through `overrides=`, deep-merged onto the template last.
 
-Relative paths are anchored to the configuration file's directory rather than the
-process working directory, so a `chdir` or a kernel restart will not break a run.
-An absolute `output_root` still makes the intent unambiguous.
-
-Long phases are silent by default. To watch progress from a notebook:
+Long phases are silent by default:
 
 ```python
 import logging
@@ -302,33 +288,8 @@ logging.getLogger("cell_curator").setLevel(logging.INFO)
 logging.getLogger("cell_curator").addHandler(logging.StreamHandler())
 ```
 
-Adaptive refinement — cluster impurity is investigated, not assumed:
-
-```python
-cur.audit_parents()        # per-parent impurity signals: donor/capture dominance,
-                           # doublet and incompatible-program fractions, QC outliers
-cur.propose_subclusters()  # bounded candidates: reuse a stored higher-resolution
-                           # clustering if one matches, else one parent-local pass
-cur.decide_subclusters()   # ACCEPT SPLIT | RETAIN PARENT | DOUBLET/MIXED |
-                           # TECHNICAL/UNRESOLVED, from frozen evidence
-cur.refine_clusters()      # all four of the above, in order
-```
-
-Canonical parents stay frozen throughout: refinement proposes candidates that must
-clear `evidence.required_candidate_gates` and reviewer sign-off. A parent whose
-impurity turns out to be technical or doublet-driven is reported as such rather than
-carved into subtypes.
-
-Two deliberate differences from LLM-annotator packages: an in-memory `AnnData` is
-written to the run directory and hashed before anything reads it, and there is no
-method that returns finished labels. Evidence is computed for you; deciding what it
-means is the reviewer's job — a person, or the Claude/Codex agent driving the skill.
-Nothing here contacts a third-party inference service.
-
-Anything not exposed as a keyword argument can be set through `overrides=`, which is
-deep-merged onto the template last.
-
-### Stable function API
+<details>
+<summary>Stable function API — the same implementation, without the object</summary>
 
 ```python
 from cell_curator import (
@@ -357,23 +318,14 @@ from cell_curator import (
     validate_run,
 )
 ```
-
-These functions and the CLI call the same package implementation. The Snakemake DAG
-in [`workflow/Snakefile`](workflow/Snakefile) exposes separate `all_evidence`,
-`review_packet`, `finalization`, and `writeback` targets; write-back is not the default.
-
-See [`skills/cell-curator/SKILL.md`](skills/cell-curator/SKILL.md) for the agent
-workflow and the one-level
-[`skills/cell-curator/references/`](skills/cell-curator/references/) documents for
-input, assay, refinement, evidence, decision, artifact, compute, and validation
-contracts.
+</details>
 
 ## Scientific boundaries
 
 - Cell type and cell state are independent axes.
 - Missing panel features are unmeasured, not negative.
 - ATAC peaks are accessibility evidence; gene activity is indirect evidence.
-- A configured RAPIDS lane requires the declared real GPU/software contract and fails
+- A configured RAPIDS lane requires its declared real GPU/software contract and fails
   closed. It never substitutes a CPU result.
 - `Unknown` is a valid result when coverage, coherence, margin, or required capability
   is inadequate.
@@ -381,3 +333,18 @@ contracts.
   always require local semantic validation.
 - No superiority claim is made without measured neutral benchmark results. Public
   benchmark manifests record pending external inputs and exact reproduction commands.
+
+## Documentation
+
+| Topic | Document |
+| --- | --- |
+| Agent workflow, stage by stage | [SKILL.md](skills/cell-curator/SKILL.md) |
+| Input, IDs, matrices, QC | [input-contract.md](skills/cell-curator/references/input-contract.md) |
+| Assay and provider routing | [assay-routing.md](skills/cell-curator/references/assay-routing.md) |
+| Parent-local refinement | [adaptive-subclustering.md](skills/cell-curator/references/adaptive-subclustering.md) |
+| Signed and multimodal evidence | [multimodal-evidence.md](skills/cell-curator/references/multimodal-evidence.md) |
+| Assumptions, decisions, critics | [decision-gates.md](skills/cell-curator/references/decision-gates.md) |
+| Durable artifact schemas | [artifact-schemas.md](skills/cell-curator/references/artifact-schemas.md) |
+| Compute, GPU contract, resume | [compute-and-snakemake.md](skills/cell-curator/references/compute-and-snakemake.md) |
+| Strict completion criteria | [validation.md](skills/cell-curator/references/validation.md) |
+| Neutral capability mapping | [quadbio-parity.md](skills/cell-curator/references/quadbio-parity.md) |
