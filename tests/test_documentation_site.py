@@ -22,6 +22,7 @@ sys.path.insert(0, str(REPO_ROOT / "docs"))
 import _sync  # noqa: E402
 
 LINK = re.compile(r"(?<=\]\()(?!https?:|mailto:|#)([^)]+)(?=\))")
+CARD_LINK = re.compile(r"^:link: (_generated/[^\n]+)$", re.MULTILINE)
 
 
 @pytest.mark.parametrize("source", sorted(_sync.PAGES))
@@ -84,6 +85,21 @@ def test_every_generated_page_is_reachable_from_the_toctree() -> None:
 
     orphaned = [page for page in _sync.PAGES.values() if f"_generated/{page[:-3]}" not in entries]
     assert not orphaned, f"generated but not in any toctree: {orphaned}"
+
+
+def test_every_landing_card_links_to_a_published_document() -> None:
+    """Task routes on the landing page must not become polished-looking dead ends."""
+
+    index = (REPO_ROOT / "docs" / "index.md").read_text()
+    links = CARD_LINK.findall(index)
+    published = {f"_generated/{page[:-3]}" for page in _sync.PAGES.values()}
+    published.add("_generated/api")
+
+    assert links, "the landing page has no task routes"
+    assert len(links) == len(set(links)), f"landing cards repeat a destination: {links}"
+    assert not (unknown := sorted(set(links) - published)), (
+        f"landing cards link to unpublished documents: {unknown}"
+    )
 
 
 def test_every_reference_document_is_published() -> None:

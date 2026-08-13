@@ -2,7 +2,8 @@
 :hidden:
 :caption: Getting started
 
-Overview <_generated/readme>
+Install and quick starts <_generated/readme>
+Agent workflow <_generated/skill>
 ```
 
 ```{toctree}
@@ -16,7 +17,6 @@ _generated/api
 :hidden:
 :caption: Contracts
 
-_generated/skill
 _generated/reference/input-contract
 _generated/reference/assay-routing
 _generated/reference/adaptive-subclustering
@@ -33,43 +33,49 @@ _generated/reference/quadbio-parity
 Evidence-driven cell-type annotation for **pre-clustered** AnnData and MuData — as a
 Claude Code plugin, a Codex skill, a Python API, and a CLI.
 
-It does not hand you labels. It computes the evidence a reviewer needs to assign
-them, then holds the run at explicit gates until a person signs off. `Unknown` is a
-valid answer.
+Start with clusters you already trust. cell-curator assembles the evidence for each
+label, preserves inadequate evidence as `Unknown`, and pauses for review before
+anything is written back.
 
-## Where to start
+## Choose how to start
 
-::::{grid} 1 1 2 2
+::::{grid}
 :gutter: 2
 
-:::{grid-item-card} Overview
+:::{grid-item-card} Start with the plugin
+:columns: 12 12 7 7
 :link: _generated/readme
 :link-type: doc
 
-Install, the two quick starts, configuration for your assay, and what a run
-produces. Start here.
+Install the runtime and agent skill, then adapt the example prompt with your input
+path, cluster key, assay layers, biological context, and marker programs.
 :::
 
-:::{grid-item-card} Python API
+:::{grid-item-card} Run from Python
+:columns: 12 12 5 5
 :link: _generated/api
 :link-type: doc
 
-`CellCurator` and the stable function API, generated from the source.
+Use `CellCurator` in a notebook or script, or call the stable functions shared by
+the CLI and Snakemake workflow.
 :::
 
-:::{grid-item-card} Agent workflow
-:link: _generated/skill
+:::{grid-item-card} Configure your assay
+:columns: 12 12 5 5
+:link: _generated/reference/assay-routing
 :link-type: doc
 
-The stage-by-stage instructions Claude and Codex follow when driving the skill.
+Declare RNA, protein, ATAC or gene activity, and spatial evidence without crossing
+modality or representation boundaries.
 :::
 
-:::{grid-item-card} Contracts
-:link: _generated/reference/input-contract
+:::{grid-item-card} Understand the gates
+:columns: 12 12 7 7
+:link: _generated/reference/decision-gates
 :link-type: doc
 
-Input, assay routing, refinement, evidence, gates, artifact schemas, compute, and
-strict completion criteria.
+See when a run must stop, how `Unknown` is retained, and what must be approved before
+labels can reach the source object.
 :::
 
 ::::
