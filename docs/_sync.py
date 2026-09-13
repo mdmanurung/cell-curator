@@ -122,8 +122,7 @@ def render_api() -> str:
 
     return f"""# Python API
 
-Everything `cell_curator` exports. The guided object is the usual entry point; the
-functions beneath it are the same implementation the CLI and the Snakemake DAG call.
+The guided object and the functions used by the CLI and Snakemake workflow.
 
 ## Guided object
 

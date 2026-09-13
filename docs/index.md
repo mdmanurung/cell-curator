@@ -2,12 +2,13 @@
 :hidden:
 :caption: Getting started
 
-Install and quick starts <_generated/readme>
+Install and examples <_generated/readme>
 Agent workflow <_generated/skill>
 ```
 
 ```{toctree}
 :hidden:
+:maxdepth: 1
 :caption: Python API
 
 _generated/api
@@ -15,7 +16,7 @@ _generated/api
 
 ```{toctree}
 :hidden:
-:caption: Contracts
+:caption: Methods and validation
 
 _generated/reference/input-contract
 _generated/reference/assay-routing
@@ -30,61 +31,56 @@ _generated/reference/quadbio-parity
 
 # cell-curator
 
-Evidence-driven cell-type annotation for **pre-clustered** AnnData and MuData — as a
-Claude Code plugin, a Codex skill, a Python API, and a CLI.
+This package annotates pre-clustered AnnData and MuData from marker, ontology,
+reference, and multimodal evidence. It records uncertainty and requires review before
+write-back.
 
-Start with clusters you already trust. cell-curator assembles the evidence for each
-label, preserves inadequate evidence as `Unknown`, and pauses for review before
-anything is written back.
-
-## Choose how to start
+## Start by task
 
 ::::{grid}
 :gutter: 2
 
-:::{grid-item-card} Start with the plugin
+:::{grid-item-card} Use an agent
 :columns: 12 12 7 7
 :link: _generated/readme
 :link-type: doc
 
-Install the runtime and agent skill, then adapt the example prompt with your input
-path, cluster key, assay layers, biological context, and marker programs.
+Install the runtime and skill, then provide the input, assay, cluster key, context,
+and marker programs.
 :::
 
-:::{grid-item-card} Run from Python
+:::{grid-item-card} Use Python
 :columns: 12 12 5 5
 :link: _generated/api
 :link-type: doc
 
-Use `CellCurator` in a notebook or script, or call the stable functions shared by
-the CLI and Snakemake workflow.
+Run `CellCurator` from a notebook or script, or call the underlying functions.
 :::
 
-:::{grid-item-card} Configure your assay
+:::{grid-item-card} Declare assays
 :columns: 12 12 5 5
 :link: _generated/reference/assay-routing
 :link-type: doc
 
-Declare RNA, protein, ATAC or gene activity, and spatial evidence without crossing
-modality or representation boundaries.
+Define RNA, protein, ATAC, gene-activity, and spatial evidence without mixing their
+measurement semantics.
 :::
 
-:::{grid-item-card} Understand the gates
+:::{grid-item-card} Review decisions
 :columns: 12 12 7 7
 :link: _generated/reference/decision-gates
 :link-type: doc
 
-See when a run must stop, how `Unknown` is retained, and what must be approved before
-labels can reach the source object.
+Review uncertainty, retained parent labels, and the approvals required for
+write-back.
 :::
 
 ::::
 
-## The rules it will not bend
+## Analytical constraints
 
-- Cell type and cell state are independent axes.
-- Missing panel features are unmeasured, not negative.
-- A configured RAPIDS lane fails closed rather than substituting a CPU result.
-- `Unknown` is a valid result when coverage, coherence, margin, or capability is
-  inadequate.
-- Nothing is written back to your object without a separate, hash-bound approval.
+- Cell type and cell state are separate axes.
+- Missing features are unmeasured, not negative evidence.
+- A required RAPIDS result is produced only under its declared GPU contract.
+- `Unknown` is retained when the evidence is inadequate.
+- Write-back requires a separate, hash-bound approval.

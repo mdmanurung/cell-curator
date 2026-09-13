@@ -1,98 +1,64 @@
 # Compute, Snakemake, and immutability
 
-## Phase boundaries
+## Workflow boundaries
 
-Use explicit aggregate targets:
+`workflow/Snakefile` defines the manifest-driven DAG. Its phases are:
 
-1. input freeze and parent audits (CPU);
-2. candidate discovery and local graphs/stability (CPU, with local resources);
-3. binary comparison preparation (CPU);
-4. backend-specific marker lanes (validated GPU for RAPIDS lanes);
-5. applicable enrichment, absolute evidence, technical summaries, and critic inputs;
-6. explicit review-packet build;
-7. explicit final mapping validation;
-8. separate, human-approved write-back.
+1. freeze the input and audit parent clusters on CPU;
+2. discover candidates and assess local graph stability on CPU;
+3. prepare binary comparisons on CPU;
+4. run backend-specific marker methods, including validated RAPIDS routes;
+5. compute enrichment, absolute evidence, technical summaries, and critic inputs;
+6. build the review packet;
+7. validate the final mapping;
+8. apply an approved write-back.
 
-Review packets and finalizers are never default targets. Snakemake owns
-dependencies and resume; do not rerun valid immutable artifacts manually.
+Review, finalization, and write-back are explicit targets. Supply the configuration
+with `--configfile` and use `workflow/profiles/slurm` for scheduler execution.
+Snakemake manages dependencies, stale artifacts, and resume.
 
-## Immutable writer contract
+## Immutable artifacts
 
-Each rule writes to a versioned path through a same-filesystem partial file,
-validates postconditions, then atomically publishes. Existing outputs cause a
-failure unless their manifest proves an exact resumable match. Never delete a
-valid artifact to satisfy a rerun. A new configuration produces a new run ID.
+Each rule writes to a partial file on the output filesystem, validates it, and then
+publishes it atomically. An existing output may be reused only when its manifest
+matches the requested run. Configuration changes require a new run ID.
 
-## Manifests
+Manifests record input, configuration, rule, script, registry, barcode, and output
+hashes; package versions; commands; parameters; runtime; and fallbacks. RAPIDS
+receipts also record the device, compute capability, visible-device count, driver,
+CUDA runtime, RAPIDS distribution, native API, resolved options, and per-method group
+coverage.
 
-Record input/config/rule/script hashes, package versions, command/parameters,
-candidate registry hash, ordered and set barcode hashes, output hashes, runtime,
-and fallbacks. RAPIDS receipts additionally record device model, compute
-capability, visible-device count, driver, CUDA runtime, RAPIDS distribution,
-and native API.
+## GPU contract
 
-## GPU fail-closed behavior
+Every RAPIDS rule validates its GPU contract before opening the input. A failed
+check creates no output or partial evidence and leaves the downstream target
+incomplete. Other marker methods use separate rules; they do not replace a required
+RAPIDS result. Declare GPU models and scheduler resources in the configuration.
 
-GPU validation is the first action in every RAPIDS marker rule. If it fails:
+Validate the runtime inside the allocated job. Pin CPU and GPU environments with
+lockfiles or immutable definitions, and record whether each environment was solved
+or reused. Python 3.11 or newer is required.
 
-- do not read the input matrix;
-- do not create an output directory;
-- do not create partial evidence;
-- do not schedule a CPU replacement;
-- leave the downstream completion target unsatisfied.
+## Validated RAPIDS environment
 
-Non-RAPIDS methods use separate rules and receipts; they never serve as a CPU
-fallback for a required RAPIDS lane. GPU models and scheduler resources are
-configuration inputs. Do not hard-code a partition, model, account, or wall time.
+The GPU route was validated on an NVIDIA RTX PRO 6000 Blackwell Server Edition MIG
+`1g.24gb` slice with compute capability 12.0, driver 580.159.04, and CUDA 13.2. The
+validation covered contract rejection, Snakemake GPU resource requests, and native
+Wilcoxon and logistic-regression execution through
+`rapids_singlecell.tl.rank_genes_groups`.
 
-## Environment handling
+### Release selection
 
-Pin environments with a lockfile or immutable environment definition. Validate
-the runtime inside the allocated job, not only on the submission host. Record
-whether the environment was solved or reused. Keep CPU and GPU phases separate
-when their dependency stacks differ. The package requires Python 3.11 or newer
-plus its locked scientific dependencies; do not run it with a
-legacy login-shell Python by accident.
+`tl.rank_genes_groups` first appeared in rapids-singlecell 0.14.
 
-## Workflow
-
-`workflow/Snakefile` is the executable manifest-driven DAG. Supply the strict
-configuration with `--configfile`, retain its evidence/review/finalization/write-back
-boundaries, and use `workflow/profiles/slurm` for configured scheduler execution.
-
-## Real-hardware GPU validation status
-
-Validated on an NVIDIA RTX PRO 6000 Blackwell Server Edition MIG `1g.24gb` slice
-(compute capability 12.0, driver 580.159.04, CUDA runtime 13.2).
-
-Confirmed working on that hardware:
-
-- the declared/observed contract check in `rank_markers_gpu.inspect_runtime`
-  validates version, distribution, CUDA major, single-device visibility, and the
-  device/compute-capability allowlist;
-- a deliberately wrong `allowed_gpu_contracts` entry is rejected on the live
-  device rather than merely parsed;
-- the Snakemake DAG requests a GPU for a RAPIDS lane (`evidence_gpu` returns 1);
-- **native GPU Wilcoxon and logreg both execute** through
-  `rapids_singlecell.tl.rank_genes_groups`.
-
-### Choosing a rapids-singlecell release
-
-`tl.rank_genes_groups` — the single entry point for both `method="wilcoxon"` and
-`method="logreg"` — arrived in **0.14**. Releases before it expose only
-`rank_genes_groups_logreg` and contain no Wilcoxon at all, so the lane cannot
-satisfy its receipt contract on them; `native_ranking_callable` fails closed with
-the installed version named.
-
-Version selection is a real constraint, not a formality:
-
-| Release | Ships | Python | Notes |
+| Release | Distribution | Python | Constraint |
 | --- | --- | --- | --- |
-| ≤ 0.13.x | wheel | ≥ 3.11 | no `rank_genes_groups`, no Wilcoxon — unusable for this lane |
-| 0.14.0–0.14.1 | wheel | ≥ 3.12 | has Wilcoxon; **no** `use_continuity` or `multi_gpu` |
-| ≥ 0.15 | sdist only | ≥ 3.12 | full signature, but building it needs a complete CUDA toolkit (`nvcc`, `cuda_runtime.h`, `crt/host_config.h`); the fragmented pip CUDA wheels do not satisfy CMake's toolkit detection |
+| 0.13.x or earlier | wheel | 3.11 or newer | No native Wilcoxon; unsuitable for this route. |
+| 0.14.0 to 0.14.1 | wheel | 3.12 or newer | Native Wilcoxon; no `use_continuity` or `multi_gpu`. |
+| 0.15 or later | source | 3.12 or newer | Full signature; build requires a complete CUDA toolkit. |
 
-Working wheel-only environment, no `nvcc` required:
+A wheel-only environment can be installed without `nvcc`:
 
 ```bash
 uv venv --python 3.12 .venv-gpu
@@ -102,34 +68,17 @@ uv pip install --python .venv-gpu \
   "cudf-cu13==25.12.*" "cuml-cu13==25.12.*" "cuvs-cu13==25.12.*" "cugraph-cu13==25.12.*"
 ```
 
-Pin RAPIDS to 25.12: `rapids-singlecell` 0.13/0.14 are incompatible with RAPIDS
-26.x, which removed `cuml.thirdparty_adapters.check_array`.
+Pin RAPIDS to 25.12. RAPIDS 26.x removed
+`cuml.thirdparty_adapters.check_array`, which rapids-singlecell 0.13 and 0.14 use.
 
-### Optional statistical switches are resolved against the real signature
+### Options and group coverage
 
-`rank_genes_groups` gained parameters over time and also accepts `**kwds`, which
-would swallow an unknown name without applying it. So each optional switch is
-checked against the installed signature: applied when declared, accepted as a
-no-op only when it was requested *off* (absent means not applied, which is the
-same result), and refused outright when requested *on* against a release that
-cannot honour it. The resolution is recorded in the receipt under
-`runtime.ranking_options`, and it runs before the input is opened so an
-unhonourable option fails fast.
+Optional ranking parameters are checked against the installed function signature
+before the input is opened. A requested option is applied only when supported; the
+resolution is recorded under `runtime.ranking_options`.
 
-### Per-group method coverage
-
-`rank_genes_groups` returns per-group results as recarray fields. A binary
-logistic regression fits a single coefficient vector, so a two-group comparison
-publishes one field — the other group's ranking is that one reversed and is not
-emitted separately. Wilcoxon publishes every group.
-
-The lane therefore reads only the fields a method actually reported, and records
-what each covered in the receipt under `runtime.ranking_group_coverage`. Nothing
-is fabricated for a group a method skipped. A consequence worth knowing when
-reading evidence: `method_concordant` is false for a group logreg did not cover,
-because there is no second method to corroborate it — the coverage record is what
-distinguishes that from genuine methodological disagreement.
-
-Verified end to end on the Blackwell MIG slice: `wilcoxon: ["0", "1"]`,
-`logreg: ["0"]` for a two-cluster run, with the lane completing and its receipt
-satisfying the full RAPIDS contract.
+Wilcoxon reports every comparison group. Binary logistic regression reports one
+coefficient vector, so only one group is emitted. Receipts record this distinction
+under `runtime.ranking_group_coverage`; no result is inferred for an unreported
+group. On the validated two-cluster run, coverage was `wilcoxon: ["0", "1"]` and
+`logreg: ["0"]`.
