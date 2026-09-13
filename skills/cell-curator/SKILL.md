@@ -157,6 +157,10 @@ cell-curator crosscheck scimilarity --input canonical.h5ad \
 cell-curator reference acquire-census --organism homo_sapiens --tissue blood \
   --output references/census.h5ad --version CENSUS_VERSION --max-cells 50000 \
   --expected-sha256 SHA256
+cell-curator reference acquire-azimuth --url https://HOST/PATH \
+  --output references/azimuth.h5ad --expected-sha256 SHA256
+cell-curator reference acquire-scimilarity --url https://HOST/PATH \
+  --output models/scimilarity.tar.gz --expected-sha256 SHA256
 cell-curator reference train-scanvi --reference references/census.h5ad \
   --labels-key cell_type --counts-layer counts --output-dir models/scanvi
 cell-curator reference map-scarches --query canonical.h5ad \
@@ -166,6 +170,11 @@ cell-curator reference map-scarches --query canonical.h5ad \
 Add `--help` to a route for its remaining flags. A `.h5mu` input additionally
 requires `--input-modality`, `--query-modality`, or `--reference-modality`.
 `--backend gpu` on `reference-knn` runs only after GPU validation passes.
+
+Each `acquire-*` route is bounded by `--max-bytes` and `--timeout-seconds`, is
+pinned by a required `--expected-sha256`, and writes a receipt recording the
+cache hit and checksum result. A bundle is stored as published; extract it
+yourself before passing it to `--reference` or `--model-path`.
 
 ## 4. Review and validate
 

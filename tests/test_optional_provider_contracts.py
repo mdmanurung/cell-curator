@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import sys
 from contextlib import contextmanager
@@ -19,7 +20,10 @@ from cell_curator.contracts import ContractError
 from cell_curator.crosschecks import (
     celltypist_hypothesis,
     discover_celltypist_models,
+    fetch_azimuth_reference,
     fetch_census_reference,
+    fetch_pinned_reference_bundle,
+    fetch_scimilarity_model,
     map_scarches_query,
     train_scanvi_reference,
 )
@@ -668,3 +672,206 @@ def test_census_worker_uses_official_filter_and_excludes_blank_labels(
         "obs_column_names": ["cell_type", "subclass"],
     }
     assert output.is_file()
+
+
+class _FakeResponse:
+    """The slice of an HTTP response the bundle acquirer actually uses."""
+
+    def __init__(self, payload: bytes) -> None:
+        self._buffer = io.BytesIO(payload)
+
+    def read(self, size: int = -1) -> bytes:
+        return self._buffer.read(size)
+
+    def __enter__(self) -> _FakeResponse:
+        return self
+
+    def __exit__(self, *exc: object) -> bool:
+        return False
+
+
+def _serve(monkeypatch: pytest.MonkeyPatch, payload: bytes) -> list[str]:
+    requested: list[str] = []
+
+    def fake_urlopen(request: Any, timeout: float = 0.0) -> _FakeResponse:
+        requested.append(request.full_url)
+        return _FakeResponse(payload)
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    return requested
+
+
+def test_pinned_bundle_rejects_plain_http_bad_digest_and_an_unbounded_size(
+    tmp_path: Path,
+) -> None:
+    """The three fields that make a bundle identifiable are validated, not defaulted."""
+
+    common = {"output_path": tmp_path / "bundle.tar.gz", "max_bytes": 1024}
+    with pytest.raises(ContractError, match="must be https"):
+        fetch_pinned_reference_bundle(
+            provider="azimuth", url="http://host/b", expected_sha256="a" * 64, **common
+        )
+    with pytest.raises(ContractError, match="lowercase SHA-256 hex"):
+        fetch_pinned_reference_bundle(
+            provider="azimuth", url="https://host/b", expected_sha256="NOTHEX", **common
+        )
+    with pytest.raises(ContractError, match="max_bytes must be between"):
+        fetch_pinned_reference_bundle(
+            provider="azimuth",
+            url="https://host/b",
+            output_path=tmp_path / "bundle.tar.gz",
+            expected_sha256="a" * 64,
+            max_bytes=0,
+        )
+    with pytest.raises(ContractError, match="timeout_seconds must be finite"):
+        fetch_pinned_reference_bundle(
+            provider="azimuth",
+            url="https://host/b",
+            expected_sha256="a" * 64,
+            timeout_seconds=0.0,
+            **common,
+        )
+
+
+def test_cached_pinned_bundle_receipt_records_url_bound_and_checksum(
+    tmp_path: Path,
+) -> None:
+    cached = tmp_path / "azimuth.h5ad"
+    cached.write_bytes(b"checksum-pinned cached bundle fixture")
+    expected = _digest(cached)
+
+    status = fetch_azimuth_reference(
+        url="https://host/azimuth.h5ad",
+        output_path=cached,
+        expected_sha256=expected,
+        max_bytes=4096,
+        timeout_seconds=11.0,
+    )
+
+    assert status["provider"] == "azimuth"
+    assert status["status"] == "complete"
+    assert status["cache_hit"] is True
+    assert status["checksum_validated"] is True
+    assert status["url"] == "https://host/azimuth.h5ad"
+    assert status["max_bytes"] == 4096
+    assert status["timeout_seconds"] == 11.0
+    assert status["artifacts"] == {"bundle": str(cached), "sha256": expected}
+    assert status["automated_output_role"] == "hypothesis_not_verdict"
+    assert json.loads((tmp_path / "provider_status.json").read_text()) == status
+
+
+def test_cached_pinned_bundle_mismatch_preserves_the_untrusted_file(tmp_path: Path) -> None:
+    cached = tmp_path / "scimilarity.tar.gz"
+    payload = b"untrusted cached bundle fixture"
+    cached.write_bytes(payload)
+
+    status = fetch_scimilarity_model(
+        url="https://host/scimilarity.tar.gz",
+        output_path=cached,
+        expected_sha256="0" * 64,
+        max_bytes=4096,
+    )
+
+    assert status["provider"] == "scimilarity"
+    assert status["status"] == "failed"
+    assert status["cache_hit"] is True
+    assert status["checksum_validated"] is False
+    assert status["artifacts"] == {
+        "untrusted_bundle": str(cached),
+        "sha256": hashlib.sha256(payload).hexdigest(),
+    }
+    # A failing checksum must not delete the operator's file for them.
+    assert cached.read_bytes() == payload
+
+
+def test_pinned_bundle_download_verifies_its_digest_and_publishes_atomically(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    payload = b"a pinned reference bundle" * 64
+    requested = _serve(monkeypatch, payload)
+    destination = tmp_path / "nested" / "azimuth.h5ad"
+
+    status = fetch_azimuth_reference(
+        url="https://host/azimuth.h5ad",
+        output_path=destination,
+        expected_sha256=hashlib.sha256(payload).hexdigest(),
+        max_bytes=len(payload),
+    )
+
+    assert requested == ["https://host/azimuth.h5ad"]
+    assert status["status"] == "complete"
+    assert status["cache_hit"] is False
+    assert status["checksum_validated"] is True
+    assert destination.read_bytes() == payload
+    assert not list(destination.parent.glob(".*partial*"))
+
+
+def test_pinned_bundle_download_refuses_a_body_larger_than_its_bound(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A moved or replaced URL must not be able to fill the cache directory."""
+
+    payload = b"x" * 8192
+    _serve(monkeypatch, payload)
+    destination = tmp_path / "azimuth.h5ad"
+
+    status = fetch_azimuth_reference(
+        url="https://host/azimuth.h5ad",
+        output_path=destination,
+        expected_sha256=hashlib.sha256(payload).hexdigest(),
+        max_bytes=1024,
+    )
+
+    assert status["status"] == "failed"
+    assert "exceeded its declared 1024-byte bound" in status["reason"]
+    assert not destination.exists()
+    assert not list(tmp_path.glob(".*partial*"))
+
+
+def test_pinned_bundle_download_checksum_mismatch_leaves_no_artifact(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    payload = b"a bundle that is not what was pinned"
+    _serve(monkeypatch, payload)
+    destination = tmp_path / "scimilarity.tar.gz"
+
+    status = fetch_scimilarity_model(
+        url="https://host/scimilarity.tar.gz",
+        output_path=destination,
+        expected_sha256="0" * 64,
+        max_bytes=4096,
+    )
+
+    assert status["status"] == "failed"
+    assert status["checksum_validated"] is False
+    assert status["artifacts"] == {"sha256": hashlib.sha256(payload).hexdigest()}
+    assert not destination.exists()
+    assert not list(tmp_path.glob(".*partial*"))
+
+
+def test_an_unreachable_bundle_url_is_a_receipt_not_an_exception(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Offline is an expected state for an optional provider, not a crash."""
+
+    def refuse(request: Any, timeout: float = 0.0) -> _FakeResponse:
+        raise OSError("network is unreachable")
+
+    monkeypatch.setattr("urllib.request.urlopen", refuse)
+    destination = tmp_path / "azimuth.h5ad"
+
+    status = fetch_azimuth_reference(
+        url="https://host/azimuth.h5ad",
+        output_path=destination,
+        expected_sha256="a" * 64,
+        max_bytes=4096,
+    )
+
+    assert status["status"] == "failed"
+    assert "network is unreachable" in status["reason"]
+    assert status["remediation"].startswith("Check network access")
+    assert not destination.exists()

@@ -767,6 +767,48 @@ def fetch_census_reference(
     )
 
 
+def fetch_azimuth_reference(
+    *,
+    url: str,
+    output_path: str | Path,
+    expected_sha256: str,
+    max_bytes: int = 512 * 1024**2,
+    timeout_seconds: float = 600.0,
+) -> dict[str, Any]:
+    """Acquire a pinned curated-human reference bundle with a cache receipt."""
+
+    from .crosschecks import fetch_azimuth_reference as fetch
+
+    return fetch(
+        url=url,
+        output_path=Path(output_path),
+        expected_sha256=expected_sha256,
+        max_bytes=max_bytes,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def fetch_scimilarity_model(
+    *,
+    url: str,
+    output_path: str | Path,
+    expected_sha256: str,
+    max_bytes: int = 32 * 1024**3,
+    timeout_seconds: float = 3_600.0,
+) -> dict[str, Any]:
+    """Acquire a pinned SCimilarity model bundle with a cache receipt."""
+
+    from .crosschecks import fetch_scimilarity_model as fetch
+
+    return fetch(
+        url=url,
+        output_path=Path(output_path),
+        expected_sha256=expected_sha256,
+        max_bytes=max_bytes,
+        timeout_seconds=timeout_seconds,
+    )
+
+
 def train_scanvi_reference_model(
     *,
     reference_path: str | Path,

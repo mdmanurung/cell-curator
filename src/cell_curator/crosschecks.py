@@ -15,6 +15,7 @@ import math
 import multiprocessing
 import os
 import queue
+import urllib.request
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, Protocol, cast
@@ -1271,13 +1272,198 @@ def fetch_census_reference(
     )
 
 
+_MAX_BUNDLE_BYTES = 64 * 1024**3
+
+
+def fetch_pinned_reference_bundle(
+    *,
+    provider: str,
+    url: str,
+    output_path: str | Path,
+    expected_sha256: str,
+    max_bytes: int,
+    timeout_seconds: float = 600.0,
+) -> dict[str, Any]:
+    """Acquire one pinned reference bundle under a declared size and checksum.
+
+    Azimuth and SCimilarity publish their references as opaque bundles rather
+    than through a queryable API, so the digest is the only identity they have.
+    The checksum is therefore required here, unlike the Census route, which pins
+    a census version instead. The transfer is capped while it streams, so a URL
+    that has been moved or replaced cannot fill the cache directory before the
+    checksum gets a chance to reject it.
+
+    The archive is stored as published. Extracting it is the caller's step: an
+    acquisition that unpacked archives would be deciding what to write where.
+    """
+
+    destination = Path(output_path)
+    root = destination.parent
+    url = url.strip()
+    expected_sha256 = expected_sha256.strip().lower()
+    if not url.startswith("https://"):
+        raise ContractError(f"{provider} bundle URL must be https; got {url!r}")
+    if len(expected_sha256) != 64 or any(
+        character not in "0123456789abcdef" for character in expected_sha256
+    ):
+        raise ContractError(f"{provider} expected_sha256 must be lowercase SHA-256 hex")
+    if max_bytes < 1 or max_bytes > _MAX_BUNDLE_BYTES:
+        raise ContractError(f"{provider} max_bytes must be between 1 and {_MAX_BUNDLE_BYTES}")
+    if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
+        raise ContractError(f"{provider} timeout_seconds must be finite and positive")
+
+    request_metadata: dict[str, Any] = {
+        "url": url,
+        "expected_sha256": expected_sha256,
+        "max_bytes": max_bytes,
+        "timeout_seconds": timeout_seconds,
+    }
+
+    def publish_bundle(
+        value: dict[str, Any], *, cache_hit: bool, checksum_validated: bool
+    ) -> dict[str, Any]:
+        value.update(request_metadata)
+        value.update({"cache_hit": cache_hit, "checksum_validated": checksum_validated})
+        return _publish_status(root, value)
+
+    if destination.is_file():
+        digest = sha256(destination)
+        if digest != expected_sha256:
+            return publish_bundle(
+                _status(
+                    provider,
+                    "failed",
+                    reason="cached bundle checksum does not match the declared SHA-256",
+                    remediation="Remove the untrusted cache entry and retry with the pinned receipt.",
+                    artifacts={"untrusted_bundle": str(destination), "sha256": digest},
+                ),
+                cache_hit=True,
+                checksum_validated=False,
+            )
+        return publish_bundle(
+            _status(
+                provider,
+                "complete",
+                artifacts={"bundle": str(destination), "sha256": digest},
+            ),
+            cache_hit=True,
+            checksum_validated=True,
+        )
+
+    root.mkdir(parents=True, exist_ok=True)
+    partial = destination.with_name(f".{destination.name}.partial.{os.getpid()}")
+    written = 0
+    try:
+        request = urllib.request.Request(url, headers={"User-Agent": "cell-curator/0.2"})
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            with partial.open("wb") as handle:
+                while True:
+                    chunk = response.read(1 << 20)
+                    if not chunk:
+                        break
+                    written += len(chunk)
+                    if written > max_bytes:
+                        raise ContractError(
+                            f"{provider} bundle exceeded its declared {max_bytes}-byte bound"
+                        )
+                    handle.write(chunk)
+    except ContractError as exc:
+        partial.unlink(missing_ok=True)
+        return publish_bundle(
+            _status(
+                provider,
+                "failed",
+                reason=str(exc),
+                remediation="Raise --max-bytes only after confirming the published bundle size.",
+            ),
+            cache_hit=False,
+            checksum_validated=False,
+        )
+    except (OSError, ValueError) as exc:
+        partial.unlink(missing_ok=True)
+        return publish_bundle(
+            _status(
+                provider,
+                "failed",
+                reason=f"bundle acquisition failed: {exc}",
+                remediation="Check network access, the pinned URL, and cache permissions, then retry.",
+            ),
+            cache_hit=False,
+            checksum_validated=False,
+        )
+
+    digest = sha256(partial)
+    if digest != expected_sha256:
+        partial.unlink(missing_ok=True)
+        return publish_bundle(
+            _status(
+                provider,
+                "failed",
+                reason="downloaded bundle checksum does not match the declared SHA-256",
+                remediation="Do not use the download; verify the pinned URL and expected checksum.",
+                artifacts={"sha256": digest},
+            ),
+            cache_hit=False,
+            checksum_validated=False,
+        )
+    os.replace(partial, destination)
+    return publish_bundle(
+        _status(provider, "complete", artifacts={"bundle": str(destination), "sha256": digest}),
+        cache_hit=False,
+        checksum_validated=True,
+    )
+
+
+def fetch_azimuth_reference(
+    *,
+    url: str,
+    output_path: str | Path,
+    expected_sha256: str,
+    max_bytes: int = 512 * 1024**2,
+    timeout_seconds: float = 600.0,
+) -> dict[str, Any]:
+    """Acquire a pinned curated-human reference bundle for `crosscheck azimuth`."""
+
+    return fetch_pinned_reference_bundle(
+        provider="azimuth",
+        url=url,
+        output_path=output_path,
+        expected_sha256=expected_sha256,
+        max_bytes=max_bytes,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def fetch_scimilarity_model(
+    *,
+    url: str,
+    output_path: str | Path,
+    expected_sha256: str,
+    max_bytes: int = 32 * 1024**3,
+    timeout_seconds: float = 3_600.0,
+) -> dict[str, Any]:
+    """Acquire a pinned SCimilarity model bundle for `crosscheck scimilarity`."""
+
+    return fetch_pinned_reference_bundle(
+        provider="scimilarity",
+        url=url,
+        output_path=output_path,
+        expected_sha256=expected_sha256,
+        max_bytes=max_bytes,
+        timeout_seconds=timeout_seconds,
+    )
+
+
 __all__ = [
     "celltypist_hypothesis",
     "curated_human_reference_hypothesis",
     "discover_celltypist_models",
     "existing_prediction_file",
     "existing_prediction_hypothesis",
+    "fetch_azimuth_reference",
     "fetch_census_reference",
+    "fetch_pinned_reference_bundle",
+    "fetch_scimilarity_model",
     "harmonize_reference_genes",
     "load_symbol_map",
     "map_curated_human_reference_files",

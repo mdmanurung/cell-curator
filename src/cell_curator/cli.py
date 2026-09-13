@@ -259,6 +259,27 @@ def build_parser() -> argparse.ArgumentParser:
     census.add_argument("--label-column", action="append", default=[])
     census.add_argument("--expected-sha256", default="")
     census.add_argument("--timeout-seconds", type=float, default=300.0)
+    for bundle_action, bundle_help, default_bytes, default_timeout in (
+        (
+            "acquire-azimuth",
+            "acquire a pinned curated-human reference bundle",
+            512 * 1024**2,
+            600.0,
+        ),
+        (
+            "acquire-scimilarity",
+            "acquire a pinned SCimilarity model bundle",
+            32 * 1024**3,
+            3_600.0,
+        ),
+    ):
+        bundle = reference_sub.add_parser(bundle_action, help=bundle_help)
+        bundle.add_argument("--url", required=True)
+        bundle.add_argument("--output", required=True, type=Path)
+        bundle.add_argument("--expected-sha256", required=True)
+        bundle.add_argument("--max-bytes", type=int, default=default_bytes)
+        bundle.add_argument("--timeout-seconds", type=float, default=default_timeout)
+
     train = reference_sub.add_parser(
         "train-scanvi", help="train scVI/scANVI under the real-GPU contract"
     )
@@ -682,11 +703,26 @@ def dispatch(args: argparse.Namespace) -> Any:
         return {**status, "n_cells": len(cells)}
     if args.command == "reference":
         from .crosschecks import (
+            fetch_azimuth_reference,
             fetch_census_reference,
+            fetch_scimilarity_model,
             map_scarches_file,
             train_scanvi_reference_file,
         )
 
+        if args.action in {"acquire-azimuth", "acquire-scimilarity"}:
+            acquire = (
+                fetch_azimuth_reference
+                if args.action == "acquire-azimuth"
+                else fetch_scimilarity_model
+            )
+            return acquire(
+                url=args.url,
+                output_path=args.output,
+                expected_sha256=args.expected_sha256,
+                max_bytes=args.max_bytes,
+                timeout_seconds=args.timeout_seconds,
+            )
         if args.action == "acquire-census":
             return fetch_census_reference(
                 organism=args.organism,
