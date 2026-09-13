@@ -906,6 +906,7 @@
             "local_markers",
             "ontology",
             "remote_ontology",
+            "live_ontology",
             "reference",
             "cached_table",
             "remote_table"

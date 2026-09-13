@@ -192,6 +192,19 @@ cell-curator report check --config config.yaml --strict
 cell-curator run validate --config config.yaml
 ```
 
+The local ontology decides whether a CL identifier is valid. When a
+`live_ontology` provider is configured and remote enhancement is authorized,
+corroborate the accessions you assigned against it before write-back:
+
+```bash
+cell-curator ontology corroborate --config config.yaml \
+  --term CL:0000084 --expected-name "T cell"
+```
+
+It reports agreement, disagreement, and unreachability, stores each answer it
+received as a hashed artifact, and changes no label. An absent network is an
+expected result, not a failure.
+
 The report must show embeddings, marker evidence, hierarchy, uncertainty, rejected
 alternatives, QC, composition, provenance, and spatial context when available.
 Reconciliation records a reviewer and rationale for every resolved or dismissed

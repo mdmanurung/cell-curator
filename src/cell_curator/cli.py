@@ -134,6 +134,13 @@ def build_parser() -> argparse.ArgumentParser:
         "provision", help="provision a configured checksum-pinned optional ontology cache"
     )
     _config_argument(ontology_provision)
+    ontology_corroborate = ontology_sub.add_parser(
+        "corroborate",
+        help="corroborate CL terms against an optional live service without depending on it",
+    )
+    _config_argument(ontology_corroborate)
+    ontology_corroborate.add_argument("--term", action="append", default=[], required=True)
+    ontology_corroborate.add_argument("--expected-name", action="append", default=[])
 
     run_command = commands.add_parser("run", help="operate the three-stage guided workflow")
     run_sub = run_command.add_subparsers(dest="action", required=True)
@@ -536,6 +543,16 @@ def dispatch(args: argparse.Namespace) -> Any:
             from .api import provision_ontology
 
             return provision_ontology(args.config)
+        if args.action == "corroborate":
+            from .api import corroborate_ontology_terms
+
+            if args.expected_name and len(args.expected_name) != len(args.term):
+                raise ContractError("--expected-name must be repeated once per --term")
+            return corroborate_ontology_terms(
+                args.config,
+                args.term,
+                expected_names=args.expected_name or None,
+            )
 
         from .api import validate_ontology_terms
 

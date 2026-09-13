@@ -449,6 +449,31 @@ def confirm_annotation_context(
     return confirm_context(config_path, input_path=Path(input_path), reviewer=reviewer)
 
 
+def corroborate_ontology_terms(
+    config_path: str | Path,
+    terms: Iterable[str],
+    *,
+    expected_names: Iterable[str | None] | None = None,
+) -> dict[str, Any]:
+    """Corroborate CL terms against an optional live service without depending on it.
+
+    The local ontology stays authoritative. This reports where a live service
+    agrees, disagrees, or cannot be reached, and stores each answer it received
+    as a hashed artifact so the run remains reproducible from its own files.
+    """
+
+    from .config import load_config
+    from .ontology import corroborate_terms_live, ontology_from_config
+
+    config = load_config(config_path)
+    return corroborate_terms_live(
+        config,
+        list(terms),
+        expected_names=list(expected_names) if expected_names is not None else None,
+        ontology=ontology_from_config(config),
+    )
+
+
 def list_annotation_assumptions(config_path: str | Path) -> dict[str, Any]:
     """Return the living assumptions ledger for a configured run."""
 

@@ -55,6 +55,7 @@ CLI_TO_PUBLIC_NAME: dict[tuple[str, ...], str] = {
     ("markers", "compute"): "run_marker_tools",
     ("markers", "profile"): "run_marker_tools",
     ("markers", "score"): "run_marker_tools",
+    ("ontology", "corroborate"): "corroborate_ontology_terms",
     ("ontology", "provision"): "provision_ontology",
     ("ontology", "validate"): "validate_ontology_terms",
     ("pipeline", "audit"): "audit_parent_clusters",

@@ -5,15 +5,19 @@ from __future__ import annotations
 import csv
 import json
 import re
+import urllib.error
+import urllib.parse
+import urllib.request
 import xml.etree.ElementTree as ET
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
-from .contracts import ContractError, sha256
+from .contracts import ContractError, safe_path_component, sha256
 
 if TYPE_CHECKING:
     from .config import CellCuratorConfig
@@ -462,3 +466,209 @@ def provision_from_config(config: CellCuratorConfig) -> dict[str, Any]:
         "remediation": "Configure a local ontology or remote_ontology provider.",
         "n_terms": len(ontology.terms) if ontology is not None else 0,
     }
+
+
+_LIVE_STATUS_KIND = "cell_curator_live_ontology_status"
+
+
+def live_ontology_provider(config: CellCuratorConfig) -> Any:
+    """Return the single configured live ontology provider, or ``None``."""
+
+    providers = [item for item in config.knowledge.providers if item.kind == "live_ontology"]
+    if len(providers) > 1:
+        raise ContractError("configure at most one live ontology provider")
+    return providers[0] if providers else None
+
+
+def _live_term_from_payload(payload: object, accession: str) -> OntologyTerm | None:
+    """Read one OLS-shaped term document without assuming a single response shape."""
+
+    if not isinstance(payload, dict):
+        return None
+    candidates: list[dict[str, Any]] = []
+    embedded = payload.get("_embedded")
+    if isinstance(embedded, dict) and isinstance(embedded.get("terms"), list):
+        candidates = [item for item in embedded["terms"] if isinstance(item, dict)]
+    elif isinstance(payload.get("terms"), list):
+        candidates = [item for item in payload["terms"] if isinstance(item, dict)]
+    elif payload.get("obo_id") or payload.get("short_form"):
+        candidates = [payload]
+    for item in candidates:
+        obo = str(item.get("obo_id") or item.get("short_form") or "").replace("_", ":")
+        if obo and obo.casefold() != accession.casefold():
+            continue
+        replaced = item.get("term_replaced_by")
+        synonyms = item.get("synonyms") or item.get("obo_synonym") or []
+        return OntologyTerm(
+            accession=obo or accession,
+            name=str(item.get("label") or ""),
+            synonyms=tuple(
+                str(value.get("name") if isinstance(value, dict) else value)
+                for value in synonyms
+            ),
+            obsolete=bool(item.get("is_obsolete", False)),
+            replaced_by=str(replaced) if replaced else None,
+        )
+    return None
+
+
+def _live_findings(
+    live: OntologyTerm,
+    local: OntologyTerm | None,
+    expected_name: str | None,
+) -> list[str]:
+    findings: list[str] = []
+    if live.obsolete:
+        replacement = f"; replaced by {live.replaced_by}" if live.replaced_by else ""
+        findings.append(f"live service reports the term obsolete{replacement}")
+    if local is not None:
+        if local.obsolete != live.obsolete:
+            findings.append(
+                "local obsolescence disagrees with the live service "
+                f"(local={local.obsolete}, live={live.obsolete})"
+            )
+        if live.name and local.name and live.name.casefold() != local.name.casefold():
+            findings.append(
+                f"local name {local.name!r} disagrees with live name {live.name!r}"
+            )
+    if expected_name:
+        known = {live.name.casefold(), *(value.casefold() for value in live.synonyms)}
+        if expected_name.casefold() not in known:
+            findings.append(
+                f"label {expected_name!r} is not the live name or a live synonym of "
+                f"{live.accession}"
+            )
+    return findings
+
+
+def corroborate_terms_live(
+    config: CellCuratorConfig,
+    accessions: Sequence[str],
+    *,
+    expected_names: Sequence[str | None] | None = None,
+    ontology: CellOntology | None = None,
+    run_root: Path | None = None,
+) -> dict[str, Any]:
+    """Corroborate local ontology terms against a live service, never depending on it.
+
+    A live service has no stable digest, so reproducibility comes from the answer
+    this run stored rather than from the endpoint: each response is written under
+    ``knowledge/ontology_live/`` in canonical JSON and hashed, and the receipt
+    records the endpoint, the query, that digest, and the retrieval time. A later
+    reader reproduces the run from its own artifact.
+
+    Nothing here may ground a label. ``require_local_grounding_for_labels`` is
+    pinned true, so this reports agreement and disagreement and leaves the local
+    answer standing — including when the network is absent, which is an expected
+    state for an optional provider and not a failure.
+    """
+
+    from .provenance import replace_json
+
+    names: list[str | None] = list(expected_names or [None] * len(accessions))
+    if len(names) != len(accessions):
+        raise ContractError("expected_names must be supplied once per accession")
+    root = Path(run_root or Path(config.run.output_root) / config.run.run_id)
+    status_path = root / "knowledge" / "ontology_live_status.json"
+
+    def unavailable(reason: str, remediation: str, *, attempted: bool) -> dict[str, Any]:
+        value = {
+            "schema_version": 3,
+            "artifact_kind": _LIVE_STATUS_KIND,
+            "status": "unavailable",
+            "reason": reason,
+            "remediation": remediation,
+            "network_attempted": attempted,
+            "corroborated": [],
+            "automated_output_role": "hypothesis_not_verdict",
+        }
+        replace_json(status_path, value)
+        return value
+
+    provider = live_ontology_provider(config)
+    if provider is None:
+        return unavailable(
+            "no live ontology provider is configured",
+            "Add a live_ontology provider to knowledge.providers to corroborate CL terms.",
+            attempted=False,
+        )
+    if not config.knowledge.allow_optional_remote_enhancement:
+        return unavailable(
+            "optional remote enhancement is disabled",
+            "Authorize knowledge.allow_optional_remote_enhancement to corroborate CL terms; "
+            "local validation and CL-free annotation remain available.",
+            attempted=False,
+        )
+
+    rows: list[dict[str, Any]] = []
+    for accession, expected_name in zip(accessions, names, strict=True):
+        query = f"{provider.url}?{urllib.parse.urlencode({'obo_id': accession})}"
+        local: OntologyTerm | None = None
+        if ontology is not None:
+            local = ontology.terms.get(accession)
+        row: dict[str, Any] = {
+            "accession": accession,
+            "expected_name": expected_name or "",
+            "url": query,
+            "local_name": local.name if local else "",
+            "local_obsolete": bool(local.obsolete) if local else None,
+        }
+        try:
+            request = urllib.request.Request(
+                query, headers={"User-Agent": "cell-curator/0.2", "Accept": "application/json"}
+            )
+            with urllib.request.urlopen(request, timeout=provider.timeout_seconds) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except (OSError, ValueError) as exc:
+            rows.append({**row, "status": "unavailable", "findings": [str(exc)]})
+            continue
+        artifact = (
+            root / "knowledge" / "ontology_live" / f"{safe_path_component(accession)}.json"
+        )
+        digest = replace_json(artifact, payload)
+        row.update(
+            {
+                "artifact": str(artifact),
+                "sha256": digest,
+                "retrieved_at": datetime.now(UTC).isoformat(timespec="seconds"),
+            }
+        )
+        live = _live_term_from_payload(payload, accession)
+        if live is None:
+            rows.append(
+                {
+                    **row,
+                    "status": "absent",
+                    "findings": [f"live service returned no term for {accession}"],
+                }
+            )
+            continue
+        findings = _live_findings(live, local, expected_name)
+        rows.append(
+            {
+                **row,
+                "status": "disagreement" if findings else "agreement",
+                "live_name": live.name,
+                "live_obsolete": live.obsolete,
+                "live_replaced_by": live.replaced_by or "",
+                "findings": findings,
+            }
+        )
+
+    value = {
+        "schema_version": 3,
+        "artifact_kind": _LIVE_STATUS_KIND,
+        "status": "complete",
+        "reason": "",
+        "remediation": "",
+        "network_attempted": True,
+        "endpoint": provider.url,
+        "version": provider.version,
+        "n_agreement": sum(1 for row in rows if row["status"] == "agreement"),
+        "n_disagreement": sum(1 for row in rows if row["status"] == "disagreement"),
+        "n_unavailable": sum(1 for row in rows if row["status"] in {"unavailable", "absent"}),
+        "corroborated": rows,
+        "automated_output_role": "hypothesis_not_verdict",
+    }
+    replace_json(status_path, value)
+    return value

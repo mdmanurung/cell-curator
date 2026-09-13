@@ -128,6 +128,7 @@ class ProviderConfig(StrictModel):
         "local_markers",
         "ontology",
         "remote_ontology",
+        "live_ontology",
         "reference",
         "cached_table",
         "remote_table",
@@ -165,6 +166,16 @@ class ProviderConfig(StrictModel):
                 raise ValueError(f"{self.kind} provider misses: {', '.join(missing)}")
             if not re.fullmatch(r"[0-9a-f]{64}", self.sha256):
                 raise ValueError(f"{self.kind} sha256 must be a lowercase SHA-256 digest")
+        if self.kind == "live_ontology":
+            # A live service has no stable digest — that is the point of querying it —
+            # so this provider pins the endpoint instead and hashes each response it
+            # stores. It corroborates an authoritative ontology; it never replaces one.
+            if not self.url.startswith("https://"):
+                raise ValueError("live_ontology provider requires an https url")
+            if self.sha256 or self.cache_path or self.path:
+                raise ValueError(
+                    "live_ontology provider takes only url, version, and timeout_seconds"
+                )
         return self
 
 

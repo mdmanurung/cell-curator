@@ -8,6 +8,8 @@ run:
 knowledge:
   # Local files are sufficient. Optional remote tables must be checksum-pinned.
   # A remote_ontology provider declares url, cache_path, sha256, version, and timeout_seconds.
+  # A live_ontology provider declares only an https url, version, and timeout_seconds: it
+  # corroborates the authoritative local ontology and may never ground a label.
   providers: []
   require_local_grounding_for_labels: true
   allow_optional_remote_enhancement: true

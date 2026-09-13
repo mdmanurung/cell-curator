@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import io
 import json
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -12,6 +14,7 @@ from cell_curator.contracts import ContractError, sha256
 from cell_curator.models import MarkerProgram
 from cell_curator.ontology import (
     CellOntology,
+    corroborate_terms_live,
     ontology_from_config,
     validate_durable_label_ontology,
     validate_program_ontology,
@@ -274,3 +277,229 @@ def test_refinement_metrics_and_graph_partition_are_computed(config: dict) -> No
         )
         == []
     )
+
+
+def _cl_obo(tmp_path: Path) -> Path:
+    path = tmp_path / "local-cl.obo"
+    path.write_text(
+        """format-version: 1.2
+
+[Term]
+id: CL:0000084
+name: T cell
+synonym: "T-lymphocyte" EXACT []
+"""
+    )
+    return path
+
+
+def _serve_ols(monkeypatch: pytest.MonkeyPatch, payload: object) -> list[str]:
+    """Answer one OLS-shaped query without reaching the network."""
+
+    requested: list[str] = []
+
+    class _Response:
+        def __init__(self, body: bytes) -> None:
+            self._buffer = io.BytesIO(body)
+
+        def read(self, size: int = -1) -> bytes:
+            return self._buffer.read(size)
+
+        def __enter__(self) -> Any:
+            return self
+
+        def __exit__(self, *exc: object) -> bool:
+            return False
+
+    def fake_urlopen(request: Any, timeout: float = 0.0) -> Any:
+        requested.append(request.full_url)
+        return _Response(json.dumps(payload).encode())
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    return requested
+
+
+def _with_live_provider(config: dict, tmp_path: Path, **overrides: Any) -> CellCuratorConfig:
+    provider = {
+        "kind": "live_ontology",
+        "url": "https://service.invalid/api/ontologies/cl/terms",
+        "version": "fixture-live-v1",
+        "timeout_seconds": 0.5,
+    }
+    provider.update(overrides)
+    config["knowledge"]["providers"] = [
+        {"kind": "ontology", "path": str(_cl_obo(tmp_path)), "version": "local-v1"},
+        provider,
+    ]
+    return CellCuratorConfig.model_validate(config)
+
+
+def test_live_ontology_provider_takes_only_an_https_endpoint(config: dict) -> None:
+    """A live provider has no digest to pin, so it must not pretend to carry one."""
+
+    config["knowledge"]["providers"] = [
+        {"kind": "live_ontology", "url": "http://service.invalid/terms"}
+    ]
+    with pytest.raises(ValueError, match="requires an https url"):
+        CellCuratorConfig.model_validate(config)
+
+    config["knowledge"]["providers"] = [
+        {
+            "kind": "live_ontology",
+            "url": "https://service.invalid/terms",
+            "sha256": "a" * 64,
+        }
+    ]
+    with pytest.raises(ValueError, match="only url, version, and timeout_seconds"):
+        CellCuratorConfig.model_validate(config)
+
+
+def test_live_corroboration_without_a_provider_never_attempts_the_network(
+    config: dict,
+) -> None:
+    model = CellCuratorConfig.model_validate(config)
+    status = corroborate_terms_live(model, ["CL:0000084"])
+    assert status["status"] == "unavailable"
+    assert status["network_attempted"] is False
+    assert "no live ontology provider" in status["reason"]
+
+
+def test_live_corroboration_disabled_by_policy_never_attempts_the_network(
+    config: dict, tmp_path: Path
+) -> None:
+    config["knowledge"]["allow_optional_remote_enhancement"] = False
+    model = _with_live_provider(config, tmp_path)
+    status = corroborate_terms_live(model, ["CL:0000084"])
+    assert status["status"] == "unavailable"
+    assert status["network_attempted"] is False
+    assert "CL-free annotation" in status["remediation"]
+
+
+def test_live_corroboration_records_agreement_with_a_hashed_answer(
+    monkeypatch: pytest.MonkeyPatch, config: dict, tmp_path: Path
+) -> None:
+    """Reproducibility comes from the stored answer, not from the live endpoint."""
+
+    model = _with_live_provider(config, tmp_path)
+    requested = _serve_ols(
+        monkeypatch,
+        {
+            "_embedded": {
+                "terms": [
+                    {
+                        "obo_id": "CL:0000084",
+                        "label": "T cell",
+                        "is_obsolete": False,
+                        "synonyms": ["T-lymphocyte"],
+                    }
+                ]
+            }
+        },
+    )
+
+    status = corroborate_terms_live(
+        model,
+        ["CL:0000084"],
+        expected_names=["T cell"],
+        ontology=ontology_from_config(model),
+    )
+
+    assert requested == [
+        "https://service.invalid/api/ontologies/cl/terms?obo_id=CL%3A0000084"
+    ]
+    assert status["status"] == "complete"
+    assert status["n_agreement"] == 1
+    assert status["n_disagreement"] == 0
+    row = status["corroborated"][0]
+    assert row["status"] == "agreement"
+    assert row["live_name"] == "T cell"
+    assert row["local_name"] == "T cell"
+    stored = Path(row["artifact"])
+    assert sha256(stored) == row["sha256"]
+    assert json.loads(stored.read_text())["_embedded"]["terms"][0]["label"] == "T cell"
+
+
+def test_live_corroboration_reports_obsolescence_and_name_disagreement(
+    monkeypatch: pytest.MonkeyPatch, config: dict, tmp_path: Path
+) -> None:
+    model = _with_live_provider(config, tmp_path)
+    _serve_ols(
+        monkeypatch,
+        {
+            "_embedded": {
+                "terms": [
+                    {
+                        "obo_id": "CL:0000084",
+                        "label": "alpha-beta T cell",
+                        "is_obsolete": True,
+                        "term_replaced_by": "CL:0000789",
+                    }
+                ]
+            }
+        },
+    )
+
+    status = corroborate_terms_live(
+        model,
+        ["CL:0000084"],
+        expected_names=["T cell"],
+        ontology=ontology_from_config(model),
+    )
+
+    row = status["corroborated"][0]
+    assert status["n_disagreement"] == 1
+    assert row["status"] == "disagreement"
+    assert row["live_replaced_by"] == "CL:0000789"
+    joined = " | ".join(row["findings"])
+    assert "obsolete" in joined
+    assert "disagrees with live name" in joined
+    assert "not the live name or a live synonym" in joined
+
+
+def test_an_unreachable_ontology_service_is_a_receipt_not_an_exception(
+    monkeypatch: pytest.MonkeyPatch, config: dict, tmp_path: Path
+) -> None:
+    def refuse(request: Any, timeout: float = 0.0) -> Any:
+        raise OSError("network is unreachable")
+
+    monkeypatch.setattr("urllib.request.urlopen", refuse)
+    model = _with_live_provider(config, tmp_path)
+
+    status = corroborate_terms_live(model, ["CL:0000084"])
+
+    assert status["status"] == "complete"
+    assert status["n_unavailable"] == 1
+    assert "network is unreachable" in " ".join(status["corroborated"][0]["findings"])
+
+
+def test_a_live_provider_never_becomes_required_for_a_label(
+    monkeypatch: pytest.MonkeyPatch, config: dict, tmp_path: Path
+) -> None:
+    """The whole point of the optional tier: offline still reaches validated labels.
+
+    `require_local_grounding_for_labels` is pinned true, so a configured live
+    service may corroborate and nothing more. With the network refused, the local
+    ontology must still resolve terms and still validate durable labels.
+    """
+
+    def refuse(request: Any, timeout: float = 0.0) -> Any:
+        raise OSError("network is unreachable")
+
+    monkeypatch.setattr("urllib.request.urlopen", refuse)
+    model = _with_live_provider(config, tmp_path)
+
+    ontology = ontology_from_config(model)
+    assert ontology is not None
+    assert ontology.resolve("CL:0000084").name == "T cell"
+    assert ontology.validate_term("CL:0000084", expected_name="T cell").name == "T cell"
+
+    labels = pd.DataFrame(
+        {
+            "level": ["L1"],
+            "parent_scope": ["ROOT"],
+            "cluster_id": ["0"],
+            "label": ["T cell"],
+            "cl_id": ["CL:0000084"],
+        }
+    )
+    assert validate_durable_label_ontology(labels, ontology)["status"] == "complete"
