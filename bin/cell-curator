@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Put the CLI on PATH for a Claude Code session: the plugin root's bin/ is added
+# to PATH when this repository is installed as a plugin, so this shim is the only
+# thing standing between an installed plugin and a runnable `cell-curator`.
+#
+# Prefer the repository's own environment, fall back to uv, and say what to run
+# when neither is present rather than failing with a bare "command not found".
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+if [[ -x "${root}/.venv/bin/cell-curator" ]]; then
+  exec "${root}/.venv/bin/cell-curator" "$@"
+fi
+
+if command -v uv >/dev/null 2>&1; then
+  exec uv run --project "${root}" cell-curator "$@"
+fi
+
+printf 'cell-curator: no environment in %s\n' "${root}" >&2
+printf "Run 'uv sync --frozen --extra workflow' there, or install the wheel.\\n" >&2
+exit 127
