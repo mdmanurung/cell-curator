@@ -610,6 +610,15 @@ def aggregate_multimodal_evidence(
         else:
             block = pd.DataFrame(columns=["cluster_id", "axis", "parent_label"])
         if "axis" not in block:
+            # Defaulting to cell_type would silently promote state evidence —
+            # cycling, stress, low quality — into identity candidates, which is the
+            # one direction the type/state separation exists to prevent. An empty
+            # block carries no such rows, so it only needs the column to exist.
+            if not block.empty:
+                raise ContractError(
+                    f"evidence for cluster {cluster_id} carries no axis column; "
+                    "cell type and cell state cannot be separated"
+                )
             block["axis"] = "cell_type"
         parent_name = config.evidence.parent_vocabulary.get(str(cluster_id), str(cluster_id))
         if not block.empty:

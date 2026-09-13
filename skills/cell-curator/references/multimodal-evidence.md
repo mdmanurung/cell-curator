@@ -36,6 +36,12 @@ singlets from within-cell co-occurrence, so report per-cell distributions and a
 predeclared separation statistic. Integrate available doublet evidence without
 inventing it for studies lacking scores.
 
+Every evidence row carries the `axis` of the program that produced it. Only
+`cell_type` rows compete for an identity; `cell_state` rows are called on their
+own axis. Evidence that reaches aggregation without an `axis` column is refused,
+never defaulted — a lost axis would promote cycling, stress, and low-quality
+programs into identity candidates silently.
+
 ## Technical evidence
 
 Report configured sample/capture representation, dominance/effect sizes, and

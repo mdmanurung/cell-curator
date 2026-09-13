@@ -141,6 +141,43 @@ def test_unmeasured_expected_negative_forces_abstention(config: dict) -> None:
     assert all(item.abstained and item.cell_type == "Unknown" for item in decisions)
 
 
+def test_axisless_evidence_is_refused_rather_than_called_cell_type(config: dict) -> None:
+    """Losing the axis column must stop the run, not relabel state as identity.
+
+    The aggregator used to default a missing axis to `cell_type`, so an evidence
+    frame that had been round-tripped through a table without the column — a
+    cached export, a hand-edited TSV — turned every cycling, stress, and
+    low-quality program into a candidate identity without saying so.
+    """
+
+    model = _model(config)
+    capabilities = build_capability_registry(model)
+    matrix = np.array([[5.0], [4.0], [0.0], [0.0]])
+    groups = pd.Series(["0", "0", "1", "1"])
+    program = MarkerProgram(label="Cycling", positive=("measured",), axis="cell_state")
+    evidence = score_marker_programs(
+        matrix,
+        groups,
+        pd.Index(["measured"]),
+        [program],
+        detection=matrix,
+        run_id=model.run.run_id,
+        assay="transcriptome",
+        representation="logcounts",
+        capability=capabilities[0],
+    )
+    assert evidence["axis"].eq("cell_state").all()
+
+    with pytest.raises(ContractError, match="axis"):
+        aggregate_multimodal_evidence(
+            evidence.drop(columns=["axis"]),
+            capabilities,
+            model,
+            scope="global",
+            cluster_ids=["0", "1"],
+        )
+
+
 def test_config_rejects_missing_comparator_and_duplicate_lane_pair(config: dict) -> None:
     missing_comparator = yaml.safe_load(yaml.safe_dump(config))
     missing_comparator["comparators"]["roles"] = ["parent_remainder"]

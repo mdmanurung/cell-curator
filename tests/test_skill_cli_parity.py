@@ -27,10 +27,11 @@ from cell_curator.cli import build_parser
 
 SKILL_PATH = SKILL_ROOT / "SKILL.md"
 
-# Actions the skill deliberately omits. `pipeline` exposes the individual phases
-# that `run execute` already sequences; the rest serve packaging, introspection,
-# and benchmarking rather than an annotation run. Documenting an action removes
-# it from here — this set only ever shrinks.
+# Actions the skill omits on purpose. The `pipeline` actions are the Snakefile's
+# per-rule entry points — a public surface, but one the workflow addresses rather
+# than an agent, which reaches the same phases through `run execute`. The rest
+# serve packaging, introspection, and benchmarking rather than an annotation run.
+# Documenting an action removes it from here; this set only ever shrinks.
 INTERNAL_ACTIONS: frozenset[tuple[str, ...]] = frozenset(
     {
         ("benchmark", "evaluate"),
