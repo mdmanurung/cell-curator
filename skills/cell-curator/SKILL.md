@@ -139,16 +139,33 @@ Use only applicable cross-checks. Inspect `unavailable` receipts and their state
 remediation. Automated predictions remain hypotheses.
 
 ```bash
-cell-curator crosscheck obs-pred --help
-cell-curator crosscheck celltypist-discover --help
-cell-curator crosscheck celltypist-predict --help
-cell-curator crosscheck reference-knn --help
-cell-curator crosscheck azimuth --help
-cell-curator crosscheck scimilarity --help
-cell-curator reference acquire-census --help
-cell-curator reference train-scanvi --help
-cell-curator reference map-scarches --help
+cell-curator crosscheck obs-pred --input canonical.h5ad \
+  --prediction-column predicted_label --cluster-column canonical_cluster \
+  --output-dir results/RUN/crosschecks
+cell-curator crosscheck celltypist-discover --output-dir results/RUN/crosschecks
+cell-curator crosscheck celltypist-predict --input canonical.h5ad \
+  --model MODEL --cluster-column canonical_cluster \
+  --output-dir results/RUN/crosschecks
+cell-curator crosscheck reference-knn --query canonical.h5ad \
+  --reference reference.h5ad --reference-label cell_type --backend cpu \
+  --output-dir results/RUN/crosschecks
+cell-curator crosscheck azimuth --query canonical.h5ad \
+  --reference reference.h5ad --reference-label cell_type \
+  --output-dir results/RUN/crosschecks
+cell-curator crosscheck scimilarity --input canonical.h5ad \
+  --model-path models/scimilarity --output-dir results/RUN/crosschecks
+cell-curator reference acquire-census --organism homo_sapiens --tissue blood \
+  --output references/census.h5ad --version CENSUS_VERSION --max-cells 50000 \
+  --expected-sha256 SHA256
+cell-curator reference train-scanvi --reference references/census.h5ad \
+  --labels-key cell_type --counts-layer counts --output-dir models/scanvi
+cell-curator reference map-scarches --query canonical.h5ad \
+  --model-dir models/scanvi --output-dir results/RUN/crosschecks
 ```
+
+Add `--help` to a route for its remaining flags. A `.h5mu` input additionally
+requires `--input-modality`, `--query-modality`, or `--reference-modality`.
+`--backend gpu` on `reference-knn` runs only after GPU validation passes.
 
 ## 4. Review and validate
 
