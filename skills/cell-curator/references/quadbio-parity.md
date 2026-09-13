@@ -55,3 +55,39 @@ reviewed 2026-08-09. This link is documentation only and is never used at runtim
 | Complete guarded write-back | Validate hierarchy and ontology, preview a complete diff, preserve category order and colors, require approval, and write atomically to a new file by default | [`writeback.py`](../../../src/cell_curator/writeback.py) | `write-back preview`, `write-back apply`; `validate_writeback()`, `write_back()` | [`test_end_to_end.py`](../../../tests/test_end_to_end.py) |
 | Immutable provenance and resume | Hash inputs, configuration, mappings, receipts, and artifacts; resume valid checkpoints through the authoritative DAG | [`provenance.py`](../../../src/cell_curator/provenance.py), [`Snakefile`](../../../workflow/Snakefile) | `run status`, `run validate`; Snakemake targets `all_evidence`, `review_packet`, `finalization`, `writeback` | [`test_end_to_end.py`](../../../tests/test_end_to_end.py) |
 | Discoverable unified CLI and shared Python logic | Expose command help while keeping commands thin over the same typed package APIs used by tests and workflows | [`cli.py`](../../../src/cell_curator/cli.py), [`api.py`](../../../src/cell_curator/api.py) | `cell-curator --help`; all command groups listed above | [`test_cli_and_manifests.py`](../../../tests/test_cli_and_manifests.py), [`test_package_core.py`](../../../tests/test_package_core.py) |
+
+## Reverse direction: gaps and deliberate divergences
+
+The matrix above records what `cell-curator` implements independently. It says
+nothing about the reverse direction, which anyone comparing the two projects
+needs. Reviewed against the same public sources on 2026-09-13.
+
+### Open gaps
+
+| QuadBio capability | `cell-curator` status | What closing it requires |
+| --- | --- | --- |
+| Live query-time knowledge grounding through the BioContextAI knowledgebase MCP (PanglaoDB, Cell Ontology/OLS, Human Protein Atlas, Europe PMC) | Absent. Every remote path here is a checksum-pinned artifact download, not a query, so a stale local cache answers silently. | An optional provider that queries, writes the response into the run directory as a durable artifact, hashes that artifact, and records url, query, response digest, and retrieval time in provenance. It may only corroborate: `knowledge.require_local_grounding_for_labels` is pinned true, so no label may depend on it. |
+| Curated literature grounding through a Zotero MCP | Absent. No bibliography provider of any kind. | A local-first provider reading a BibTeX or CSL-JSON export, with a live literature tier layered on the contract above. A documented non-goal until that contract is settled. |
+| Sized reference provisioning for Azimuth and SCimilarity | Partial. `reference acquire-census` exists; the Azimuth and SCimilarity routes take a user-supplied reference or model path with no bounded, checksummed acquisition. | Two direct mirrors of `fetch_census_reference()`: bounded size, expected SHA-256, timeout, and an explicit unavailable state carrying remediation. |
+
+### Closed already, listed because a surface comparison suggests otherwise
+
+| QuadBio capability | `cell-curator` equivalent |
+| --- | --- |
+| Semantic CL identifier validation before write-back: the term exists, is not obsolete, and its name matches the label | `CellOntology.validate_term()` resolves the accession, rejects `is_obsolete` while reporting `replaced_by`, and checks the label against the term name and synonyms; `validate_durable_label_ontology()` runs it at write-back. The checks are equivalent. Only their freshness depends on the local ontology copy. |
+| Self-bootstrapping isolated environment through pixi | `uv.lock` with `uv sync --frozen --extra workflow`, and `bin/cell-curator` puts the CLI on PATH for an installed plugin without a project install. Parity by other means, not a gap. |
+
+### Deliberate divergence, not a gap
+
+A hard MCP requirement is the one QuadBio design decision this package rejects on
+purpose. `cell-curator` must run from local AnnData or MuData, marker files, and
+ontology files with no agent platform, no MCP, and no network. Adopting that
+requirement would contradict the invariant, so the live provider above is
+specified as optional corroboration that degrades to the local cache. It closes
+the capability gap without reversing the trade.
+
+Against the same checklist, `cell-curator` additionally carries MuData and
+multimodal capability routing, a Snakemake DAG with a scheduler profile, a
+hash-bound write-back approval, and a critic loop that runs as a file packet
+rather than as agent subagents. No accuracy or performance claim is made or
+implied by any row above.
