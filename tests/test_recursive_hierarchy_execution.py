@@ -437,3 +437,54 @@ def test_provider_manifest_hashes_local_files_and_disabled_remote_never_networks
     }
     assert providers["remote_table"]["artifact"]["status"] == "unavailable"
     assert "disabled" in providers["remote_table"]["artifact"]["reason"]
+
+
+def test_a_state_program_is_never_assignable_as_an_identity(tmp_path: Path) -> None:
+    """The planned vocabulary records every program; assignment takes only identity rows.
+
+    `plan/vocabulary.tsv` is written from all declared marker programs, cell state
+    included, and both execution routes read exactly that file. Nothing between the
+    read and `assign_parent_scoped_level` inspected the axis, so a declared cell
+    state program was an assignable cell type on the score-manifest route.
+    """
+
+    config_path, _, markers = _write_fixture(tmp_path, run_id="state-vocabulary-v1")
+    programs = json.loads(markers.read_text())
+    programs.append(
+        {"label": "Cycling", "parent": "Immune", "pos": ["MB"], "axis": "cell_state"}
+    )
+    markers.write_text(json.dumps(programs))
+
+    prepare_scene(config_path)
+    construct_plan(config_path)
+    root = run_directory(load_config(config_path))
+
+    planned = pd.read_csv(root / "plan/vocabulary.tsv", sep="\t")
+    assert "Cycling" in set(planned["label"]), "the plan must record what was declared"
+
+    tables = _score_tables()
+    tables[("L2", "Immune")] = pd.DataFrame(
+        [
+            *_scores("immune-t", "T", "B"),
+            *_scores("immune-b", "B", "T"),
+            *_scores("immune-cycling", "Cycling", "T"),
+        ]
+    )
+    entries: list[dict[str, str]] = []
+    for index, ((level, parent), frame) in enumerate(tables.items()):
+        score_path = tmp_path / f"state-scope-{index}.tsv"
+        frame.to_csv(score_path, sep="\t", index=False)
+        entries.append({"level": level, "parent_scope": parent, "path": score_path.name})
+    manifest_path = tmp_path / "state-scores.json"
+    manifest_path.write_text(json.dumps({"schema_version": 3, "score_tables": entries}))
+
+    public_manifest_execute(config_path, manifest_path)
+
+    receipt = json.loads((root / "plan/identity_vocabulary_status.json").read_text())
+    assert receipt["excluded_cell_state_labels"] == ["Cycling"]
+
+    assigned = pd.concat(
+        [pd.read_csv(path, sep="\t") for path in sorted((root / "labels").glob("*.tsv"))],
+        ignore_index=True,
+    )
+    assert "Cycling" not in set(assigned["label"].astype(str))

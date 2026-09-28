@@ -202,6 +202,34 @@ def _hierarchy_level_number(level: str) -> int:
     return number
 
 
+def _identity_vocabulary_for_execution(
+    vocabulary: pd.DataFrame, *, root: Path, operator_supplied: bool
+) -> pd.DataFrame:
+    """Keep an operator's vocabulary verbatim; reduce the planned one to identity rows.
+
+    Naming a vocabulary asserts that its rows are the identity candidates, so a cell
+    state row there is an error and ``validate_parent_vocabulary`` refuses it. The
+    planned vocabulary is instead the full record of what the providers declared, where
+    state programs are expected, so they are excluded here under a receipt.
+    """
+
+    from .hierarchy import identity_vocabulary
+
+    if operator_supplied:
+        return vocabulary
+    identity, excluded = identity_vocabulary(vocabulary)
+    replace_json(
+        root / "plan" / "identity_vocabulary_status.json",
+        {
+            "schema_version": 3,
+            "artifact_kind": "cell_curator_identity_vocabulary_status",
+            "identity_rows": int(len(identity)),
+            "excluded_cell_state_labels": excluded,
+        },
+    )
+    return identity
+
+
 def _validate_execution_vocabulary(
     vocabulary: pd.DataFrame,
 ) -> tuple[list[str], dict[str, str | None]]:
@@ -387,6 +415,9 @@ def execute_recursive_hierarchy(
             f"recursive hierarchy vocabulary does not exist: {selected_vocabulary}"
         )
     vocabulary = pd.read_csv(selected_vocabulary, sep="\t", keep_default_na=False)
+    vocabulary = _identity_vocabulary_for_execution(
+        vocabulary, root=root, operator_supplied=vocabulary_path is not None
+    )
     levels, next_level = _validate_execution_vocabulary(vocabulary)
     available_scopes = {
         (str(row.level), str(row.parent_scope))
@@ -899,6 +930,9 @@ def assign_hierarchy_level(
         else root / "plan" / "vocabulary.tsv",
         sep="\t",
         keep_default_na=False,
+    )
+    vocabulary = _identity_vocabulary_for_execution(
+        vocabulary, root=root, operator_supplied=vocabulary_path is not None
     )
     scores = pd.read_csv(Path(scores_path), sep="\t", keep_default_na=False)
     state_by_cluster = (

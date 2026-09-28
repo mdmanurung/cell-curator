@@ -129,10 +129,58 @@ def validate_parent_vocabulary(vocabulary: pd.DataFrame) -> None:
     values = vocabulary.loc[:, ["level", "parent_scope", "label"]].astype(str)
     if values.apply(lambda column: column.str.strip().eq("").any()).any():
         raise ContractError("hierarchy vocabulary contains blank level/parent/label values")
+    if "axis" in vocabulary.columns:
+        # This vocabulary assigns identity, so a cell state program reaching it would
+        # become a cell's type -- the one direction the separation exists to prevent.
+        # A frame without the column carries no state rows for it to admit.
+        state = sorted(
+            set(vocabulary.loc[~vocabulary["axis"].astype(str).eq("cell_type"), "label"].astype(str))
+        )
+        if state:
+            raise ContractError(
+                "hierarchy vocabulary assigns cell identity, so every row must carry "
+                f"axis cell_type; cell state programs present: {state}"
+            )
     parents_per_label = values.groupby("label", observed=True)["parent_scope"].nunique()
     invalid = sorted(parents_per_label[parents_per_label > 1].index.astype(str))
     if invalid:
         raise ContractError(f"a child label may belong to only one parent scope: {invalid}")
+
+
+def identity_vocabulary(vocabulary: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
+    """Restrict a planned vocabulary to identity rows, refusing a cross-axis parent.
+
+    The planned vocabulary records every marker program the providers declared,
+    cell state included, because the plan is that record. Assignment needs only the
+    identity rows, and dropping the rest is safe unless a cell type program descends
+    from a cell state one: filtering would then leave the survivor without its parent.
+    Nothing constrains ``MarkerProgram.parent`` to one axis, so that link is reachable
+    and is refused here rather than silently producing a broken hierarchy.
+    """
+
+    if "axis" not in vocabulary.columns:
+        return vocabulary, []
+    is_identity = vocabulary["axis"].astype(str).eq("cell_type")
+    excluded = sorted(set(vocabulary.loc[~is_identity, "label"].astype(str)))
+    if not excluded:
+        return vocabulary, []
+    identity = vocabulary.loc[is_identity].reset_index(drop=True)
+    dropped = set(excluded)
+    orphaned = sorted(
+        f"{label} under {parent}"
+        for label, parent in zip(
+            identity["label"].astype(str),
+            identity["parent_scope"].astype(str),
+            strict=True,
+        )
+        if parent in dropped
+    )
+    if orphaned:
+        raise ContractError(
+            "a cell type program descends from a cell state program, so identity and "
+            f"state cannot be separated: {orphaned}"
+        )
+    return identity, excluded
 
 
 def assign_parent_scoped_level(
@@ -622,5 +670,6 @@ __all__ = [
     "recursive_parent_scoped_assignment",
     "scaffold_labels_table",
     "validate_hierarchy_nesting",
+    "identity_vocabulary",
     "validate_parent_vocabulary",
 ]

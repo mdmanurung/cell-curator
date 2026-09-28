@@ -20,6 +20,7 @@ from cell_curator.evidence import (
     compute_gpu_bottom_up_markers,
     score_marker_programs,
 )
+from cell_curator.hierarchy import identity_vocabulary, validate_parent_vocabulary
 from cell_curator.models import MarkerProgram
 from cell_curator.provenance import atomic_publish
 from cell_curator.refinement import _stored_evaluation
@@ -176,6 +177,76 @@ def test_axisless_evidence_is_refused_rather_than_called_cell_type(config: dict)
             scope="global",
             cluster_ids=["0", "1"],
         )
+
+
+def _vocabulary_rows() -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {"level": "L1", "parent_scope": "ROOT", "label": "Type A", "axis": "cell_type"},
+            {"level": "L1", "parent_scope": "ROOT", "label": "Cycling", "axis": "cell_state"},
+        ]
+    )
+
+
+def test_a_state_program_is_refused_as_an_identity_candidate() -> None:
+    """An operator-named vocabulary asserts its rows are identity candidates.
+
+    `validate_parent_vocabulary` checked only level, parent, and label, so a
+    cell state program sitting in the vocabulary was assignable as a cell's
+    type. Nothing downstream re-checked the axis.
+    """
+
+    with pytest.raises(ContractError, match="cell_type"):
+        validate_parent_vocabulary(_vocabulary_rows())
+
+    identity_only = _vocabulary_rows().iloc[[0]].reset_index(drop=True)
+    validate_parent_vocabulary(identity_only)
+
+
+def test_a_vocabulary_without_an_axis_column_stays_legal() -> None:
+    """The documented minimal contract is level, parent, and label.
+
+    A frame without the column carries no state rows to admit, so refusing it
+    would break the contract without closing anything.
+    """
+
+    bare = _vocabulary_rows().drop(columns=["axis"]).iloc[[0]].reset_index(drop=True)
+    validate_parent_vocabulary(bare)
+    filtered, excluded = identity_vocabulary(bare)
+    assert excluded == []
+    assert filtered.equals(bare)
+
+
+def test_filtering_refuses_a_type_program_descended_from_a_state_program() -> None:
+    """`MarkerProgram.parent` is not constrained to one axis, so this is reachable.
+
+    Dropping the state rows would leave the survivor pointing at a parent that
+    no longer exists, which silently produces a broken hierarchy instead of a
+    stated error.
+    """
+
+    crossed = pd.concat(
+        [
+            _vocabulary_rows(),
+            pd.DataFrame(
+                [
+                    {
+                        "level": "L2",
+                        "parent_scope": "Cycling",
+                        "label": "Type B",
+                        "axis": "cell_type",
+                    }
+                ]
+            ),
+        ],
+        ignore_index=True,
+    )
+    with pytest.raises(ContractError, match="descends from a cell state"):
+        identity_vocabulary(crossed)
+
+    filtered, excluded = identity_vocabulary(_vocabulary_rows())
+    assert excluded == ["Cycling"]
+    assert filtered["label"].tolist() == ["Type A"]
 
 
 def test_config_rejects_missing_comparator_and_duplicate_lane_pair(config: dict) -> None:
