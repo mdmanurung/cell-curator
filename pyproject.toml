@@ -45,6 +45,7 @@ dev = [
   "nbclient>=0.10",
   "nbformat>=5.10",
   "pytest>=8",
+  "pytest-cov>=5",
   "ruff>=0.6",
   "setuptools>=77",
   "snakemake>=8",
@@ -86,6 +87,29 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 markers = [
   "gpu: requires a real contract-satisfying NVIDIA GPU with the RAPIDS stack installed",
+]
+
+# Coverage is measured in CI rather than through addopts so a local `pytest` run
+# stays fast; `uv run pytest --cov` produces the same numbers. `fail_under` is the
+# measured value, not a target: it is a floor that can only rise, so a change
+# that adds untested code fails and a change that adds tests does not have to
+# move it first. Branch coverage is on because this package expresses most of its
+# contracts as `raise ContractError`, and statement coverage alone reports a
+# gate as covered when only the passing side of it was ever taken.
+[tool.coverage.run]
+source = ["cell_curator"]
+branch = true
+omit = ["*/__main__.py"]
+
+[tool.coverage.report]
+fail_under = 76
+show_missing = true
+skip_covered = true
+exclude_lines = [
+  "pragma: no cover",
+  "if TYPE_CHECKING:",
+  "raise NotImplementedError",
+  "\\.\\.\\.",
 ]
 
 [tool.ruff]

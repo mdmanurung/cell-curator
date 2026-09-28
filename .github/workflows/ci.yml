@@ -49,5 +49,26 @@ jobs:
       - name: Type-check
         run: uv run mypy
 
+      # Coverage is measured here rather than through pytest addopts so a local
+      # `uv run pytest -q` stays fast. fail_under in pyproject.toml is the
+      # measured floor, so this step fails on a drop and passes on an
+      # improvement; the report is published as an artifact because a number
+      # nobody can look at does not get improved.
       - name: Test
-        run: uv run pytest -q
+        run: >-
+          uv run pytest -q
+          --cov=cell_curator
+          --cov-report=term:skip-covered
+          --cov-report=xml
+          --cov-report=json
+
+      - name: Publish the coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: |
+            coverage.xml
+            coverage.json
+          if-no-files-found: ignore
+          retention-days: 14

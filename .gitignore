@@ -1,5 +1,7 @@
 .mypy_cache/
 .bipartite/audit/
+.coverage
+.coverage.*
 .pytest_cache/
 .ruff_cache/
 .snakemake/
@@ -8,7 +10,10 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 build/
+coverage.json
+coverage.xml
 dist/
+.hypothesis/
 .gpu-validation/
 .venv-gpu/
 
