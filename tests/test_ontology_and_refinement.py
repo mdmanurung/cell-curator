@@ -14,6 +14,7 @@ from cell_curator.contracts import ContractError, sha256
 from cell_curator.models import MarkerProgram
 from cell_curator.ontology import (
     CellOntology,
+    OntologyTerm,
     corroborate_terms_live,
     ontology_from_config,
     validate_durable_label_ontology,
@@ -75,6 +76,65 @@ replaced_by: CL:0000001
             ],
             ontology,
         )
+
+
+def test_depth_and_roots_describe_the_supplied_graph_not_the_cell_ontology(
+    tmp_path: Path,
+) -> None:
+    """A subtree export has a cut at the top, and the cut is what a root means.
+
+    Depth is the number of `is_a` edges to a root of the file that was loaded, so
+    a term whose parent was not exported counts as a root and a term that hangs
+    off nothing measurable resolves to 0. A distance built on these two
+    primitives is only meaningful against the snapshot it names, which is why
+    they report the graph rather than a hard-coded Cell Ontology root. The
+    dangling parent also stays in `ancestors`, so a consumer comparing two
+    accessions has to check that a term is present before measuring it.
+    """
+
+    path = tmp_path / "subtree-cl.tsv"
+    path.write_text(
+        """id\tname\tparents
+CL:0000000\tcell\t
+CL:0000738\tleukocyte\tCL:0000000
+CL:0000542\tlymphocyte\tCL:0000738
+CL:0000084\tT cell\tCL:0000542
+CL:0000786\tplasma cell\tCL:0009000
+"""
+    )
+    ontology = CellOntology.load(path)
+    assert ontology.roots() == frozenset({"CL:0000000", "CL:0000786"})
+    assert ontology.depth("CL:0000000") == 0
+    assert ontology.depth("CL:0000738") == 1
+    assert ontology.depth("CL:0000542") == 2
+    assert ontology.depth("CL:0000084") == 3
+    assert ontology.depth("CL:0000084") == ontology.depth("CL:0000084")
+    with pytest.raises(ContractError, match="unknown"):
+        ontology.resolve("CL:0009000")
+    assert ontology.ancestors("CL:0000786") == {"CL:0009000"}
+
+
+def test_a_parent_cycle_resolves_to_depth_zero_rather_than_hanging() -> None:
+    """A malformed snapshot must not be able to produce a plausible depth.
+
+    A cycle has no top, so there is no distance to measure in it. The walk is
+    iterative and memoized precisely so a file with a cycle terminates and
+    reports 0 for the terms involved, instead of exhausting the stack or
+    inventing a depth a reader would take for a measurement.
+    """
+
+    ontology = CellOntology(
+        {
+            "CL:0000000": OntologyTerm("CL:0000000", "a", parents=("CL:0000001",)),
+            "CL:0000001": OntologyTerm("CL:0000001", "b", parents=("CL:0000000",)),
+            "CL:0000002": OntologyTerm("CL:0000002", "c", parents=("CL:0000001",)),
+        },
+        source="cycle",
+    )
+    assert ontology.roots() == frozenset()
+    assert ontology.depth("CL:0000000") == 0
+    assert ontology.depth("CL:0000001") == 1
+    assert ontology.depth("CL:0000002") == 2
 
 
 def test_durable_labels_enforce_name_obsolete_and_parent_semantics(

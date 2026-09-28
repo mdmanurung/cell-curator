@@ -11,6 +11,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 SCHEMA_VERSION: Literal[3] = 3
 
+Agreement = Literal["strict", "relaxed"]
+
 
 class StrictModel(BaseModel):
     """Base model that rejects misspelled or undeclared fields."""
@@ -203,6 +205,7 @@ class BenchmarkResult(StrictModel):
     selective_accuracy: float
     coverage_risk: float
     hierarchical_accuracy: float | None = None
+    relaxed_accuracy: float | None = None
     unknown_precision: float | None = None
     unknown_recall: float | None = None
     unknown_f1: float | None = None
@@ -219,6 +222,42 @@ class BenchmarkResult(StrictModel):
     peak_memory_mb: float | None = None
     artifact_completeness: float | None = None
     artifact_path: Path | None = None
+
+
+class RiskCoveragePoint(StrictModel):
+    """One operating point on the risk-coverage curve of a prediction table.
+
+    A curve is the only form in which two systems can be compared at matched
+    coverage, so each point is self-describing: it carries the counts it was
+    computed from so a reader never has to trust a ratio whose denominator the
+    artifact does not show, and it names the ``agreement`` it counted, because a
+    curve scored on exact label equality and a curve scored on Cell Ontology
+    compatibility are different claims about the same table and cannot be laid
+    side by side as if they were the same measurement. Accuracy and risk are both
+    optional and both absent together, because a threshold that calls nothing has
+    no measured risk and reporting 0.0 or 1.0 there would invent the best and
+    worst possible system at the same point. This is a returned record rather than
+    a published artifact, so it carries no schema version of its own.
+    """
+
+    threshold: float = Field(ge=0.0, le=1.0)
+    n_total: int = Field(ge=0)
+    n_called: int = Field(ge=0)
+    n_correct: int = Field(ge=0)
+    coverage: float = Field(ge=0.0, le=1.0)
+    selective_accuracy: float | None = Field(default=None, ge=0.0, le=1.0)
+    risk: float | None = Field(default=None, ge=0.0, le=1.0)
+    agreement: Agreement = "strict"
+
+    @model_validator(mode="after")
+    def consistent_counts(self) -> RiskCoveragePoint:
+        if self.n_called > self.n_total:
+            raise ValueError("risk-coverage n_called must not exceed n_total")
+        if self.n_correct > self.n_called:
+            raise ValueError("risk-coverage n_correct must not exceed n_called")
+        if (self.selective_accuracy is None) != (self.risk is None):
+            raise ValueError("risk-coverage accuracy and risk must both be absent or present")
+        return self
 
 
 class BenchmarkArtifact(StrictModel):

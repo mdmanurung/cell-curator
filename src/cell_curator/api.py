@@ -8,10 +8,14 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .config import CellCuratorConfig, ProviderConfig, RepresentationConfig
 from .contracts import ContractError
+from .models import Agreement, RiskCoveragePoint
+
+if TYPE_CHECKING:
+    from .ontology import CellOntology
 
 
 def inspect_input(config_path: str | Path) -> dict[str, Any]:
@@ -962,8 +966,15 @@ def evaluate_benchmark_predictions(
     system: str,
     dataset: str,
     output_path: str | Path,
+    ontology: str | Path | None = None,
 ) -> Any:
-    """Score a neutral-format prediction table against its recorded truth."""
+    """Score a neutral-format prediction table against its recorded truth.
+
+    The optional ``ontology`` is a local Cell Ontology snapshot. It is required
+    only when the table carries CL identifiers, and the published result then
+    records the snapshot's path and digest so the measurement can be traced
+    back to the file it was taken against.
+    """
 
     from .benchmark import evaluate_file
 
@@ -972,6 +983,49 @@ def evaluate_benchmark_predictions(
         system=system,
         dataset=dataset,
         output_path=Path(output_path),
+        ontology=ontology,
+    )
+
+
+def sweep_benchmark_risk_coverage(
+    predictions: str | Path,
+    *,
+    thresholds: Sequence[float] | None = None,
+    agreement: Agreement = "strict",
+    ontology: str | Path | CellOntology | None = None,
+) -> list[RiskCoveragePoint]:
+    """Report coverage, selective accuracy, and risk across a confidence grid.
+
+    This is the form the package's selective-prediction claim takes: comparable
+    accuracy at matched coverage. It is public because a comparative claim is
+    only checkable by whoever holds the competing table, so the curve has to be
+    computable over an export the caller brings, not only over this package's
+    own runs. It publishes nothing, because a published result is a commitment
+    and a curve is a reading.
+
+    ``agreement="relaxed"`` counts a call as correct when its Cell Ontology term
+    is the true term or an ``is_a`` ancestor or descendant of it, for tables whose
+    truth is annotated more finely than the system under comparison answers, and
+    it takes the local snapshot the relaxed criterion is read from. The default
+    stays exact-label equality, so an existing comparison is unchanged, and the
+    strict curve ignores ``ontology`` entirely. Each point records the agreement
+    it was computed under.
+    """
+
+    from .benchmark import read_predictions, risk_coverage_sweep
+    from .ontology import CellOntology
+
+    if isinstance(ontology, CellOntology):
+        resolved: CellOntology | None = ontology
+    else:
+        resolved = None if ontology is None else CellOntology.load(ontology)
+    return list(
+        risk_coverage_sweep(
+            read_predictions(predictions),
+            thresholds=thresholds,
+            agreement=agreement,
+            ontology=resolved,
+        )
     )
 
 

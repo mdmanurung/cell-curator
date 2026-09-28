@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://cell-curator.local/schema/neutral-predictions-v3.json",
   "title": "cell-curator neutral prediction table",
+  "description": "Describes the header of a neutral prediction table: a per-cell export any annotation system can produce, which `cell-curator benchmark evaluate` scores without knowing which system wrote it. `optional_columns` is permissive because unknown columns are ignored, so a vendor may add its own. `scored_optional_columns` enumerates the columns the evaluator actually reads and `scored_optional_column_metrics` says what each one is for; a column present but absent from those two changes no published metric. That distinction is the reason the enumeration exists: the contract used to list no optional column at all, so an exporter following it could not know that `confidence` was what made the risk-coverage curve computable, nor that CL identifiers turn on a metric that cannot be produced without a local ontology snapshot.",
   "type": "object",
   "required": ["schema_version", "required_columns", "optional_columns"],
   "properties": {
@@ -11,7 +12,105 @@
     },
     "optional_columns": {
       "type": "array",
-      "items": {"type": "string"}
+      "items": {"type": "string"},
+      "description": "Every optional column present in the table, scored or not."
+    },
+    "scored_optional_columns": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "confidence",
+          "true_path",
+          "predicted_path",
+          "true_mixed",
+          "predicted_mixed",
+          "true_split_decision",
+          "predicted_split_decision",
+          "repeat_predicted_label",
+          "input_invariant",
+          "unsplit_parent_invariant",
+          "runtime_seconds",
+          "peak_memory_mb",
+          "artifact_complete",
+          "true_cl_id",
+          "predicted_cl_id",
+          "true_cell_type_ontology_term_id",
+          "predicted_cell_type_ontology_term_id"
+        ]
+      },
+      "uniqueItems": true,
+      "allOf": [
+        {
+          "description": "`true_path` and `predicted_path` are read only as a pair.",
+          "allOf": [{"contains": {"const": "true_path"}}, {"contains": {"const": "predicted_path"}}]
+        },
+        {
+          "description": "`true_mixed` and `predicted_mixed` are read only as a pair.",
+          "allOf": [{"contains": {"const": "true_mixed"}}, {"contains": {"const": "predicted_mixed"}}]
+        },
+        {
+          "description": "`true_split_decision` and `predicted_split_decision` are read only as a pair.",
+          "allOf": [
+            {"contains": {"const": "true_split_decision"}},
+            {"contains": {"const": "predicted_split_decision"}}
+          ]
+        },
+        {
+          "description": "Either CL spelling enables `ontology_distance_error` and `relaxed_accuracy`, and either spelling then requires `cell-curator benchmark evaluate --ontology` with a local Cell Ontology snapshot: the evaluator refuses to report the metrics for a table it cannot measure rather than substituting another one. The same pair is what `cell_curator.sweep_benchmark_risk_coverage(..., agreement=\"relaxed\")` scores a curve against.",
+          "anyOf": [
+            {
+              "allOf": [
+                {"contains": {"const": "true_cl_id"}},
+                {"contains": {"const": "predicted_cl_id"}}
+              ]
+            },
+            {
+              "allOf": [
+                {"contains": {"const": "true_cell_type_ontology_term_id"}},
+                {"contains": {"const": "predicted_cell_type_ontology_term_id"}}
+              ]
+            }
+          ]
+        }
+      ],
+      "description": "The optional columns the evaluator reads at runtime."
+    },
+    "scored_optional_column_metrics": {
+      "type": "object",
+      "properties": {
+        "confidence": {
+          "const": ["brier_score", "expected_calibration_error"],
+          "description": "Finite and within [0, 1] or the table is refused. This is also the axis of the risk-coverage sweep."
+        },
+        "true_path": {"const": ["hierarchy_error", "hierarchical_accuracy"]},
+        "predicted_path": {"const": ["hierarchy_error", "hierarchical_accuracy"]},
+        "true_mixed": {"const": ["mixed_detection_f1"]},
+        "predicted_mixed": {"const": ["mixed_detection_f1"]},
+        "true_split_decision": {"const": ["split_decision_accuracy"]},
+        "predicted_split_decision": {"const": ["split_decision_accuracy"]},
+        "repeat_predicted_label": {"const": ["repeat_reproducibility"]},
+        "input_invariant": {"const": ["input_invariance"]},
+        "unsplit_parent_invariant": {"const": ["unsplit_parent_invariance"]},
+        "runtime_seconds": {"const": ["runtime_seconds"]},
+        "peak_memory_mb": {"const": ["peak_memory_mb"]},
+        "artifact_complete": {"const": ["artifact_completeness"]},
+        "true_cl_id": {"const": ["ontology_distance_error", "relaxed_accuracy"]},
+        "predicted_cl_id": {"const": ["ontology_distance_error", "relaxed_accuracy"]},
+        "true_cell_type_ontology_term_id": {"const": ["ontology_distance_error", "relaxed_accuracy"]},
+        "predicted_cell_type_ontology_term_id": {"const": ["ontology_distance_error", "relaxed_accuracy"]}
+      },
+      "additionalProperties": false,
+      "description": "Each column and the `BenchmarkResult` fields it can move. `accuracy`, `macro_f1`, `micro_f1`, `coverage`, `selective_accuracy`, `coverage_risk`, and the `Unknown` precision, recall, and F1 come from the three required columns alone: `relaxed_accuracy` is reported beside `accuracy` rather than in place of it, so the exact-label number is still there to disagree with."
+    },
+    "carried_unscored_columns": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["scenario"]
+      },
+      "uniqueItems": true,
+      "description": "Columns the shipped fixture carries for a human reader. They are permitted and change no metric, which is why they are named here rather than left in a header to look like measurements."
     }
   }
 }

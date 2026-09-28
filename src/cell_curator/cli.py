@@ -411,6 +411,11 @@ def build_parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--system", required=True)
     evaluate.add_argument("--dataset", required=True)
     evaluate.add_argument("--output", required=True, type=Path)
+    evaluate.add_argument(
+        "--ontology",
+        type=Path,
+        help="local Cell Ontology snapshot; required when the table carries CL ids",
+    )
     manifest = benchmark_sub.add_parser("validate-manifest")
     manifest.add_argument("--manifest", required=True, type=Path)
     return parser
@@ -912,6 +917,7 @@ def dispatch(args: argparse.Namespace) -> Any:
                 system=args.system,
                 dataset=args.dataset,
                 output_path=args.output,
+                ontology=args.ontology,
             ).model_dump(mode="json")
         return validate_dataset_manifest(args.manifest)
     raise ContractError(f"unsupported command: {args.command}")

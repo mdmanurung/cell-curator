@@ -58,6 +58,7 @@ from .api import (
     run_candidate_evidence_lane,
     run_evidence_lane,
     run_marker_tools,
+    sweep_benchmark_risk_coverage,
     train_scanvi_reference_model,
     validate_critic_reconciliation,
     validate_dataset_manifest,
@@ -78,6 +79,7 @@ from .models import (
     EvidenceRecord,
     MappingRecord,
     MarkerProgram,
+    RiskCoveragePoint,
     RunState,
 )
 from .session import CellCurator
@@ -100,6 +102,7 @@ __all__ = [
     "EvidenceRecord",
     "MappingRecord",
     "MarkerProgram",
+    "RiskCoveragePoint",
     "RunState",
     "advisory_confidence",
     "annotate",
@@ -157,6 +160,7 @@ __all__ = [
     "run_candidate_evidence_lane",
     "run_evidence_lane",
     "run_marker_tools",
+    "sweep_benchmark_risk_coverage",
     "train_scanvi_reference_model",
     "validate_critic_reconciliation",
     "validate_dataset_manifest",

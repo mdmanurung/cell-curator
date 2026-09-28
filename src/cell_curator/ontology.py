@@ -42,6 +42,12 @@ class CellOntology:
         for accession, term in terms.items():
             for name in (term.name, *term.synonyms):
                 self._names.setdefault(name.casefold(), set()).add(accession)
+        self._roots: frozenset[str] = frozenset(
+            accession
+            for accession, term in terms.items()
+            if not any(parent in terms for parent in term.parents)
+        )
+        self._depths: dict[str, int] = {}
 
     @classmethod
     def load(cls, path: str | Path) -> CellOntology:
@@ -195,6 +201,62 @@ class CellOntology:
             if parent in self.terms:
                 stack.extend(self.terms[parent].parents)
         return seen
+
+    def roots(self) -> frozenset[str]:
+        """Report the terms that have no parent inside the supplied graph.
+
+        "Root" is a property of the snapshot, not of the Cell Ontology. A term
+        is a root here exactly when none of its `is_a` parents were loaded, which
+        is what an OBO, OWL, or table export of a subtree looks like: the top of
+        the file is a cut, not a biological top. Consumers that reason about
+        ancestry need this set because the whole graph shares its roots by
+        construction, so a shared root is the one piece of ancestry that
+        distinguishes nothing.
+        """
+
+        return self._roots
+
+    def depth(self, accession: str) -> int:
+        """Return the longest `is_a` chain from a term to a root of this graph.
+
+        Depth is the number of edges, so a root of the supplied graph is 0. The
+        longest chain rather than a particular one is what makes "deeper"
+        well defined for a DAG: a term with two parents of different depth sits
+        below the deeper one, and any statement about how far below an
+        agreement point something lies has to use the same measure on both
+        sides or it is not a distance.
+
+        Results are memoized because an evaluation over a prediction table asks
+        for the same handful of terms thousands of times. The walk is iterative
+        rather than recursive so that a malformed snapshot with a parent cycle
+        cannot exhaust the interpreter stack, and a cycle resolves to depth 0:
+        a cycle is a broken hierarchy, and inventing a depth for it would let a
+        corrupt file produce a plausible-looking number.
+        """
+
+        start = self.resolve(accession).accession
+        if start in self._depths:
+            return self._depths[start]
+        pending: list[tuple[str, bool]] = [(start, False)]
+        active: set[str] = set()
+        while pending:
+            current, expanded = pending.pop()
+            if current in self._depths:
+                continue
+            parents = [p for p in self.terms[current].parents if p in self.terms]
+            if not parents:
+                self._depths[current] = 0
+                continue
+            if expanded:
+                self._depths[current] = 1 + max(self._depths[p] for p in parents)
+                continue
+            if current in active:
+                self._depths[current] = 0
+                continue
+            active.add(current)
+            pending.append((current, True))
+            pending.extend((p, False) for p in parents if p not in self._depths)
+        return self._depths[start]
 
     def validate_term(
         self, accession: str, *, expected_name: str | None = None
