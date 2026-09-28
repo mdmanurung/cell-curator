@@ -210,6 +210,22 @@ alternatives, QC, composition, provenance, and spatial context when available.
 Reconciliation records a reviewer and rationale for every resolved or dismissed
 finding.
 
+To score this run against an external ground truth, export its labels as a
+neutral prediction table:
+
+```bash
+cell-curator run export-predictions --config config.yaml \
+  --truth ground-truth.tsv --output predictions.tsv
+```
+
+The truth table must name exactly the barcodes the run labelled, carrying
+`barcode` and `true_label` and optionally `true_cl_id` and `true_path`. Any
+overlap that is not an exact match is refused rather than scored, so the cell set
+being measured is one that was chosen. An immutable receipt beside the table
+records the truth digest, the run's mapping digest, and every label table it was
+built from. Annotation is per cluster, so the per-cell confidence column is a
+cluster value carried to each cell, and the receipt says so.
+
 ## 5. Preview and write back
 
 Preview the complete mapping:

@@ -161,6 +161,13 @@ def build_parser() -> argparse.ArgumentParser:
     _config_argument(confirm)
     confirm.add_argument("--input", required=True, type=Path)
     confirm.add_argument("--reviewer", required=True)
+    export_predictions = run_sub.add_parser(
+        "export-predictions",
+        help="export a run's labels as a neutral benchmark prediction table",
+    )
+    _config_argument(export_predictions)
+    export_predictions.add_argument("--truth", required=True, type=Path)
+    export_predictions.add_argument("--output", required=True, type=Path)
 
     assumptions = commands.add_parser("assumptions", help="manage the living assumptions gate")
     assumptions_sub = assumptions.add_subparsers(dest="action", required=True)
@@ -583,6 +590,12 @@ def dispatch(args: argparse.Namespace) -> Any:
             return initialize(args.config)
         if args.action == "confirm-context":
             return confirm_context(args.config, input_path=args.input, reviewer=args.reviewer)
+        if args.action == "export-predictions":
+            from .export import export_benchmark_predictions
+
+            return export_benchmark_predictions(
+                load_config(args.config), truth_path=args.truth, output_path=args.output
+            )
         if args.action == "plan":
             return construct_plan(args.config)
         if args.action == "execute":

@@ -1035,3 +1035,22 @@ def validate_dataset_manifest(path: str | Path) -> dict[str, Any]:
     from .benchmark import validate_dataset_manifest as validate
 
     return validate(Path(path))
+
+
+def export_benchmark_predictions(
+    config: CellCuratorConfig,
+    *,
+    truth_path: str | Path,
+    output_path: str | Path,
+) -> dict[str, Any]:
+    """Write a completed run's labels as a neutral-format prediction table.
+
+    The truth table must name exactly the barcodes the run labelled. A
+    prediction table is written next to an immutable receipt recording the run,
+    the truth digest, and the digests of the mapping and every label table, so
+    the scored table is attributable to the artifacts it came from.
+    """
+
+    from .export import export_benchmark_predictions as export
+
+    return export(config, truth_path=truth_path, output_path=output_path)

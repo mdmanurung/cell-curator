@@ -78,6 +78,7 @@ CLI_TO_PUBLIC_NAME: dict[tuple[str, ...], str] = {
     ("route", "select"): "route_annotation_crosscheck",
     ("run", "confirm-context"): "confirm_annotation_context",
     ("run", "execute"): "annotate",
+    ("run", "export-predictions"): "export_benchmark_predictions",
     ("run", "init"): "initialize_run",
     ("run", "plan"): "plan_annotation",
     ("run", "scene"): "prepare_annotation_scene",
