@@ -1,14 +1,32 @@
 # Neutral capability-parity matrix
 
-Use the public QuadBio `cell-type-annotation` surface only as a capability
-checklist. The mappings below identify independent `cell-curator` implementations;
-they do not import, invoke, vendor, or require QuadBio, its CLI, package, skill, MCP
-configuration, or artifacts. They make no comparative accuracy or performance
-claim.
+Use the two public QuadBio surfaces below only as a capability checklist. The
+mappings identify independent `cell-curator` implementations; they do not import,
+invoke, vendor, or require QuadBio, its CLI, package, skill, MCP configuration, or
+artifacts. They make no comparative accuracy or performance claim.
 
-Checklist source: the public QuadBio
-[`cell-type-annotation` skill](https://github.com/quadbio/cell-type-annotation/blob/main/skills/cell-type-annotation/SKILL.md),
-reviewed 2026-08-09. This link is documentation only and is never used at runtime.
+**This is reviewer orientation, not a routing input.** An agent reading this file
+is deciding how to annotate data, not which project to prefer. Nothing here should
+change what a run does, and a gap recorded below is a statement about this
+package's surface, not an instruction to route around it.
+
+Checklist sources, both documentation only and never used at runtime:
+
+- QuadBio [`cell-type-annotation`](https://github.com/quadbio/cell-type-annotation/blob/main/skills/cell-type-annotation/SKILL.md) — an agent skill plus a `cta` CLI, last commit `b438119` (2026-08-06).
+- QuadBio [`cell-annotator`](https://github.com/quadbio/cell-annotator) — a PyPI package, `cell-annotator` 0.3.0, head `0b17fc3` (2026-07-07).
+
+### The two QuadBio projects are unrelated to each other
+
+They share a lab and a problem, and nothing else. Neither repository contains a
+cross-reference to the other, they share no package or namespace, and
+`cell-annotator` was created roughly eighteen months *before* the skill, which
+rules out the skill being a port of it. They also make opposite architectural
+bets: `cell-annotator` uses a language model as the classifier, while
+`cell-type-annotation` uses a language model as the reasoning agent over evidence
+computed classically. The matrix below is therefore drawn from the skill, and
+`cell-annotator` is compared separately further down.
+
+## The matrix, against `cell-type-annotation`
 
 | QuadBio capability | `cell-curator` equivalent | Implementation file | CLI / API entry point | Test coverage |
 | --- | --- | --- | --- | --- |
@@ -58,18 +76,56 @@ reviewed 2026-08-09. This link is documentation only and is never used at runtim
 | Immutable provenance and resume | Hash inputs, configuration, mappings, receipts, and artifacts; resume valid checkpoints through the authoritative DAG | [`provenance.py`](../../../src/cell_curator/provenance.py), [`Snakefile`](../../../workflow/Snakefile) | `run status`, `run validate`; Snakemake targets `all_evidence`, `review_packet`, `finalization`, `writeback` | [`test_end_to_end.py`](../../../tests/test_end_to_end.py) |
 | Discoverable unified CLI and shared Python logic | Expose command help while keeping commands thin over the same typed package APIs used by tests and workflows | [`cli.py`](../../../src/cell_curator/cli.py), [`api.py`](../../../src/cell_curator/api.py) | `cell-curator --help`; all command groups listed above | [`test_cli_and_manifests.py`](../../../tests/test_cli_and_manifests.py), [`test_package_core.py`](../../../tests/test_package_core.py) |
 
+## Where `cell-annotator` differs
+
+The skill is the checklist; the package is a different project with a different
+bet, and the comparison is worth recording because it is not one-sided in either
+direction.
+
+| Capability | `cell-annotator` | `cell-curator` |
+| --- | --- | --- |
+| Where the call is made | A language model classifies each cluster from its marker list | Scored locally; no model call, no provider key |
+| Cell Ontology | None. Labels are free text, de-duplicated only against each other | Local CL snapshot, semantic validation, optional live tier |
+| Hierarchy | Flat. A single `cluster_key`, no recursion or sub-clustering | Arbitrary depth, every child scoped to its parent |
+| State axis | `cell_state` is a field the agent may fill, and is not written to `obs` | Orthogonal to identity and refused as an identity candidate |
+| Reference mapping | None. No CellTypist, Azimuth, scANVI, or kNN route | Routed, with bounded acquisition and skip reasons |
+| Uncertainty | A self-reported `Low`/`Medium`/`High` string, also not written to `obs` | Margin-anchored confidence; `Unknown` is machine-gated |
+| Cross-sample vocabulary consolidation | Yes, local labels are mapped onto one global vocabulary | Absent. See the gap recorded below |
+| Category colour assignment | Model-proposed hex colours validated with a ΔE threshold and re-queried on failure | Preserves existing category order and colours |
+| Network | Mandatory. Every annotation is an outbound call to a commercial provider | Not required. Runs with no network |
+| Provenance | None. Re-running re-issues every call | Hash-bound, immutable artifacts, resumable DAG |
+| Orchestration | None | Snakemake DAG with a scheduler profile |
+| Published evaluation | None | None |
+
+The two shared refusals are worth stating plainly. Both projects disclaim any
+accuracy comparison, and both require a network service that `cell-curator` does
+not: `cell-annotator` requires a commercial LLM provider, `cell-type-annotation`
+requires the BioContextAI knowledge MCP.
+
 ## Reverse direction: gaps and deliberate divergences
 
 The matrix above records what `cell-curator` implements independently. It says
-nothing about the reverse direction, which anyone comparing the two projects
-needs. Reviewed against the same public sources on 2026-09-13.
+nothing about the reverse direction, which anyone comparing the projects needs.
+Reviewed against both public sources on 2026-09-28.
 
 ### Open gaps
 
 | QuadBio capability | `cell-curator` status | What closing it requires |
 | --- | --- | --- |
-| Live query-time grounding against the Human Protein Atlas and Europe PMC | Absent. PanglaoDB is reachable as a checksum-pinned `remote_table`, and the Cell Ontology now has a live tier (below), but expression-atlas and literature queries have no provider. | Two further `live_*` provider kinds on the contract the live ontology tier already establishes. Lower value than the ontology tier: neither is direct marker evidence for a label. |
-| Curated literature grounding through a Zotero MCP | Absent. No bibliography provider of any kind. | A local-first provider reading a BibTeX or CSL-JSON export, with a live literature tier layered on the same contract. A documented non-goal until there is a reason to prefer it over citing evidence in the labels table. |
+| Live query-time grounding against the Human Protein Atlas and Europe PMC | Absent. PanglaoDB is reachable as a checksum-pinned `remote_table`, and the Cell Ontology has a live tier (below), but expression-atlas and literature queries have no provider. | Two further `live_*` provider kinds on the contract the live ontology tier already establishes. Lower value than the ontology tier: neither is direct marker evidence for a label. |
+| Curated literature grounding through a Zotero MCP | Not a gap of equal standing, and previously recorded here as one. The skill treats Zotero as strongly preferred rather than required and documents a fallback to its own Europe PMC tools, so a run continues without it. | A local-first provider reading a BibTeX or CSL-JSON export would be a strict convenience over reading papers directly, which the labels table already carries. A documented non-goal until there is a reason to prefer it. |
+
+### Gaps this package has that the review exposed
+
+These are absent from `cell-curator` and are recorded here because a checklist
+that only lists another project's gaps is not a neutral document.
+
+| Gap | Status | What closing it requires |
+| --- | --- | --- |
+| Cross-sample label-vocabulary consolidation | Absent. One clustering over one vocabulary is assumed, so two independently clustered samples can carry `Monocyte` at different granularity with nothing reconciling them. `cell-annotator` maps per-sample labels onto one global vocabulary. | A consolidation pass over the per-parent vocabularies, writing a mapping table and refusing an unresolvable label rather than picking a winner. Note the same machinery already exists for gene identifiers in `harmonize_reference_genes()`; this is the label-axis analogue. |
+| A neutral evaluation harness that has never been pointed at real data | The harness exists and is independent of the annotation engine, but five of six dataset manifests are `pending-external-resource` and the only result scores an eight-row fixture. | One real dataset with independent ground truth, run through the shipped CLI, with the label-harmonization and threshold grid frozen before the first result is published. |
+| No stated empirical basis for the negative-marker violation threshold | The threshold that decides whether an expected-absent marker counts as violated is asserted. The skill documents a chosen value and the reasoning behind it, and reports the rates behind that choice in a pull request body rather than in the repository, so the asymmetry is one of documented reasoning rather than of published evidence. | Record the rate at which real positive markers exceed the threshold across several reference datasets, and either justify the value or calibrate it. Until then it is a tuned constant with no recorded provenance. |
+| The matrix above can only be checked for existence, not for truth | The skill generates its method-selection document from the router and fails CI on drift. `tests/test_parity_matrix_claims.py` closes the mechanical half of the difference by resolving every implementation file, entry point, and symbol this document names. | A reader still has to judge whether the named implementation actually provides the capability, and nothing here measures that. Existence is checkable; equivalence is not. |
 
 ### Closed already, listed because a surface comparison suggests otherwise
 
@@ -89,8 +145,40 @@ requirement would contradict the invariant, so the live provider above is
 specified as optional corroboration that degrades to the local cache. It closes
 the capability gap without reversing the trade.
 
+The trade is sharper than a checklist alone conveys, and the reason it was made
+that way is on the record. In the skill the knowledge MCP is a strict stop rather
+than a preference: the run halts instead of degrading to web-only, on the stated
+ground that a web-only fallback produces exactly the confident-but-unfounded
+annotation the project exists to prevent. That same server also supplies the
+Ensembl-to-symbol map, so without it an Ensembl-indexed query cannot be
+canonicalized at all. The cost of the requirement is therefore not that a lookup
+is slower; it is that the package cannot be used at all in a firewalled or
+air-gapped setting, and that a third-party service sits in the path of every
+label. `cell-curator` takes the opposite position and pays for it by carrying a
+local ontology snapshot that must be provisioned before use.
+
 Against the same checklist, `cell-curator` additionally carries MuData and
 multimodal capability routing, a Snakemake DAG with a scheduler profile, a
 hash-bound write-back approval, and a critic loop that runs as a file packet
-rather than as agent subagents. No accuracy or performance claim is made or
-implied by any row above.
+rather than as agent subagents.
+
+### No published comparison exists for any of the three projects
+
+This is worth stating separately because it is the most consequential fact in
+the document, and it is checkable rather than a matter of opinion.
+
+None of these projects publishes a measured accuracy figure for cell-type
+annotation. The skill states this three times, and disclaims it most explicitly
+where a reader might mistake its method ranking for a result: the ordering "is
+not a claim that any tool annotates better than another", and the internal
+sanity-checking it describes is "preliminary and unpublished". `cell-annotator`
+publishes no benchmark either; the only figure in its tutorials is a confusion
+matrix computed against clusters that are the ground-truth labels relabelled, so
+each cluster is by construction exactly one true type and the comparison cannot
+detect a tool failing to find types in real clusters. Its own README recommends
+the output as "an initial, coarse set of annotations that must be further
+refined".
+
+`cell-curator` is in the same position and says so: comparative claims require
+measured benchmark results, and no such result has been published. No accuracy or
+performance claim is made or implied by any row above.
