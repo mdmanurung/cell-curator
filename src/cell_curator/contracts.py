@@ -51,6 +51,27 @@ def values_sha256(values: list[str], *, sort_values: bool = False) -> str:
     return digest.hexdigest()
 
 
+def identifier_text(value: object) -> str:
+    """Normalize an identifier cell, mapping the stringified null to absent.
+
+    A missing identifier arrives as ``None`` or ``NaN``, and the obvious
+    `str(value)` turns either into a short string that reads as data: the
+    resulting text is truthy, so it survives an `if value` guard, is collected
+    as a real identifier, and is written into durable, hashed artifacts as an
+    accession the run never had. Anything consuming those artifacts later then
+    fails on a term named "None", with nothing pointing at the stage that
+    invented it.
+
+    An accession is never the literal text `none`, `nan`, or `null`, so treating
+    those as absent is unambiguous. Everything else is returned stripped, and a
+    value that is already absent stays absent rather than becoming its own
+    representation of absence.
+    """
+
+    text = str(value).strip()
+    return "" if text.lower() in {"", "none", "nan", "null"} else text
+
+
 def as_bool(value: object) -> bool:
     if isinstance(value, bool):
         return value

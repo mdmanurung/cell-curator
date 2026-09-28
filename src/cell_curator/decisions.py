@@ -12,7 +12,7 @@ from scipy import sparse
 
 from .capabilities import build_capability_registry
 from .config import CellCuratorConfig
-from .contracts import ContractError, as_bool, sha256, values_sha256
+from .contracts import ContractError, as_bool, identifier_text, sha256, values_sha256
 from .evidence import lane_key, validate_backend_receipt
 from .models import BackendReceipt, CapabilityLevel, MarkerProgram, ParentOutcome
 from .provenance import atomic_publish, publish_json
@@ -344,7 +344,7 @@ def derive_candidate_evidence(
                 else:
                     best = target.iloc[0]
                     winner = str(best["label"])
-                    cl_id = str(best["cl_id"])
+                    cl_id = identifier_text(best["cl_id"])
                     coverage = float(best["positive_coverage"])
                     violation = float(best["negative_violation"])
                     program_coverage = float(best["program_coverage"])
@@ -445,9 +445,9 @@ def derive_candidate_evidence(
             failed.append("run_mode_evidence_only")
         cl_ids = sorted(
             {
-                str(item["cl_id"])
+                item["cl_id"]
                 for item in lane_rows
-                if item["winner"] == consensus_label and str(item["cl_id"])
+                if item["winner"] == consensus_label and item["cl_id"]
             }
         )
         if len(cl_ids) > 1:

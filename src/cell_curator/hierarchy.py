@@ -10,7 +10,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from .contracts import ContractError
+from .contracts import ContractError, identifier_text
 from .provenance import atomic_publish, atomic_replace, publish_json
 
 LABEL_COLUMNS = (
@@ -484,7 +484,7 @@ def labels_from_existing_proposals(
                 "cluster_id": str(proposal["cluster_id"]),
                 "label": str(proposal.get("cell_type", "Unknown")),
                 "cell_state": str(proposal.get("cell_state", "normal")),
-                "cl_id": str(proposal.get("cl_id", "")),
+                "cl_id": identifier_text(proposal.get("cl_id")),
                 "confidence": float(proposal.get("confidence", 0.0)),
                 "margin": float(proposal.get("margin", 0.0)),
                 "specificity": float(proposal.get("specificity", 0.0)),
