@@ -72,3 +72,107 @@ jobs:
             coverage.json
           if-no-files-found: ignore
           retention-days: 14
+
+  # A `v*` tag used to run lint, type-check, and tests and then produce nothing,
+  # so a green badge on a release tag meant only that the suite passed. This job
+  # builds the artifacts a release would consist of and proves they work.
+  # Publishing stays a deliberate manual step: a tag should not be able to put
+  # code on PyPI on its own.
+  build:
+    needs: check
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Build the wheel and sdist
+        run: uv build
+
+      # The suite builds a wheel from the source tree, but nothing built the
+      # sdist and nothing ever checked that the metadata renders. `twine check`
+      # reads the same files PyPI reads, so a broken long_description is caught
+      # here rather than at upload.
+      - name: Check the distribution metadata
+        run: uvx twine check --strict dist/*
+
+      # A tag can disagree with the version in pyproject.toml, and the published
+      # wheel filename is what the install instructions in the README point at.
+      # The distribution manifests are already held to the project version by
+      # test_distribution_manifests.py; this closes the last link in that chain,
+      # from the tag to the artifact name.
+      - name: Verify the tag matches the built version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          built="$(ls dist/*.whl | sed -E 's/.*-([^-]+)-py3-none-any\.whl/\1/')"
+          if [ "$tag" != "$built" ]; then
+            echo "tag $tag does not match the built version $built" >&2
+            exit 1
+          fi
+          echo "tag and artifact agree: $built"
+
+      # The artifact a user installs, proven in an environment that shares
+      # nothing with the build, rather than the checkout the suite already tested.
+      - name: Install the wheel into a clean environment
+        run: |
+          uv venv --python 3.11 /tmp/release-check
+          uv pip install --python /tmp/release-check dist/*.whl
+
+      - name: Smoke-test the installed distribution
+        run: |
+          /tmp/release-check/bin/cell-curator --version
+          /tmp/release-check/bin/cell-curator --help > /dev/null
+          /tmp/release-check/bin/python - <<'PY'
+          import sys
+          from importlib.metadata import version
+          from pathlib import Path
+
+          import cell_curator
+          from cell_curator import CellCurator, __all__
+
+          # Resolved through the installed package rather than the checkout the
+          # suite already exercised.
+          assert Path(cell_curator.__file__).is_relative_to(Path(sys.prefix)), (
+              "the imported cell_curator is not the installed one"
+          )
+          assert version("cell-curator")
+          assert len(__all__) > 50
+
+          # The skill, workflow, schemas, references, and benchmark data all ship
+          # as data-files under the environment prefix, and an install missing
+          # them is an install that cannot run the documented workflow.
+          # sysconfig rather than relative traversal, because the depth of
+          # lib/pythonX.Y is not the same on every interpreter and platform.
+          import sysconfig
+
+          share = Path(sysconfig.get_path("data")) / "share" / "cell-curator"
+          for relative in (
+              "SKILL.md",
+              "workflow/Snakefile",
+              "workflow/config",
+              "workflow/profiles/slurm",
+              "schemas/cell-curator-config-v3.schema.json",
+              "references/quadbio-parity.md",
+              "benchmarks/neutral-format.schema.json",
+              "benchmarks/manifests",
+              "benchmarks/fixtures",
+              "benchmarks/results",
+          ):
+              assert share.joinpath(relative).exists(), f"missing from the wheel: {relative}"
+          print("installed distribution is complete")
+          PY
+
+      - name: Publish the built distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
