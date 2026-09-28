@@ -36,9 +36,34 @@ under "Where a novel result could still come from".
 **Dataset.** AIDA Phase 1 Data Freeze v2, CELLxGENE collection
 `ced320a1-29f3-47c1-a735-513c7084d508`, dataset
 `c838aec3-03ef-4398-b882-0e3912abfff0`, read from Census release `2025-11-08`.
-License CC BY 4.0 as distributed by CZI. A bounded slice of 2,000 highly
-variable genes, stratified across the joinid axis, because Census peak memory
-scales with tile scatter and this box has 4 GB of RAM.
+Acquired slice: **17,394 cells x 2,000 highly variable genes, 394 donors, 28
+CL types, 75.6 MB**, sha256 `e7833ebb…cee09`, pinned in
+`manifests/rna.json`. The two acquisition scripts sit beside the data so the
+slice is re-derivable rather than asserted. The 2,000-gene restriction is a
+memory constraint, not a design choice: Census peak memory scales with tile
+scatter, and a contiguous 2,000-gene read of this cohort measures ~2.6 GB peak
+against a 4 GB budget, so the slice is taken as contiguous windows straddling
+the joinid axis plus a small scattered backfill for rare types. The whole
+transcriptome at the same cell count measures ~5.5 GB and does not fit.
+
+**Composition, recorded before any annotation was run.** The slice is T/NK-heavy
+because the joinid axis is not ordered by cell type, so window placement
+determines the mix. Counts: CD16-dim NK 2,854; naive CD4 1,729; T cell 1,720;
+CD14 mono 1,614; central memory CD4 1,500; naive CD8 1,023; CD8 1,002; CD8
+cytotoxic 823; NK 789; gamma-delta T 685; myeloid 530; CD4 470; CD14-low
+CD16 mono 438; CD8 memory 343; effector memory CD4 295; iNKT 271; Treg 152; CD4
+cytotoxic 151; **B cell 147**; CD1c+ mDC 115; CD16-bright NK 109; double
+negative Treg 108; ILC 107; pre-cDC 106; **plasma cell 101**; CD141+ mDC 100;
+HSPC 100; **platelet 12**.
+
+The B-cell and rare-type tail is thin, and the slice was **not** re-cut to
+improve it. Re-acquiring after inspecting the composition, with no result in
+hand, is still tuning the dataset toward the annotation, and the protocol is
+worth less if that is available. The cost is stated instead: per-cell-type F1 for
+platelet rests on 12 cells and must be read with its support count or not at
+all, and the B-cell axis is where this evaluation is weakest. The `scenarios`
+field in the manifest records which partitions the slice is meant to exercise and
+`rare-types-under-200-cells` names the ones it covers only thinly.
 
 **The caveat that governs how this result may be read.** CELLxGENE
 `cell_type_ontology_term_id` is curator-standardized but not
