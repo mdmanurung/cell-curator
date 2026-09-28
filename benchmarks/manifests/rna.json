@@ -20,6 +20,8 @@
   "reproduce": [
     "uv run --extra census python benchmarks/data/aida-phase1-v2-pbmc-hvg2000/acquire_hvg_panel.py",
     "uv run --extra census python benchmarks/data/aida-phase1-v2-pbmc-hvg2000/acquire_slice.py",
-    "sha256sum benchmarks/data/aida-phase1-v2-pbmc-hvg2000/aida_pbmc_benchmark.h5ad"
+    "sha256sum benchmarks/data/aida-phase1-v2-pbmc-hvg2000/aida_pbmc_benchmark.h5ad",
+    "Export truth labels and each system to benchmarks/neutral-format.schema.json.",
+    "cell-curator benchmark evaluate --predictions PREDICTIONS.tsv --system SYSTEM --dataset aida-phase1-v2-pbmc-hvg2000 --output RESULT.json"
   ]
 }

@@ -16,6 +16,10 @@ from test_distribution_manifests import _project_version
 
 
 def _run(command: list[str], *, cwd: Path, env: dict[str, str] | None = None) -> str:
+    # Generous, because the longest step is a Snakemake DAG in a freshly created
+    # virtual environment. That step takes roughly 110s on an idle machine and has
+    # timed out at 180 under load, twice, which is a flaky test rather than a
+    # signal about the wheel. The budget still bounds a hang.
     completed = subprocess.run(
         command,
         cwd=cwd,
@@ -23,7 +27,7 @@ def _run(command: list[str], *, cwd: Path, env: dict[str, str] | None = None) ->
         check=False,
         capture_output=True,
         text=True,
-        timeout=180,
+        timeout=420,
     )
     assert completed.returncode == 0, completed.stdout + completed.stderr
     return completed.stdout
