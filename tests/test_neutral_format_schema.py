@@ -102,7 +102,7 @@ def test_every_scored_column_says_which_metric_it_moves() -> None:
         or column.endswith("_cell_type_ontology_term_id")
     }
     assert {tuple(value) for value in ontology.values()} == {
-        ("ontology_distance_error", "relaxed_accuracy")
+        ("ontology_distance_error", "descendant_accuracy", "relaxed_accuracy")
     }
     assert len(ontology) == 4
 

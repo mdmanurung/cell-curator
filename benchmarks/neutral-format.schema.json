@@ -57,7 +57,7 @@
           ]
         },
         {
-          "description": "Either CL spelling enables `ontology_distance_error` and `relaxed_accuracy`, and either spelling then requires `cell-curator benchmark evaluate --ontology` with a local Cell Ontology snapshot: the evaluator refuses to report the metrics for a table it cannot measure rather than substituting another one. The same pair is what `cell_curator.sweep_benchmark_risk_coverage(..., agreement=\"relaxed\")` scores a curve against.",
+          "description": "Either CL spelling enables `ontology_distance_error`, `descendant_accuracy` and `relaxed_accuracy`, and either spelling then requires `cell-curator benchmark evaluate --ontology` with a local Cell Ontology snapshot: the evaluator refuses to report the metrics for a table it cannot measure rather than substituting another one. The same pair is what `cell_curator.sweep_benchmark_risk_coverage` scores a curve against, under `agreement=\"descendant\"` (a prediction counts when it is the truth or a more specific subtype) or `agreement=\"relaxed\"` (also credits a coarser answer).",
           "anyOf": [
             {
               "allOf": [
@@ -95,10 +95,10 @@
         "runtime_seconds": {"const": ["runtime_seconds"]},
         "peak_memory_mb": {"const": ["peak_memory_mb"]},
         "artifact_complete": {"const": ["artifact_completeness"]},
-        "true_cl_id": {"const": ["ontology_distance_error", "relaxed_accuracy"]},
-        "predicted_cl_id": {"const": ["ontology_distance_error", "relaxed_accuracy"]},
-        "true_cell_type_ontology_term_id": {"const": ["ontology_distance_error", "relaxed_accuracy"]},
-        "predicted_cell_type_ontology_term_id": {"const": ["ontology_distance_error", "relaxed_accuracy"]}
+        "true_cl_id": {"const": ["ontology_distance_error", "descendant_accuracy", "relaxed_accuracy"]},
+        "predicted_cl_id": {"const": ["ontology_distance_error", "descendant_accuracy", "relaxed_accuracy"]},
+        "true_cell_type_ontology_term_id": {"const": ["ontology_distance_error", "descendant_accuracy", "relaxed_accuracy"]},
+        "predicted_cell_type_ontology_term_id": {"const": ["ontology_distance_error", "descendant_accuracy", "relaxed_accuracy"]}
       },
       "additionalProperties": false,
       "description": "Each column and the `BenchmarkResult` fields it can move. `accuracy`, `macro_f1`, `micro_f1`, `coverage`, `selective_accuracy`, `coverage_risk`, and the `Unknown` precision, recall, and F1 come from the three required columns alone: `relaxed_accuracy` is reported beside `accuracy` rather than in place of it, so the exact-label number is still there to disagree with."

@@ -296,38 +296,65 @@ def _ontology_distance_error(
     return float(np.mean(distances)) if distances else None
 
 
-def _relaxed_agreement(ontology: CellOntology, truth: str, prediction: str) -> bool:
-    """Whether two resolved Cell Ontology terms agree at any level of granularity.
+def _relaxed_agreement(
+    ontology: CellOntology, truth: str, prediction: str, *, mode: str = "relaxed"
+) -> bool:
+    """Whether two resolved Cell Ontology terms agree, at one of two relaxations.
 
-    This is :meth:`CellOntology.is_descendant` read in both directions, over the
-    same ``ancestors`` walk the distance metric uses and never a second copy of the
-    graph: the terms agree when they are the same term, when the prediction is an
-    ``is_a`` ancestor of the truth, or when the truth is an ``is_a`` ancestor of the
-    prediction. Both terms arrive already resolved, so an identifier the snapshot
-    does not know has raised before this is reached and a term it considers
-    obsolete is treated exactly as the distance metric treats it.
+    :meth:`CellOntology.is_descendant` read over the same ``ancestors`` walk the
+    distance metric uses and never a second copy of the graph. Both terms arrive
+    already resolved, so an identifier the snapshot does not know has raised
+    before this is reached and a term it considers obsolete is treated exactly as
+    the distance metric treats it.
+
+    The two relaxations differ in which direction they forgive, and the difference
+    is not cosmetic:
+
+    ``descendant`` credits a prediction that is the truth or a more specific
+    descendant of it, and does *not* credit a coarser answer. This is the
+    one-directional rule used by the largest published cross-tissue benchmark,
+    which states the reason: a valid subtype remains consistent with the original
+    label, whereas a coarser label asserts less than the truth and is counted
+    incorrect. It is the rule that cannot be satisfied by answering vaguely.
+
+    ``relaxed`` credits both directions, because a table whose vocabulary is
+    genuinely coarser than its ground truth is measuring a real difference of
+    design rather than a mistake. It is a ceiling on what the system was asked,
+    and it is why a run that abstains from specificity scores well here.
+
+    Publishing only one of them would be choosing the flattering direction, so
+    both are reported beside the strict number and the gap between them is the
+    evidence in a result about how much of an accuracy is identification and how
+    much is specificity.
     """
 
-    return (
-        truth == prediction
-        or prediction in ontology.ancestors(truth)
-        or truth in ontology.ancestors(prediction)
-    )
+    if truth == prediction:
+        return True
+    # `truth in ancestors(prediction)` means the prediction is a descendant of the
+    # truth, that is, a more specific answer. `prediction in ancestors(truth)` is
+    # the opposite: the prediction is a coarser answer, asserting less than the
+    # truth. The one-directional rule credits the first and not the second.
+    if mode in {"descendant", "relaxed"} and truth in ontology.ancestors(prediction):
+        return True
+    return mode == "relaxed" and prediction in ontology.ancestors(truth)
 
 
-def _relaxed_accuracy(frame: pd.DataFrame, ontology: CellOntology | None) -> float | None:
-    """Fraction of calls that survive a difference of Cell Ontology granularity.
+def _granularity_accuracy(
+    frame: pd.DataFrame, ontology: CellOntology | None, *, mode: str
+) -> float | None:
+    """Share of calls that survive a difference of Cell Ontology granularity.
 
-    A prediction agrees when its term is the true term or an ``is_a`` ancestor or
-    descendant of it, so a call of "T cell" scored against a truth of "central
-    memory CD4-positive, alpha-beta T cell" is credited where ``accuracy`` reads it
-    as a complete error. That gap is what this metric exists to close. The
-    benchmark ground truth is annotated at a finer Cell Ontology granularity than
-    any system is asked to reproduce, so exact string equality measures how nearly
-    a system imitates the annotator's chosen depth rather than whether it found the
-    cell, and a system that is right in every cell publishes a number near zero. A
-    selective-prediction curve built on the same rule inherits the defect: its
-    selective accuracy could never approach one, so two systems could not be
+    A prediction agrees when its term is the true term, or under ``relaxed`` when
+    one is an ``is_a`` ancestor of the other, so a call of "T cell" scored
+    against a truth of "central memory CD4-positive, alpha-beta T cell" is
+    credited where ``accuracy`` reads it as a complete error. That gap is what
+    this metric exists to close. The benchmark ground truth is annotated at a
+    finer Cell Ontology granularity than any system is asked to reproduce, so
+    exact string equality measures how nearly a system imitates the annotator's
+    chosen depth rather than whether it found the cell, and a system that is
+    right in every cell publishes a number near zero. A selective-prediction
+    curve built on the same rule inherits the defect: its selective accuracy
+    could never approach one, so two systems could not be
     compared at matched coverage on it at all.
 
     The relaxation is deliberately symmetric, and that is the one caveat a reader
@@ -360,13 +387,15 @@ def _relaxed_accuracy(frame: pd.DataFrame, ontology: CellOntology | None) -> flo
         return None
     pair, snapshot = claim
     agreements = [
-        _relaxed_agreement(snapshot, truth, prediction)
+        _relaxed_agreement(snapshot, truth, prediction, mode=mode)
         for _, truth, prediction in _resolved_identifier_pairs(frame, pair, snapshot)
     ]
     return float(np.mean(agreements)) if agreements else None
 
 
-def _relaxed_correctness(frame: pd.DataFrame, ontology: CellOntology | None) -> np.ndarray:
+def _relaxed_correctness(
+    frame: pd.DataFrame, ontology: CellOntology | None, *, mode: str = "relaxed"
+) -> np.ndarray:
     """Per-cell relaxed correctness, for the selective-prediction curve.
 
     A cell is relaxed-correct on exactly the condition ``relaxed_accuracy`` counts
@@ -394,7 +423,7 @@ def _relaxed_correctness(frame: pd.DataFrame, ontology: CellOntology | None) -> 
     pair, snapshot = claim
     correct = np.zeros(len(frame), dtype=bool)
     for row, truth, prediction in _resolved_identifier_pairs(frame, pair, snapshot):
-        correct[row] = _relaxed_agreement(snapshot, truth, prediction)
+        correct[row] = _relaxed_agreement(snapshot, truth, prediction, mode=mode)
     return correct
 
 
@@ -509,9 +538,10 @@ def risk_coverage_sweep(
     table are two different measurements and neither is the other.
     """
 
-    if agreement not in {"strict", "relaxed"}:
+    if agreement not in {"strict", "descendant", "relaxed"}:
         raise ContractError(
-            f"risk-coverage agreement must be 'strict' or 'relaxed', not {agreement!r}"
+            "risk-coverage agreement must be 'strict', 'descendant', or "
+            f"'relaxed', not {agreement!r}"
         )
     if "confidence" not in frame:
         raise ContractError(
@@ -525,8 +555,8 @@ def risk_coverage_sweep(
             )
     confidence = _confidence_values(frame)
     grid = _validated_thresholds(thresholds)
-    if agreement == "relaxed":
-        correct = _relaxed_correctness(frame, ontology)
+    if agreement in {"descendant", "relaxed"}:
+        correct = _relaxed_correctness(frame, ontology, mode=agreement)
     else:
         correct = (
             frame["true_label"]
@@ -650,7 +680,8 @@ def evaluate_predictions(
         selective_accuracy=selective_accuracy,
         coverage_risk=1.0 - selective_accuracy,
         hierarchical_accuracy=(1.0 - hierarchy_error) if hierarchy_error is not None else None,
-        relaxed_accuracy=_relaxed_accuracy(frame, ontology),
+        descendant_accuracy=_granularity_accuracy(frame, ontology, mode="descendant"),
+        relaxed_accuracy=_granularity_accuracy(frame, ontology, mode="relaxed"),
         unknown_precision=unknown_precision,
         unknown_recall=unknown_recall,
         unknown_f1=unknown_f1,

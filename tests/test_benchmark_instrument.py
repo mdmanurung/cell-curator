@@ -40,8 +40,8 @@ def test_the_committed_result_is_reproducible_from_its_fixture(tmp_path: Path) -
     different on every machine and cannot participate in a cross-machine pin.
     Everything that is a measurement is asserted.
 
-    `ontology_distance_error` and `relaxed_accuracy` are pinned to their pending
-    values rather than to what the code returns. `ontology_distance_error`
+    `ontology_distance_error`, `descendant_accuracy`, and `relaxed_accuracy` are
+    pinned to their pending values rather than to what the code returns. `ontology_distance_error`
     recorded 0.0625, which was `hierarchy_error` under a second name; the alias
     is gone and a table with no Cell Ontology ids makes no ontology claim, so
     the honest answer is `None`. `relaxed_accuracy` did not exist when the
@@ -60,15 +60,16 @@ def test_the_committed_result_is_reproducible_from_its_fixture(tmp_path: Path) -
     ).model_dump(mode="json")
 
     for key, value in recomputed.items():
-        if key in {"ontology_distance_error", "relaxed_accuracy"}:
+        if key in {"ontology_distance_error", "descendant_accuracy", "relaxed_accuracy"}:
             continue
         assert committed[key] == value, f"{key} drifted from the committed result"
     assert committed["prediction_path"] == str(FIXTURE.resolve())
     assert committed["neutral_format"] is True
     assert committed["ontology_distance_error"] == 0.0625
     assert recomputed["ontology_distance_error"] is None
-    assert "relaxed_accuracy" not in committed
-    assert recomputed["relaxed_accuracy"] is None
+    for key in ("descendant_accuracy", "relaxed_accuracy"):
+        assert key not in committed
+        assert recomputed[key] is None
 
 
 @pytest.mark.xfail(

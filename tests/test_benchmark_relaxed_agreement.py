@@ -47,6 +47,7 @@ T_CELL = "CL:0000084"
 CENTRAL_MEMORY_CD4 = "CL:0000904"
 MONOCYTE = "CL:0000576"
 B_CELL = "CL:0000236"
+CD4_POSITIVE_T = "CL:0000624"
 FIBROBLAST = "CL:0000057"
 ABSENT_TERM = "CL:1234567"
 
@@ -450,7 +451,7 @@ def test_an_unrecognised_agreement_is_refused_and_a_snapshot_changes_nothing() -
         [T_CELL],
         [0.95],
     )
-    with pytest.raises(ContractError, match="agreement must be 'strict' or 'relaxed'"):
+    with pytest.raises(ContractError, match="'strict', 'descendant', or 'relaxed'"):
         risk_coverage_sweep(frame, agreement="granularity", ontology=_ontology())
     strict = risk_coverage_sweep(frame)
     with_snapshot = risk_coverage_sweep(frame, ontology=_ontology())
@@ -537,3 +538,123 @@ def test_the_public_sweep_reads_a_relaxed_curve_from_disk(tmp_path: Path) -> Non
             predictions, thresholds=[0.0, 0.95]
         )
     ] == [0.0, 0.0]
+
+
+def _directional_ontology() -> CellOntology:
+    """A chain deep enough to have a child, a parent, and a grandparent of a term.
+
+    Built here rather than reused from the module fixture, because that one has
+    no term with a child and these tests are about which side of the truth a
+    prediction falls on.
+    """
+
+    return CellOntology(
+        {
+            CELL: OntologyTerm(CELL, "cell"),
+            NATIVE_CELL: OntologyTerm(NATIVE_CELL, "native cell", (CELL,)),
+            LEUKOCYTE: OntologyTerm(LEUKOCYTE, "leukocyte", (NATIVE_CELL,)),
+            LYMPHOCYTE: OntologyTerm(LYMPHOCYTE, "lymphocyte", (LEUKOCYTE,)),
+            T_CELL: OntologyTerm(T_CELL, "T cell", (LYMPHOCYTE,)),
+            CD4_POSITIVE_T: OntologyTerm(CD4_POSITIVE_T, "CD4-positive T cell", (T_CELL,)),
+            CENTRAL_MEMORY_CD4: OntologyTerm(
+                CENTRAL_MEMORY_CD4, "central memory CD4-positive T cell", (CD4_POSITIVE_T,)
+            ),
+            B_CELL: OntologyTerm(B_CELL, "B cell", (LYMPHOCYTE,)),
+        },
+        source="directional",
+    )
+
+
+def _directional_frame(truth: str, predicted: str) -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "barcode": ["a"],
+            "true_label": ["truth"],
+            "predicted_label": ["prediction"],
+            "confidence": [0.9],
+            "true_cl_id": [truth],
+            "predicted_cl_id": [predicted],
+        }
+    )
+
+
+def test_the_two_relaxations_differ_in_exactly_one_direction() -> None:
+    """A finer answer is credited by both; a coarser one only by the symmetric rule.
+
+    The one-directional rule is the one the largest published cross-tissue
+    benchmark uses, and it states its reason: a valid subtype remains consistent
+    with the original label, whereas a coarser label asserts less than the truth
+    and is counted incorrect. That asymmetry is what stops a system buying
+    apparent accuracy by answering vaguely.
+
+    Both are reported beside the strict number, because publishing only the
+    flattering direction would mean choosing it after seeing the result. The gap
+    between them is the evidence about how much of an accuracy is identification
+    and how much is specificity.
+    """
+
+    ontology = _directional_ontology()
+    assert ontology.is_descendant(CENTRAL_MEMORY_CD4, CD4_POSITIVE_T)
+    assert ontology.is_descendant(CD4_POSITIVE_T, T_CELL)
+
+    for predicted, descendant, relaxed in (
+        (CD4_POSITIVE_T, 1.0, 1.0),
+        (CENTRAL_MEMORY_CD4, 1.0, 1.0),
+        (T_CELL, 0.0, 1.0),
+        (LYMPHOCYTE, 0.0, 1.0),
+        (B_CELL, 0.0, 0.0),
+    ):
+        measured = evaluate_predictions(
+            _directional_frame(CD4_POSITIVE_T, predicted),
+            system="fixture",
+            dataset="cl-direction",
+            ontology=ontology,
+        )
+        assert measured.descendant_accuracy == pytest.approx(descendant), predicted
+        assert measured.relaxed_accuracy == pytest.approx(relaxed), predicted
+
+    coarse = evaluate_predictions(
+        _directional_frame(CD4_POSITIVE_T, T_CELL),
+        system="fixture",
+        dataset="cl-direction",
+        ontology=ontology,
+    )
+    assert coarse.accuracy == 0.0
+    assert coarse.descendant_accuracy == 0.0
+    assert coarse.relaxed_accuracy == 1.0
+    assert coarse.ontology_distance_error is not None
+
+
+def test_the_sweep_under_each_relaxation_is_a_different_measurement() -> None:
+    """Three curves over one table are three measurements and each records its own.
+
+    A curve that credits a coarser call answers a different question from one
+    that does not, so a point has to say which question it answered, or two curves
+    could be compared as though they measured the same thing.
+    """
+
+    ontology = _directional_ontology()
+    frame = pd.DataFrame(
+        {
+            "barcode": ["a", "b"],
+            "true_label": ["CD4 T", "CD4 T"],
+            "predicted_label": ["T cell", "central memory CD4 T"],
+            "confidence": [0.9, 0.9],
+            "true_cl_id": [CD4_POSITIVE_T, CD4_POSITIVE_T],
+            "predicted_cl_id": [T_CELL, CENTRAL_MEMORY_CD4],
+        }
+    )
+    curves = {
+        mode: risk_coverage_sweep(frame, agreement=mode, ontology=ontology)
+        for mode in ("strict", "descendant", "relaxed")
+    }
+    assert {points[0].coverage for points in curves.values()} == {1.0}
+    at_zero = {mode: points[0].selective_accuracy for mode, points in curves.items()}
+    assert at_zero["strict"] == pytest.approx(0.0)
+    assert at_zero["descendant"] == pytest.approx(0.5)
+    assert at_zero["relaxed"] == pytest.approx(1.0)
+    for mode, points in curves.items():
+        assert {point.agreement for point in points} == {mode}
+
+    with pytest.raises(ContractError, match="descendant"):
+        risk_coverage_sweep(frame, agreement="strictest", ontology=ontology)

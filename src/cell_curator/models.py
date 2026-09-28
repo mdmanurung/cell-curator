@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 SCHEMA_VERSION: Literal[3] = 3
 
-Agreement = Literal["strict", "relaxed"]
+Agreement = Literal["strict", "descendant", "relaxed"]
 
 
 class StrictModel(BaseModel):
@@ -205,6 +205,7 @@ class BenchmarkResult(StrictModel):
     selective_accuracy: float
     coverage_risk: float
     hierarchical_accuracy: float | None = None
+    descendant_accuracy: float | None = None
     relaxed_accuracy: float | None = None
     unknown_precision: float | None = None
     unknown_recall: float | None = None
