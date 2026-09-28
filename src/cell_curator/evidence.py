@@ -6,6 +6,7 @@ import json
 import logging
 import math
 import warnings
+from collections.abc import Iterable
 from dataclasses import dataclass
 from itertools import combinations
 from pathlib import Path
@@ -18,7 +19,7 @@ from scipy.spatial import cKDTree
 
 from .capabilities import build_capability_registry
 from .config import CellCuratorConfig
-from .contracts import ContractError, as_bool, sha256
+from .contracts import ContractError, as_bool, measured_float, sha256
 from .data import (
     LoadedInput,
     close_input,
@@ -586,6 +587,40 @@ def _call_cell_state(
     return str(winner["label"]) if passes else "Unknown"
 
 
+def _mean_measured(series: Iterable[object]) -> float | None:
+    """Mean of the measurable values in a column, or absent if none is measurable.
+
+    The column is text at this point, so a pandas reduction orders it as strings
+    and reports a different program's value as the mean. That is a wrong number
+    rather than a traceback, which is why it needs pinning as carefully as the
+    crashes around it.
+    """
+
+    values = [measured for measured in (measured_float(v) for v in series) if measured is not None]
+    return sum(values) / len(values) if values else None
+
+
+def _max_measured(series: Iterable[object]) -> float | None:
+    """Largest measurable value in a column, or absent if none is measurable."""
+
+    values = [measured for measured in (measured_float(v) for v in series) if measured is not None]
+    return max(values) if values else None
+
+
+def _first_measured(*values: object) -> float | None:
+    """The first measurable of the given cells, or absent if none is measurable.
+
+    A pair of programs where neither could be measured has no separation to
+    report, and a maximum over a list containing `None` is not a number.
+    """
+
+    for value in values:
+        measured = measured_float(value)
+        if measured is not None:
+            return measured
+    return None
+
+
 def aggregate_multimodal_evidence(
     evidence: pd.DataFrame,
     capabilities: list[Capability],
@@ -691,16 +726,22 @@ def aggregate_multimodal_evidence(
                     or lane_key(str(item["assay"]), str(item["representation"]))
                 )
                 detection_valid = as_bool(item["detection_valid"])
+                positive_coverage = measured_float(item["positive_coverage"])
+                negative_violation = measured_float(item["negative_violation"])
+                program_coverage = measured_float(item["program_coverage"])
+                # An unmeasured quantity cannot be shown to satisfy a gate, so it
+                # does not pass. That is the fail-closed reading of "missing panel
+                # features are unmeasured, not negative evidence": an absent
+                # measurement is not evidence the expected-negative markers were
+                # respected, and it is equally not evidence they were violated.
                 lane_passes = bool(
                     detection_valid
-                    and np.isfinite(float(item["positive_coverage"]))
-                    and np.isfinite(float(item["negative_violation"]))
-                    and float(item["program_coverage"])
-                    >= config.evidence.min_positive_coverage
-                    and float(item["positive_coverage"])
-                    >= config.evidence.min_positive_coverage
-                    and float(item["negative_violation"])
-                    <= config.evidence.max_negative_violation
+                    and positive_coverage is not None
+                    and negative_violation is not None
+                    and program_coverage is not None
+                    and program_coverage >= config.evidence.min_positive_coverage
+                    and positive_coverage >= config.evidence.min_positive_coverage
+                    and negative_violation <= config.evidence.max_negative_violation
                 )
                 if lane_passes:
                     passing_lanes.add(configured_key)
@@ -709,14 +750,41 @@ def aggregate_multimodal_evidence(
                 weighted_scores.append(float(item["score"]) * weight)
                 weights.append(weight)
             score = sum(weighted_scores) / sum(weights) if sum(weights) else -math.inf
+            # The table arrives as text, so these are reductions over parsed
+            # measurements rather than pandas reductions on the column. A numeric
+            # reduction on this column set sorts them as strings, which silently
+            # reports a different program's value as the maximum.
+            measured_positive = [
+                value
+                for value in (measured_float(v) for v in label_block["positive_coverage"])
+                if value is not None
+            ]
+            measured_negative = [
+                value
+                for value in (measured_float(v) for v in label_block["negative_violation"])
+                if value is not None
+            ]
+            measured_program = [
+                value
+                for value in (measured_float(v) for v in label_block["program_coverage"])
+                if value is not None
+            ]
             label_rows.append(
                 {
                     "label": label,
                     "axis": "cell_type",
                     "score": score,
-                    "positive_coverage": float(label_block["positive_coverage"].mean()),
-                    "negative_violation": float(label_block["negative_violation"].max()),
-                    "program_coverage": float(label_block["program_coverage"].min()),
+                    "positive_coverage": (
+                        sum(measured_positive) / len(measured_positive)
+                        if measured_positive
+                        else float("nan")
+                    ),
+                    "negative_violation": (
+                        max(measured_negative) if measured_negative else float("nan")
+                    ),
+                    "program_coverage": (
+                        min(measured_program) if measured_program else float("nan")
+                    ),
                     "annotation_lanes": len(annotation_lanes),
                     "required_program_evidence_complete": required_lanes.issubset(
                         passing_lanes
@@ -1378,16 +1446,14 @@ def summarize_program_cooccurrence(evidence: pd.DataFrame) -> pd.DataFrame:
                     "label_a": label_a,
                     "label_b": label_b,
                     "cooccurrence_scope": "cluster_aggregate_program_support",
-                    "co_support": min(
-                        float(left["positive_coverage"]),
-                        float(right["positive_coverage"]),
+                    "co_support": _first_measured(
+                        left["positive_coverage"], right["positive_coverage"]
                     ),
                     "both_scores_positive": bool(
                         float(left["score"]) > 0 and float(right["score"]) > 0
                     ),
-                    "maximum_negative_violation": max(
-                        float(left["negative_violation"]),
-                        float(right["negative_violation"]),
+                    "maximum_negative_violation": _first_measured(
+                        left["negative_violation"], right["negative_violation"]
                     ),
                 }
             )
@@ -1440,8 +1506,8 @@ def summarize_source_corroboration(evidence: pd.DataFrame) -> pd.DataFrame:
                     .nunique()
                 ),
                 "mean_score": float(scores.mean()) if len(scores) else float("nan"),
-                "mean_positive_coverage": float(block["positive_coverage"].mean()),
-                "maximum_negative_violation": float(block["negative_violation"].max()),
+                "mean_positive_coverage": _mean_measured(block["positive_coverage"]),
+                "maximum_negative_violation": _max_measured(block["negative_violation"]),
                 "score_sign_disagreement": bool(
                     len(scores) > 1 and (scores > 0).any() and (scores <= 0).any()
                 ),

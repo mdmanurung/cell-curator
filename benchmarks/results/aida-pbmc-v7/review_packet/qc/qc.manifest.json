@@ -1,0 +1,52 @@
+{
+  "artifact_kind": "cell_curator_read_only_qc",
+  "assays": {
+    "transcriptome": {
+      "cell_cycle_features": {
+        "g2m_genes": 4,
+        "s_genes": 3
+      },
+      "count_scale": true,
+      "limitations": [],
+      "matrix_source": "declared_detection:lognorm:layer:counts",
+      "metrics": [
+        "n_features_detected",
+        "total_counts",
+        "n_features_by_counts",
+        "pct_counts_mt",
+        "pct_counts_ribo",
+        "s_score",
+        "g2m_score",
+        "phase"
+      ],
+      "status": "complete",
+      "total_counts": {
+        "maximum": 26215.0,
+        "median": 3753.0,
+        "minimum": 369.0
+      }
+    }
+  },
+  "canonical_path": "/exports/para-lipg-hpc/mdmanurung/cell-curator/benchmarks/results/aida-pbmc-v7/canonical/input.h5ad",
+  "canonical_sha256": "b64bb39edd09a385a32f38ad93a53912a561a57cb53a088ace487bb177e8f93d",
+  "cell_metrics_path": "/exports/para-lipg-hpc/mdmanurung/cell-curator/benchmarks/results/aida-pbmc-v7/qc/cell_metrics.tsv",
+  "cell_metrics_sha256": "0c0033a75fd45f4b2052ed8d88b17be034e00168f72d787e72c4b3bc8d4de277",
+  "feature_standardization": {
+    "transcriptome": {
+      "configured_id_column": "feature_name",
+      "id_convention": "gene_symbol",
+      "n_unique_ids": 2000,
+      "symbol_column": "feature_name",
+      "symbol_mapping_available": true,
+      "symbol_mapping_path": null,
+      "symbol_mapping_reason": "",
+      "symbol_mapping_unique": true,
+      "symbol_status": "column"
+    }
+  },
+  "run_id": "aida-pbmc-v7",
+  "schema_version": 3,
+  "source_mutated": false,
+  "source_sha256": "440ba41a0508686457732508fc5868db719e1b3cf2c88f961c7ae315f097c159",
+  "status": "complete"
+}

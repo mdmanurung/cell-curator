@@ -1,0 +1,16 @@
+{
+  "all_gpu_fallback_flags_false": true,
+  "artifact_kind": "cell_curator_validated_backend_receipts",
+  "n_applicable_lanes": 1,
+  "receipts": [
+    {
+      "lane_key": "transcriptome__lognorm",
+      "path": "/exports/para-lipg-hpc/mdmanurung/cell-curator/benchmarks/results/aida-pbmc-v7/evidence/lanes/transcriptome__lognorm/receipt.json",
+      "sha256": "d95c3be16d3b2afe3158b251d588f7c0b65b4aa311c6c614cfe06c2836ffa3fe"
+    }
+  ],
+  "run_id": "aida-pbmc-v7",
+  "schema_version": 3,
+  "status": "complete",
+  "zero_lane_run": false
+}

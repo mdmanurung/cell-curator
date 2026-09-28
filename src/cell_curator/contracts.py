@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import math
 import re
 from pathlib import Path
 
@@ -70,6 +71,34 @@ def identifier_text(value: object) -> str:
 
     text = str(value).strip()
     return "" if text.lower() in {"", "none", "nan", "null"} else text
+
+
+def measured_float(value: object) -> float | None:
+    """Parse a measurement cell, treating an unmeasured value as absent.
+
+    A quantity that was never measured is `NaN` in memory, which pandas writes to
+    a tab-separated file as an empty field, and a reader using
+    `keep_default_na=False` gets that field back as the empty string. A bare
+    `float()` then raises `could not convert string to float: ''`, so a run dies
+    the first time an evidence table contains an unmeasured cell -- which is
+    exactly the targeted-panel case, where a marker program's expected-negative
+    violation cannot be measured because the panel does not carry the markers.
+
+    Returning `None` instead lets a caller state what absence means. A gate that
+    asks whether a value is within a bound should refuse an absent one, because
+    "not measured" is not "measured as acceptable". The round trip is the only
+    place the two spellings of absent disagree, so it is the only place this
+    matters, and a test that builds its frame in memory cannot reach it.
+    """
+
+    text = str(value).strip()
+    if not text or text.lower() in {"nan", "none", "null", "na"}:
+        return None
+    try:
+        number = float(text)
+    except ValueError:
+        return None
+    return number if math.isfinite(number) else None
 
 
 def as_bool(value: object) -> bool:

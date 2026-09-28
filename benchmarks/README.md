@@ -100,6 +100,37 @@ for the dataset in `manifests/rna.json` (unobtainable *and* Azimuth-derived, per
 multimodal PBMC set, which *is* the Azimuth reference at 161,764 cells; Tabula
 Sapiens, since Pan-human Azimuth was trained on it.
 
+## The input caps this evaluation before any annotator runs
+
+The clustering is fixed a priori, not chosen: unit-variance scaling, 50 PCs, 15
+nearest neighbours on the first 30, Louvain at resolution 1.0, seed 0, via the
+`networkx` the package already depends on. It yields **28 clusters, median
+purity 0.718 against AIDA truth, and a hard ceiling of 0.636 on per-cell
+accuracy contributed by the clustering alone** — no annotator, however good, can
+exceed it on this input.
+
+The cause is the 2,000-gene panel plus 394 donors with no batch correction, both
+forced by a 4 GB machine on which no `scanpy`, `leidenalg`, or `harmony` is
+available. Widening the gene panel does not fit in memory, and resolution was
+deliberately not tuned against purity, because tuning a clustering by its
+agreement with the ground truth fits the input to the answer.
+
+**This is recorded before the run and it governs how every number may be read.**
+The literature's fine-PBMC figures of 52–75% sit *at or above* this ceiling, so
+an absolute accuracy from this input is not comparable to any published number
+and no such comparison is made. What survives is the *relative* comparison
+between systems on identical cells, which is what the claim below is about and
+which a shared ceiling depresses equally. Two consequences follow and both are
+accepted rather than worked around: the per-cell-type numbers are properties of
+this input as much as of the systems, and a system that abstains on clusters
+below a usable purity may look better here than it would on full-transcriptome
+data, because abstention is the correct response to an input that cannot support
+the call.
+
+Recording this is the protocol doing its job. The alternative — running the
+annotation, seeing a number near 0.6, and explaining it afterwards as "PBMC is
+hard" — is the failure this document exists to prevent.
+
 ## Scoring, frozen
 
 Three granularity tiers are reported side by side, never one in place of

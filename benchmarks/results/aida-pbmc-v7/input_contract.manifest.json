@@ -1,0 +1,565 @@
+{
+  "artifact_kind": "cell_curator_canonical_input",
+  "assays": {
+    "transcriptome": {
+      "feature_ids": {
+        "configured_id_column": "feature_name",
+        "id_convention": "gene_symbol",
+        "n_unique_ids": 2000,
+        "symbol_column": "feature_name",
+        "symbol_mapping_available": true,
+        "symbol_mapping_path": null,
+        "symbol_mapping_reason": "",
+        "symbol_mapping_unique": true,
+        "symbol_status": "column"
+      },
+      "feature_space": "gene",
+      "graph_representations": [
+        {
+          "key": "X_pca_bench",
+          "shape": [
+            17394,
+            30
+          ],
+          "source": "obsm"
+        }
+      ],
+      "kind": "rna",
+      "layers": [
+        "counts",
+        "lognorm"
+      ],
+      "modality": "root",
+      "n_features": 2000,
+      "obsm": [
+        "X_pca_bench"
+      ],
+      "obsm_shapes": {
+        "X_pca_bench": [
+          17394,
+          30
+        ]
+      },
+      "panel": {
+        "detection_basis": "broad_feature_space",
+        "gene_id_convention": "gene_symbol",
+        "is_targeted_panel": false,
+        "n_features": 2000,
+        "panel_type": "whole_transcriptome_or_broad_gene_space",
+        "requires_missing_feature_accounting": false,
+        "requires_program_coverage_gating": false,
+        "supports_genome_wide_marker_discovery": true,
+        "supports_program_scoring": true
+      },
+      "raw": {
+        "available": false,
+        "shape": null
+      },
+      "representations": {
+        "lognorm": {
+          "detection": {
+            "available": true,
+            "classification": "detection_safe",
+            "detection_safe": true,
+            "finite_fraction": 1.0,
+            "integer_fraction": 1.0,
+            "key": "counts",
+            "maximum": 962.0,
+            "mean": 5.669829845428467,
+            "minimum": 1.0,
+            "nonfinite_values": 0,
+            "nonnegative": true,
+            "reasons": [],
+            "required": true,
+            "role": "detection",
+            "semantics": "counts > 0",
+            "shape": [
+              17394,
+              2000
+            ],
+            "source": "layer",
+            "verdict": "valid",
+            "zero_fraction": 0.6377958203978383
+          },
+          "feature_space": "gene",
+          "normalization": {
+            "classification": "log_normalized",
+            "detection_safe": true,
+            "finite_fraction": 1.0,
+            "integer_fraction": 0.0,
+            "maximum": 6.755124092102051,
+            "mean": 2.0743842124938965,
+            "minimum": 0.3231416344642639,
+            "nonfinite_values": 0,
+            "nonnegative": true,
+            "reasons": [],
+            "role": "evidence",
+            "shape": [
+              17394,
+              2000
+            ],
+            "verdict": "valid",
+            "zero_fraction": 0.6377958203978383
+          },
+          "ontology_compatible": true,
+          "ranking_backend": "scipy_mannwhitney"
+        }
+      }
+    }
+  },
+  "blockers": [],
+  "canonical_membership_sha256": "6e849e29813c12ac2801cc5d6e0f437dff810cb0650328f00be26a3d22a4db1b",
+  "canonical_parent_count": 28,
+  "canonical_parent_counts": {
+    "0": 802,
+    "1": 885,
+    "10": 1114,
+    "11": 1503,
+    "12": 126,
+    "13": 1002,
+    "14": 374,
+    "15": 353,
+    "16": 686,
+    "17": 1345,
+    "18": 640,
+    "19": 1082,
+    "2": 153,
+    "20": 984,
+    "21": 902,
+    "22": 420,
+    "23": 99,
+    "24": 104,
+    "25": 100,
+    "26": 111,
+    "27": 180,
+    "3": 299,
+    "4": 122,
+    "5": 214,
+    "6": 439,
+    "7": 1813,
+    "8": 1312,
+    "9": 230
+  },
+  "canonical_path": "/exports/para-lipg-hpc/mdmanurung/cell-curator/benchmarks/results/aida-pbmc-v7/canonical/input.h5ad",
+  "canonical_sha256": "b64bb39edd09a385a32f38ad93a53912a561a57cb53a088ace487bb177e8f93d",
+  "categorical_covariates": {
+    "annotation_scope": {
+      "categories": [
+        "ROOT"
+      ],
+      "color_key": null,
+      "colors": [],
+      "colors_match_categories": false,
+      "counts": {
+        "ROOT": 17394
+      },
+      "dtype": "category",
+      "n_categories": 1,
+      "ordered": false
+    },
+    "bench_cluster": {
+      "categories": [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "10",
+        "11",
+        "12",
+        "13",
+        "14",
+        "15",
+        "16",
+        "17",
+        "18",
+        "19",
+        "20",
+        "21",
+        "22",
+        "23",
+        "24",
+        "25",
+        "26",
+        "27"
+      ],
+      "color_key": null,
+      "colors": [],
+      "colors_match_categories": false,
+      "counts": {
+        "0": 802,
+        "1": 885,
+        "10": 1114,
+        "11": 1503,
+        "12": 126,
+        "13": 1002,
+        "14": 374,
+        "15": 353,
+        "16": 686,
+        "17": 1345,
+        "18": 640,
+        "19": 1082,
+        "2": 153,
+        "20": 984,
+        "21": 902,
+        "22": 420,
+        "23": 99,
+        "24": 104,
+        "25": 100,
+        "26": 111,
+        "27": 180,
+        "3": 299,
+        "4": 122,
+        "5": 214,
+        "6": 439,
+        "7": 1813,
+        "8": 1312,
+        "9": 230
+      },
+      "dtype": "category",
+      "n_categories": 28,
+      "ordered": false
+    },
+    "cell_type": {
+      "categories": [
+        "B cell",
+        "CD1c-positive myeloid dendritic cell",
+        "CD4-positive, alpha-beta T cell",
+        "CD4-positive, alpha-beta cytotoxic T cell",
+        "CD8-positive, alpha-beta T cell",
+        "CD8-positive, alpha-beta cytotoxic T cell",
+        "CD8-positive, alpha-beta memory T cell",
+        "CD14-low, CD16-positive monocyte",
+        "CD14-positive monocyte",
+        "CD16-negative, CD56-bright natural killer cell, human",
+        "CD16-positive, CD56-dim natural killer cell, human",
+        "CD141-positive myeloid dendritic cell",
+        "T cell",
+        "central memory CD4-positive, alpha-beta T cell",
+        "double negative T regulatory cell",
+        "effector memory CD4-positive, alpha-beta T cell",
+        "gamma-delta T cell",
+        "hematopoietic stem cell",
+        "innate lymphoid cell",
+        "mucosal invariant T cell",
+        "myeloid cell",
+        "naive thymus-derived CD4-positive, alpha-beta T cell",
+        "naive thymus-derived CD8-positive, alpha-beta T cell",
+        "natural killer cell",
+        "plasma cell",
+        "platelet",
+        "pre-conventional dendritic cell",
+        "regulatory T cell"
+      ],
+      "color_key": null,
+      "colors": [],
+      "colors_match_categories": false,
+      "counts": {
+        "B cell": 147,
+        "CD14-low, CD16-positive monocyte": 438,
+        "CD14-positive monocyte": 1614,
+        "CD141-positive myeloid dendritic cell": 100,
+        "CD16-negative, CD56-bright natural killer cell, human": 109,
+        "CD16-positive, CD56-dim natural killer cell, human": 2854,
+        "CD1c-positive myeloid dendritic cell": 115,
+        "CD4-positive, alpha-beta T cell": 470,
+        "CD4-positive, alpha-beta cytotoxic T cell": 151,
+        "CD8-positive, alpha-beta T cell": 1002,
+        "CD8-positive, alpha-beta cytotoxic T cell": 823,
+        "CD8-positive, alpha-beta memory T cell": 343,
+        "T cell": 1720,
+        "central memory CD4-positive, alpha-beta T cell": 1500,
+        "double negative T regulatory cell": 108,
+        "effector memory CD4-positive, alpha-beta T cell": 295,
+        "gamma-delta T cell": 685,
+        "hematopoietic stem cell": 100,
+        "innate lymphoid cell": 107,
+        "mucosal invariant T cell": 271,
+        "myeloid cell": 530,
+        "naive thymus-derived CD4-positive, alpha-beta T cell": 1729,
+        "naive thymus-derived CD8-positive, alpha-beta T cell": 1023,
+        "natural killer cell": 789,
+        "plasma cell": 101,
+        "platelet": 12,
+        "pre-conventional dendritic cell": 106,
+        "regulatory T cell": 152
+      },
+      "dtype": "category",
+      "n_categories": 28,
+      "ordered": false
+    },
+    "cell_type_ontology_term_id": {
+      "categories": [
+        "CL:0000037",
+        "CL:0000084",
+        "CL:0000233",
+        "CL:0000236",
+        "CL:0000623",
+        "CL:0000624",
+        "CL:0000625",
+        "CL:0000763",
+        "CL:0000786",
+        "CL:0000794",
+        "CL:0000798",
+        "CL:0000815",
+        "CL:0000895",
+        "CL:0000900",
+        "CL:0000904",
+        "CL:0000905",
+        "CL:0000909",
+        "CL:0000934",
+        "CL:0000938",
+        "CL:0000939",
+        "CL:0000940",
+        "CL:0001054",
+        "CL:0001065",
+        "CL:0002010",
+        "CL:0002394",
+        "CL:0002396",
+        "CL:0002399",
+        "CL:0011024"
+      ],
+      "color_key": null,
+      "colors": [],
+      "colors_match_categories": false,
+      "counts": {
+        "CL:0000037": 100,
+        "CL:0000084": 1720,
+        "CL:0000233": 12,
+        "CL:0000236": 147,
+        "CL:0000623": 789,
+        "CL:0000624": 470,
+        "CL:0000625": 1002,
+        "CL:0000763": 530,
+        "CL:0000786": 101,
+        "CL:0000794": 823,
+        "CL:0000798": 685,
+        "CL:0000815": 152,
+        "CL:0000895": 1729,
+        "CL:0000900": 1023,
+        "CL:0000904": 1500,
+        "CL:0000905": 295,
+        "CL:0000909": 343,
+        "CL:0000934": 151,
+        "CL:0000938": 109,
+        "CL:0000939": 2854,
+        "CL:0000940": 271,
+        "CL:0001054": 1614,
+        "CL:0001065": 107,
+        "CL:0002010": 106,
+        "CL:0002394": 100,
+        "CL:0002396": 438,
+        "CL:0002399": 115,
+        "CL:0011024": 108
+      },
+      "dtype": "category",
+      "n_categories": 28,
+      "ordered": false
+    },
+    "census_version": {
+      "categories": [
+        "2025-11-08"
+      ],
+      "color_key": null,
+      "colors": [],
+      "colors_match_categories": false,
+      "counts": {
+        "2025-11-08": 17394
+      },
+      "dtype": "category",
+      "n_categories": 1,
+      "ordered": false
+    },
+    "collection_id": {
+      "categories": [
+        "ced320a1-29f3-47c1-a735-513c7084d508"
+      ],
+      "color_key": null,
+      "colors": [],
+      "colors_match_categories": false,
+      "counts": {
+        "ced320a1-29f3-47c1-a735-513c7084d508": 17394
+      },
+      "dtype": "category",
+      "n_categories": 1,
+      "ordered": false
+    },
+    "dataset_id": {
+      "categories": [
+        "c838aec3-03ef-4398-b882-0e3912abfff0"
+      ],
+      "color_key": null,
+      "colors": [],
+      "colors_match_categories": false,
+      "counts": {
+        "c838aec3-03ef-4398-b882-0e3912abfff0": 17394
+      },
+      "dtype": "category",
+      "n_categories": 1,
+      "ordered": false
+    },
+    "lineage": {
+      "categories": [
+        "B cell",
+        "NK cell",
+        "T cell",
+        "hematopoietic stem cell",
+        "innate lymphoid cell",
+        "myeloid",
+        "plasma cell",
+        "platelet"
+      ],
+      "color_key": null,
+      "colors": [],
+      "colors_match_categories": false,
+      "counts": {
+        "B cell": 147,
+        "NK cell": 3752,
+        "T cell": 10272,
+        "hematopoietic stem cell": 100,
+        "innate lymphoid cell": 107,
+        "myeloid": 2903,
+        "plasma cell": 101,
+        "platelet": 12
+      },
+      "dtype": "category",
+      "n_categories": 8,
+      "ordered": false
+    },
+    "sex": {
+      "categories": [
+        "female",
+        "male"
+      ],
+      "color_key": null,
+      "colors": [],
+      "colors_match_categories": false,
+      "counts": {
+        "female": 10379,
+        "male": 7015
+      },
+      "dtype": "category",
+      "n_categories": 2,
+      "ordered": false
+    },
+    "true_path": {
+      "categories": [
+        "B cell/B cell",
+        "NK cell/CD16-negative, CD56-bright natural killer cell, human",
+        "NK cell/CD16-positive, CD56-dim natural killer cell, human",
+        "NK cell/natural killer cell",
+        "T cell/CD4-positive, alpha-beta T cell",
+        "T cell/CD4-positive, alpha-beta cytotoxic T cell",
+        "T cell/CD8-positive, alpha-beta T cell",
+        "T cell/CD8-positive, alpha-beta cytotoxic T cell",
+        "T cell/CD8-positive, alpha-beta memory T cell",
+        "T cell/T cell",
+        "T cell/central memory CD4-positive, alpha-beta T cell",
+        "T cell/double negative T regulatory cell",
+        "T cell/effector memory CD4-positive, alpha-beta T cell",
+        "T cell/gamma-delta T cell",
+        "T cell/mucosal invariant T cell",
+        "T cell/naive thymus-derived CD4-positive, alpha-beta T cell",
+        "T cell/naive thymus-derived CD8-positive, alpha-beta T cell",
+        "T cell/regulatory T cell",
+        "hematopoietic stem cell/hematopoietic stem cell",
+        "innate lymphoid cell/innate lymphoid cell",
+        "myeloid/CD1c-positive myeloid dendritic cell",
+        "myeloid/CD14-low, CD16-positive monocyte",
+        "myeloid/CD14-positive monocyte",
+        "myeloid/CD141-positive myeloid dendritic cell",
+        "myeloid/myeloid cell",
+        "myeloid/pre-conventional dendritic cell",
+        "plasma cell/plasma cell",
+        "platelet/platelet"
+      ],
+      "color_key": null,
+      "colors": [],
+      "colors_match_categories": false,
+      "counts": {
+        "B cell/B cell": 147,
+        "NK cell/CD16-negative, CD56-bright natural killer cell, human": 109,
+        "NK cell/CD16-positive, CD56-dim natural killer cell, human": 2854,
+        "NK cell/natural killer cell": 789,
+        "T cell/CD4-positive, alpha-beta T cell": 470,
+        "T cell/CD4-positive, alpha-beta cytotoxic T cell": 151,
+        "T cell/CD8-positive, alpha-beta T cell": 1002,
+        "T cell/CD8-positive, alpha-beta cytotoxic T cell": 823,
+        "T cell/CD8-positive, alpha-beta memory T cell": 343,
+        "T cell/T cell": 1720,
+        "T cell/central memory CD4-positive, alpha-beta T cell": 1500,
+        "T cell/double negative T regulatory cell": 108,
+        "T cell/effector memory CD4-positive, alpha-beta T cell": 295,
+        "T cell/gamma-delta T cell": 685,
+        "T cell/mucosal invariant T cell": 271,
+        "T cell/naive thymus-derived CD4-positive, alpha-beta T cell": 1729,
+        "T cell/naive thymus-derived CD8-positive, alpha-beta T cell": 1023,
+        "T cell/regulatory T cell": 152,
+        "hematopoietic stem cell/hematopoietic stem cell": 100,
+        "innate lymphoid cell/innate lymphoid cell": 107,
+        "myeloid/CD14-low, CD16-positive monocyte": 438,
+        "myeloid/CD14-positive monocyte": 1614,
+        "myeloid/CD141-positive myeloid dendritic cell": 100,
+        "myeloid/CD1c-positive myeloid dendritic cell": 115,
+        "myeloid/myeloid cell": 530,
+        "myeloid/pre-conventional dendritic cell": 106,
+        "plasma cell/plasma cell": 101,
+        "platelet/platelet": 12
+      },
+      "dtype": "category",
+      "n_categories": 28,
+      "ordered": false
+    }
+  },
+  "config_sha256": "721748c3433be515c97a424ded7899653f166fa1b8ee20ee3458a2f0b5853ec6",
+  "created_utc": "2026-09-28T17:36:05.200814+00:00",
+  "input_kind": "h5ad",
+  "input_path": "/exports/para-lipg-hpc/mdmanurung/cell-curator/benchmarks/data/aida-phase1-v2-pbmc-hvg2000/aida_pbmc_clustered.h5ad",
+  "input_sha256": "440ba41a0508686457732508fc5868db719e1b3cf2c88f961c7ae315f097c159",
+  "n_cells": 17394,
+  "ordered_barcode_sha256": "ffb071f89bb155820b50b936686f95e629d9b7b70c608b954cd71a2d65ee6d77",
+  "prepared": {
+    "cells": "/exports/para-lipg-hpc/mdmanurung/cell-curator/benchmarks/results/aida-pbmc-v7/prepared/cells.tsv",
+    "parent_membership": "/exports/para-lipg-hpc/mdmanurung/cell-curator/benchmarks/results/aida-pbmc-v7/prepared/parent_membership.tsv",
+    "stored_memberships": "/exports/para-lipg-hpc/mdmanurung/cell-curator/benchmarks/results/aida-pbmc-v7/prepared/stored_membership_long.tsv"
+  },
+  "prepared_sha256": {
+    "cells": "77382cf5dfb37b7dff80130b6986ca460fa77882cd4d1684bad73730a14fb99e",
+    "parent_membership": "cf7d7a5860d2b2ca711a6dc94620fdf0cf6e581e4428b662f02debe873cb7f10",
+    "stored_memberships": "b3b2e724b574736e30e5ebb99f77e6ec5500512fc4ab938236fce450c90e0b5e"
+  },
+  "qc": {
+    "cell_metrics_path": "/exports/para-lipg-hpc/mdmanurung/cell-curator/benchmarks/results/aida-pbmc-v7/qc/cell_metrics.tsv",
+    "cell_metrics_sha256": "0c0033a75fd45f4b2052ed8d88b17be034e00168f72d787e72c4b3bc8d4de277",
+    "manifest_path": "/exports/para-lipg-hpc/mdmanurung/cell-curator/benchmarks/results/aida-pbmc-v7/qc/qc.manifest.json",
+    "manifest_sha256": "d6bc50f0a1ad6d44c0971e218e76a318c2a5bf23d86073822c92160156834791"
+  },
+  "representations": {
+    "embedding": "X_pca_bench",
+    "obsm": {
+      "X_pca_bench": [
+        17394,
+        30
+      ]
+    },
+    "resolved_obsm": {
+      "X_pca_bench": {
+        "shape": [
+          17394,
+          30
+        ],
+        "source": "root"
+      }
+    },
+    "spatial": null,
+    "visualization": "X_pca_bench"
+  },
+  "run_id": "aida-pbmc-v7",
+  "schema_version": 3,
+  "source_unchanged": true
+}

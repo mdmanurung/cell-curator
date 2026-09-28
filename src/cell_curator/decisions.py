@@ -12,7 +12,14 @@ from scipy import sparse
 
 from .capabilities import build_capability_registry
 from .config import CellCuratorConfig
-from .contracts import ContractError, as_bool, identifier_text, sha256, values_sha256
+from .contracts import (
+    ContractError,
+    as_bool,
+    identifier_text,
+    measured_float,
+    sha256,
+    values_sha256,
+)
 from .evidence import lane_key, validate_backend_receipt
 from .models import BackendReceipt, CapabilityLevel, MarkerProgram, ParentOutcome
 from .provenance import atomic_publish, publish_json
@@ -337,6 +344,9 @@ def derive_candidate_evidence(
                         ).any()
                     )
                 separation = float(comparison["separation"])
+                coverage: float | None
+                violation: float | None
+                program_coverage: float | None
                 if target.empty:
                     winner = cl_id = ""
                     coverage = violation = 0.0
@@ -345,14 +355,21 @@ def derive_candidate_evidence(
                     best = target.iloc[0]
                     winner = str(best["label"])
                     cl_id = identifier_text(best["cl_id"])
-                    coverage = float(best["positive_coverage"])
-                    violation = float(best["negative_violation"])
-                    program_coverage = float(best["program_coverage"])
+                    coverage = measured_float(best["positive_coverage"])
+                    violation = measured_float(best["negative_violation"])
+                    program_coverage = measured_float(best["program_coverage"])
                     detection_valid = as_bool(best["detection_valid"])
+                    # An unmeasured quantity cannot be shown to be within a
+                    # bound, so it does not pass. Reading it the other way would
+                    # let a program whose negative markers the panel does not
+                    # carry satisfy the gate meant to catch one it does.
                     passed = bool(
                         marker_significant
                         and separation >= 0.1
                         and detection_valid
+                        and program_coverage is not None
+                        and coverage is not None
+                        and violation is not None
                         and program_coverage >= config.evidence.min_positive_coverage
                         and coverage >= config.evidence.min_positive_coverage
                         and violation <= config.evidence.max_negative_violation

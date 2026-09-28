@@ -1,0 +1,16 @@
+{
+  "artifact_kind": "cell_curator_report_colors",
+  "columns": {
+    "aida_bench_type": {
+      "categories": [
+        "Unknown",
+        "B cell"
+      ],
+      "colors": [
+        "#4477AA",
+        "#EE6677"
+      ]
+    }
+  },
+  "schema_version": 3
+}

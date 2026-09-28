@@ -1,0 +1,1 @@
+schema_version	run_id	lane_id	scope	parent_id	candidate_key	candidate_child_uid	comparator_role	assay	representation	lane_key	backend	required_for_acceptance	groups_path	target_n_cells	comparator_n_cells	target_barcode_sha256	comparator_barcode_sha256

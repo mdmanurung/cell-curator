@@ -1,0 +1,12 @@
+{
+  "artifact_kind": "cell_curator_candidate_evidence",
+  "comparator_manifest_sha256": "ebdc56ceba16d38adf282263f4782ed26cf9befa50c63b492b70a3469ca77d3c",
+  "derived_from_raw_artifacts": true,
+  "n_accepted": 0,
+  "n_candidates": 0,
+  "output_sha256": "67257ba0c6d3beb47bf875a6192645f1546b4f51169a2846528c1b6ab98e7b34",
+  "run_id": "aida-pbmc-v7",
+  "schema_version": 3,
+  "status": "complete",
+  "zero_candidate_run": true
+}

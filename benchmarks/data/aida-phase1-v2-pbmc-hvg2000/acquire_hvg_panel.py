@@ -3,8 +3,12 @@
 Isolated so its peak heap is returned to the OS before the benchmark slice is
 fetched. Writes the chosen var soma_joinids + feature names to JSON.
 """
-import gc, json, resource
-import cellxgene_census, numpy as np
+import gc
+import json
+import resource
+
+import cellxgene_census
+import numpy as np
 
 CENSUS_VERSION = "2025-11-08"
 DATASET_ID    = "c838aec3-03ef-4398-b882-0e3912abfff0"

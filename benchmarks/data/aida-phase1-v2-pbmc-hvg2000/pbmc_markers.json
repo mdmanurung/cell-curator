@@ -1,0 +1,279 @@
+{
+  "CD4-positive T cell": {
+    "cl_id": "CL:0000624",
+    "pos": [
+      "CD4",
+      "CD3D",
+      "CD3E",
+      "IL7R",
+      "CCR7",
+      "SELL",
+      "TCF7",
+      "LTB",
+      "MAL",
+      "CD2"
+    ],
+    "negative": [
+      "CD8A",
+      "MS4A1"
+    ]
+  },
+  "CD8-positive T cell": {
+    "cl_id": "CL:0000625",
+    "pos": [
+      "CD8A",
+      "CD8B",
+      "CD3D",
+      "CD3E",
+      "GZMK",
+      "CCL5",
+      "NKG7",
+      "CST7",
+      "KLRG1",
+      "EOMES"
+    ],
+    "negative": [
+      "CD4",
+      "MS4A1"
+    ]
+  },
+  "gamma-delta T cell": {
+    "cl_id": "CL:0000798",
+    "pos": [
+      "TRDC",
+      "TRGC1",
+      "TRGC2",
+      "KLRD1",
+      "CD7",
+      "TRDV2",
+      "ZBTB16",
+      "CD3D"
+    ],
+    "negative": [
+      "CD4",
+      "CD8A"
+    ]
+  },
+  "B cell": {
+    "cl_id": "CL:0000236",
+    "pos": [
+      "CD79A",
+      "CD79B",
+      "MS4A1",
+      "CD19",
+      "BANK1",
+      "HLA-DRA",
+      "TCL1A",
+      "CD74",
+      "VPREB3",
+      "LINC00926"
+    ],
+    "negative": [
+      "CD3D",
+      "CD14"
+    ]
+  },
+  "plasma cell": {
+    "cl_id": "CL:0000786",
+    "pos": [
+      "MZB1",
+      "JCHAIN",
+      "DERL3",
+      "XBP1",
+      "IGHG1",
+      "TNFRSF17",
+      "PRDM1",
+      "SDC1",
+      "SSR4",
+      "FKBP11"
+    ],
+    "negative": [
+      "MS4A1",
+      "CD3D"
+    ]
+  },
+  "natural killer cell": {
+    "cl_id": "CL:0000623",
+    "pos": [
+      "NKG7",
+      "GNLY",
+      "KLRD1",
+      "KLRF1",
+      "NCR1",
+      "PRF1",
+      "FGFBP2",
+      "TYROBP",
+      "KLRB1",
+      "SPON2",
+      "GZMB"
+    ],
+    "negative": [
+      "CD3D",
+      "CD19"
+    ]
+  },
+  "CD14-positive monocyte": {
+    "cl_id": "CL:0001054",
+    "pos": [
+      "CD14",
+      "LYZ",
+      "S100A8",
+      "S100A9",
+      "FCN1",
+      "VCAN",
+      "SELL",
+      "CSF1R",
+      "CD68",
+      "MNDA",
+      "TYROBP"
+    ],
+    "negative": [
+      "CD3D",
+      "MS4A1"
+    ]
+  },
+  "CD16-positive monocyte": {
+    "cl_id": "CL:0002396",
+    "pos": [
+      "FCGR3A",
+      "MS4A7",
+      "CDKN1C",
+      "LST1",
+      "IFITM3",
+      "CD68",
+      "CSF1R",
+      "TYROBP",
+      "LYZ",
+      "AIF1",
+      "COTL1"
+    ],
+    "negative": [
+      "VCAN",
+      "CD3D"
+    ]
+  },
+  "myeloid dendritic cell": {
+    "cl_id": "CL:0002399",
+    "pos": [
+      "CD1C",
+      "FCER1A",
+      "CLEC10A",
+      "HLA-DQA1",
+      "CD1E",
+      "HLA-DRA",
+      "CLEC9A",
+      "CD74",
+      "ITGAX",
+      "FLT3",
+      "IRF8"
+    ],
+    "negative": [
+      "CD3D",
+      "CD19",
+      "LILRA4"
+    ]
+  },
+  "plasmacytoid dendritic cell": {
+    "cl_id": "CL:0002010",
+    "pos": [
+      "LILRA4",
+      "IL3RA",
+      "GZMB",
+      "IRF7",
+      "CLEC4C",
+      "TCF4",
+      "PLD4",
+      "SERPINF1",
+      "GZMB",
+      "JCHAIN",
+      "BCL11A",
+      "SPIB"
+    ],
+    "negative": [
+      "CD1C",
+      "CD3D",
+      "MS4A1"
+    ]
+  },
+  "platelet": {
+    "cl_id": "CL:0000233",
+    "pos": [
+      "PPBP",
+      "PF4",
+      "ITGA2B",
+      "GP9",
+      "TUBB1",
+      "NRGN",
+      "CLU",
+      "SPARC",
+      "THBS1",
+      "GP1BA"
+    ],
+    "negative": [
+      "CD3D",
+      "CD14",
+      "MS4A1"
+    ]
+  },
+  "innate lymphoid cell": {
+    "cl_id": "CL:0001065",
+    "pos": [
+      "RORC",
+      "IL7R",
+      "IL32",
+      "KLRB1",
+      "KIT",
+      "AREG",
+      "IL23R",
+      "SLAMF1",
+      "ZBTB16",
+      "ID2",
+      "TOX2"
+    ],
+    "negative": [
+      "CD3D",
+      "MS4A1"
+    ]
+  },
+  "hematopoietic stem cell": {
+    "cl_id": "CL:0000037",
+    "pos": [
+      "CD34",
+      "SPINK2",
+      "CRHBP",
+      "HOPX",
+      "GATA2",
+      "MLF1",
+      "SOX4",
+      "MSI2",
+      "CD34",
+      "AVP",
+      "MECOM"
+    ],
+    "negative": [
+      "CD3D",
+      "CD14",
+      "MS4A1"
+    ]
+  },
+  "myeloid cell": {
+    "cl_id": "CL:0000763",
+    "pos": [
+      "LYZ",
+      "CD68",
+      "CSF1R",
+      "TYROBP",
+      "AIF1",
+      "CTSS",
+      "FCER1G",
+      "MNDA",
+      "SPI1",
+      "CSF3R",
+      "ITGAM"
+    ],
+    "negative": [
+      "CD3D",
+      "MS4A1"
+    ]
+  }
+}

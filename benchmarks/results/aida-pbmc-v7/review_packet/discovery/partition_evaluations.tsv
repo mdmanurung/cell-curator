@@ -1,0 +1,2 @@
+scope	parent_id	source	resolution	n_clusters	minimum_cluster_size	stability	stability_metric	separation	technical_effect_size	stable	eligible	technical_dominated	gradient_like	action	eligibility_failures
+ROOT	23	none		1		0.0		0.0	0.0					RETAIN_TOO_SMALL	

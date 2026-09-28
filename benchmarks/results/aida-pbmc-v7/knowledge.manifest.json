@@ -1,0 +1,32 @@
+{
+  "artifact_kind": "cell_curator_local_knowledge",
+  "external_service_required": false,
+  "n_programs": 14,
+  "ontology": {
+    "limitation": "labels are permitted without CL IDs",
+    "status": "unavailable"
+  },
+  "program_digest": "eba2c7ddb6cdbd1a6c2bccac4cc026ade0c30f4d439477c118aa1856b4ddb896",
+  "providers": [
+    {
+      "artifact": {
+        "checksum_validated": false,
+        "declared_checksum": false,
+        "path": "/exports/para-lipg-hpc/mdmanurung/cell-curator/benchmarks/data/aida-phase1-v2-pbmc-hvg2000/pbmc_markers.json",
+        "sha256": "0d9ac8faf711ffbb478b21eefbc689120f7b2c5f604639277bd3002e25281ef2",
+        "status": "validated"
+      },
+      "cache_path": "",
+      "kind": "local_markers",
+      "label_key": "",
+      "parent_key": "",
+      "path": "/exports/para-lipg-hpc/mdmanurung/cell-curator/benchmarks/data/aida-phase1-v2-pbmc-hvg2000/pbmc_markers.json",
+      "sha256": "",
+      "timeout_seconds": 30.0,
+      "url": "",
+      "version": "aida-pbmc-vocab-v2"
+    }
+  ],
+  "run_id": "aida-pbmc-v7",
+  "schema_version": 3
+}
