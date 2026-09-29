@@ -15,7 +15,8 @@
     ],
     "negative": [
       "CD8A",
-      "MS4A1"
+      "MS4A1",
+      "NKG7"
     ]
   },
   "CD8-positive T cell": {
@@ -34,7 +35,8 @@
     ],
     "negative": [
       "CD4",
-      "MS4A1"
+      "MS4A1",
+      "NKG7"
     ]
   },
   "gamma-delta T cell": {
@@ -51,7 +53,8 @@
     ],
     "negative": [
       "CD4",
-      "CD8A"
+      "CD8A",
+      "MS4A1"
     ]
   },
   "B cell": {
@@ -70,7 +73,8 @@
     ],
     "negative": [
       "CD3D",
-      "CD14"
+      "CD14",
+      "NKG7"
     ]
   },
   "plasma cell": {
@@ -89,7 +93,8 @@
     ],
     "negative": [
       "MS4A1",
-      "CD3D"
+      "CD3D",
+      "CD14"
     ]
   },
   "natural killer cell": {
@@ -109,7 +114,8 @@
     ],
     "negative": [
       "CD3D",
-      "CD19"
+      "CD19",
+      "CD14"
     ]
   },
   "CD14-positive monocyte": {
@@ -129,7 +135,8 @@
     ],
     "negative": [
       "CD3D",
-      "MS4A1"
+      "MS4A1",
+      "NKG7"
     ]
   },
   "CD16-positive monocyte": {
@@ -149,7 +156,8 @@
     ],
     "negative": [
       "VCAN",
-      "CD3D"
+      "CD3D",
+      "MS4A1"
     ]
   },
   "myeloid dendritic cell": {
@@ -232,7 +240,8 @@
     ],
     "negative": [
       "CD3D",
-      "MS4A1"
+      "MS4A1",
+      "CD14"
     ]
   },
   "hematopoietic stem cell": {
@@ -273,7 +282,8 @@
     ],
     "negative": [
       "CD3D",
-      "MS4A1"
+      "MS4A1",
+      "CD19"
     ]
   }
 }

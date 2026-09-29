@@ -100,6 +100,96 @@ for the dataset in `manifests/rna.json` (unobtainable *and* Azimuth-derived, per
 multimodal PBMC set, which *is* the Azimuth reference at 161,764 cells; Tabula
 Sapiens, since Pan-human Azimuth was trained on it.
 
+## Protocol v2: the negative-marker bar, changed after v1 and derived rather than fitted
+
+**v1 is not withdrawn and not hidden.** It labelled 1 cluster of 28 at a
+0.2 violation threshold, and that number stands as recorded above. Everything from
+here is v2, and v2 changed after v1's outcome was seen. That is the one thing this
+document exists to make visible, so it is stated before any v2 number exists.
+
+**What changed.** `max_negative_violation` goes from 0.2 to 0.5, and every marker
+program carries three discriminative negative markers rather than two. Nothing
+else changed: the cell set, the clustering and its recipe, the measured panel, the
+other three thresholds, the marker positives, and the CL identifiers are as v1.
+
+**The threshold is derived, not chosen to raise coverage.** The evidence records
+`negative_violation` as the *fraction of a program's measured negative markers
+that are flagged*, not the fraction of cells expressing one. A clustering whose
+ceiling is 0.636 admits up to 0.364 of a cluster belonging to a neighbouring
+lineage, so a neighbour's marker is expected to be flagged in many clusters
+through contamination alone. Two markers cannot express that distinction: the
+reachable values are 0.0, 0.5, and 1.0, so one marker flagged by contamination
+and one marker flagged by a genuine contradiction are the same number, and any
+threshold above 0.0 admits every row and one at or below 0.0 rejects every row.
+Three markers give 0.0, 0.333, 0.667, and 1.0, so **0.5 separates one flag from
+two**: contamination produces one, contradiction produces two. The measured
+violation distribution bears this out -- on the 2-marker panels 225 of 280 rows sit
+at exactly 0.5, and on the 3-marker panels 101 of 112 sit at 0.333.
+
+**What a v2 number may and may not mean.** With a 0.636 clustering ceiling, no
+system can exceed 0.636 per-cell accuracy on this input, and cell-curator's own
+negative gate is the thing that detects the ceiling. A v2 result therefore
+measures whether naming the dominant type of each cluster is a useful summary of
+these clusters, not whether the clusters are pure. If it is, coverage should rise
+substantially and accuracy should land near the ceiling, and that agreement is the
+result: the tool is doing what it is designed to do and the input is what limits
+it. If coverage stays low, the gate is not the cause and the diagnosis above is
+wrong.
+
+The honest reading of either outcome is bounded by this section. No v2 number is
+comparable to a published figure, and none is a measurement of cell-type accuracy.
+
+### What v2 measured, and what it cost
+
+| | v1 (0.2, 2 negatives) | v2 (0.5, 3 negatives) |
+| --- | --- | --- |
+| clusters labelled | 1 of 28 | 2 of 28 |
+| cells called | 153 | 279 |
+| per-cell coverage | 0.0088 | 0.0160 |
+| selective accuracy on called cells | 0.961 (147/153) | 0.570 (159/279) |
+| cells called and exactly wrong | 6 | 120 |
+
+The derivation was right about its own terms. The negative gate stopped being the
+binding constraint exactly as predicted, blocking 12 clusters instead of 24, and
+the marker-panel fix held. Coverage roughly doubled.
+
+**The result is still not a benchmark, and the change made precision worse.** The
+126 additional cells are one cluster of 1,103 whose dominant true type is CD16-dim
+natural killer cell, called `platelet`, of which 12 are platelet. So v2 bought 120
+confidently wrong cells to double the denominator, and selective accuracy fell by
+39 points. v1's bar was better on both counts: it called fewer cells and they were
+nearly all right.
+
+That is a real result about the gate rather than about the tool, and it points the
+other way from the change. The derivation assumed contamination flags *one*
+negative marker, which held for the 3-marker panels; it did not hold for the
+winner, because a wrong winner on a contaminated cluster can also flag only one.
+One flag is ambiguous between "this cluster is a third neighbour" and "this cluster
+is not what the winner says it is", and 0.5 cannot separate two from one, since
+no two-marker program exists any more. **A third state is needed -- panels of four
+or five negatives, where one flag is 0.2 or 0.25, two is 0.4 or 0.5, and the gate
+can sit between them.** That is the direction the threshold work should have gone,
+and it was not found by lowering a bound.
+
+The remaining blockers are the margin and entropy gates, at 26 of 28 and 21 of 28
+respectively, and those were left alone deliberately. They are the package's
+uncertainty calibration, which is the core claim; a system with those lowered
+labels whatever scores highest, which is not a selective-prediction system and
+would make every other number here decorative. Median top-2 margin on this input
+is 0.099 with 14 competing programs, so the evidence genuinely does not separate
+them, and that is a property of the data.
+
+**Two measurements are absent for understood reasons and are not defects.**
+`ontology_distance_error`, `descendant_accuracy`, and `relaxed_accuracy` are `None`
+because the run configured no ontology, so the pipeline cleared every marker
+program's accession and refused to let an unvalidated one reach a proposal. The
+exported table therefore carries no predicted identifier and there is nothing to
+measure. That is the designed refusal, and it is why a real CL snapshot was
+supplied only at scoring time. `unknown_precision` and `unknown_recall` are 0.0
+because `Unknown` is spelled `Unknown` on the truth side only for a handful of
+cells, so the binary problem is nearly one-sided; the coverage figure is the one to
+read, and the protocol says so.
+
 ## Why the pre-declared evidence bar is not met, measured rather than guessed
 
 Two runs, differing only in measured panel width. Both label one cluster of 28.

@@ -33,7 +33,7 @@
 schema_version: 3
 
 run:
-  run_id: aida-pbmc-v9
+  run_id: aida-pbmc-v10
   output_root: /exports/para-lipg-hpc/mdmanurung/cell-curator/benchmarks/results
   mode: annotation
 
@@ -122,7 +122,7 @@ knowledge:
   providers:
     - kind: local_markers
       path: /exports/para-lipg-hpc/mdmanurung/cell-curator/benchmarks/data/aida-phase1-v2-pbmc-hvg2000/pbmc_markers.json
-      version: aida-pbmc-vocab-v2
+      version: aida-pbmc-vocab-v3
 
 comparators:
   roles:
@@ -164,7 +164,11 @@ evidence:
     - cell_level_separation_pass
     - source_corroboration_pass
   min_positive_coverage: 0.5
-  max_negative_violation: 0.2
+  # Protocol v2. See benchmarks/README.md for the derivation: the violation is the
+  # fraction of measured negative markers flagged, and a 0.636 clustering ceiling means
+  # contamination alone flags one marker in three. With three markers per program, 0.5
+  # separates one flag (contamination) from two (contradiction). v1 used 0.2.
+  max_negative_violation: 0.5
   min_confidence: 0.6
   min_margin: 0.2
   max_normalized_entropy: 0.85

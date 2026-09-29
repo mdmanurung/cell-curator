@@ -77,16 +77,21 @@ def _run_artifacts(
     return load_config(path)
 
 
-def _mapping(barcodes: list[str], types: list[str]) -> pd.DataFrame:
+def _mapping(
+    barcodes: list[str], types: list[str], clusters: list[str] | None = None
+) -> pd.DataFrame:
+    """A durable mapping. `clusters` assigns each cell its parent; all share one by default."""
+    parents = clusters or ["0"] * len(barcodes)
+    assert len(parents) == len(barcodes)
     return pd.DataFrame(
         {
             "schema_version": [3] * len(barcodes),
             "run_id": ["export-fixture-v1"] * len(barcodes),
             "barcode": barcodes,
-            "scope": ["L1::ROOT"] * len(barcodes),
-            "canonical_parent": ["0"] * len(barcodes),
-            "parent_uid": ["L1::ROOT::0"] * len(barcodes),
-            "leaf_id": [f"L1::ROOT::0::{value}" for value in types],
+            "scope": ["ROOT"] * len(barcodes),
+            "canonical_parent": parents,
+            "parent_uid": [f"ROOT::{value}" for value in parents],
+            "leaf_id": [f"ROOT::{parent}::{value}" for parent, value in zip(parents, types, strict=True)],
             "cell_type": types,
             "cell_state": ["normal"] * len(barcodes),
             "membership_role": ["retained_parent"] * len(barcodes),
@@ -138,14 +143,26 @@ def test_a_completed_export_carries_both_sides_of_every_comparable_column(
 
     config = _run_artifacts(
         tmp_path,
-        mapping=_mapping(["c0", "c1", "c2", "c3"], ["T cell", "B cell", "T cell", "Unknown"]),
-        labels=_labels([("0", "T cell", "CL:0000084", 0.9), ("1", "B cell", "CL:0000236", 0.7)]),
+        mapping=_mapping(
+            ["c0", "c1", "c2", "c3", "c4"],
+            ["T cell", "B cell", "T cell", "Unknown", "T cell"],
+            ["0", "1", "0", "0", "0"],
+        ),
+        labels=_labels(
+            [("0", "T cell", "CL:0000084", 0.9), ("1", "B cell", "CL:0000236", 0.7)]
+        ),
     )
     truth = _truth(
-        ["c0", "c1", "c2", "c3"],
-        ["T cell", "B cell", "Unknown", "T cell"],
-        true_cl_id=["CL:0000084", "CL:0000236", "", "CL:0000084"],
-        true_path=["immune/T cell", "immune/B cell", "immune", "immune/T cell"],
+        ["c0", "c1", "c2", "c3", "c4"],
+        ["T cell", "B cell", "Unknown", "T cell", "T cell"],
+        true_cl_id=["CL:0000084", "CL:0000236", "", "CL:0000084", "CL:0000084"],
+        true_path=[
+            "immune/T cell",
+            "immune/B cell",
+            "immune",
+            "immune/T cell",
+            "immune/T cell",
+        ],
         __path=tmp_path / "truth.tsv",
     )
     output = tmp_path / "predictions.tsv"
@@ -164,20 +181,43 @@ def test_a_completed_export_carries_both_sides_of_every_comparable_column(
         "true_cl_id",
         "predicted_cl_id",
     ]
-    assert table["barcode"].tolist() == ["c0", "c1", "c2", "c3"]
-    assert table["predicted_label"].tolist() == ["T cell", "B cell", "T cell", "Unknown"]
-    assert table["predicted_cl_id"].tolist() == ["CL:0000084", "CL:0000236", "CL:0000084", ""]
-    assert table["true_cl_id"].tolist() == ["CL:0000084", "CL:0000236", "", "CL:0000084"]
+    assert table["barcode"].tolist() == ["c0", "c1", "c2", "c3", "c4"]
+    assert table["predicted_label"].tolist() == [
+        "T cell",
+        "B cell",
+        "T cell",
+        "Unknown",
+        "T cell",
+    ]
+    assert table["predicted_cl_id"].tolist() == [
+        "CL:0000084",
+        "CL:0000236",
+        "CL:0000084",
+        "",
+        "CL:0000084",
+    ]
+    assert table["true_cl_id"].tolist() == [
+        "CL:0000084",
+        "CL:0000236",
+        "",
+        "CL:0000084",
+        "CL:0000084",
+    ]
+    # The abstained cell sits in a cluster that was decided against a named
+    # program, and it reports neither that program's accession nor a path: what
+    # the cell received was `Unknown`, and anything else would put a term into
+    # the ontology metrics that the system never asserted.
     assert table["predicted_path"].tolist() == [
         "L1/ROOT/T cell",
         "L1/ROOT/B cell",
         "L1/ROOT/T cell",
         "",
+        "L1/ROOT/T cell",
     ]
 
-    assert receipt["n_cells"] == 4
+    assert receipt["n_cells"] == 5
     assert receipt["n_predicted_unknown"] == 1
-    assert receipt["coverage"] == 0.75
+    assert receipt["coverage"] == pytest.approx(0.8)
     assert receipt["truth_sha256"] == sha256(truth)
     assert receipt["mapping_sha256"]
     assert receipt["label_tables_sha256"] == {"L1.tsv": receipt["label_tables_sha256"]["L1.tsv"]}
@@ -255,10 +295,11 @@ def test_a_repeated_truth_barcode_is_refused(tmp_path: Path) -> None:
 def test_a_label_with_two_cell_ontology_ids_is_refused(tmp_path: Path) -> None:
     """Row order would silently decide which identifier the metric inherits."""
 
-    labels = _labels([("0", "T cell", "CL:0000084", 0.9)])
+    first = _labels([("0", "T cell", "CL:0000084", 0.9)])
+    # One label, two clusters, two accessions: each cluster decided its own, and
+    # row order would otherwise choose which id reaches the published metric.
     conflict = pd.concat(
-        [labels, labels.assign(cl_id="CL:0000625", level="L2", parent_scope="T")],
-        ignore_index=True,
+        [first, _labels([("1", "T cell", "CL:0000625", 0.9)])], ignore_index=True
     )
     config = _run_artifacts(
         tmp_path, mapping=_mapping(["c0"], ["T cell"]), labels=conflict
@@ -285,6 +326,36 @@ def test_confidence_outside_the_unit_interval_is_refused(tmp_path: Path) -> None
         export_benchmark_predictions(config, truth_path=truth, output_path=tmp_path / "a.tsv")
 
 
+def test_a_cluster_described_at_two_levels_is_refused_rather_than_guessed(
+    tmp_path: Path,
+) -> None:
+    """The two artifacts share the cluster, not the scope, and only that is checked.
+
+    A recursive run writes one labels file per level, and a cluster id can appear
+    at more than one level. `mapping.scope` is the input's scope column and
+    `parent_scope` is the vocabulary's parent, and on a configured run they are
+    different things, so neither disambiguates. Attaching the wrong level's
+    confidence to a cell would be silent.
+    """
+
+    config = _run_artifacts(
+        tmp_path,
+        mapping=_mapping(["c0"], ["T cell"]),
+        labels={
+            # Distinct labels, so the cluster-id collision is the only ambiguity
+            # present. With the same label the accession check fires first, which
+            # is the more specific diagnosis and is pinned separately.
+            "L1.tsv": _labels([("0", "T cell", "CL:0000084", 0.9)]),
+            "L2.tsv": _labels([("0", "naive T cell", "CL:0000895", 0.3)], level="L2"),
+        },
+    )
+    truth = _truth(["c0"], ["T cell"], __path=tmp_path / "truth.tsv")
+    with pytest.raises(ContractError, match="more than one level or parent scope"):
+        export_benchmark_predictions(
+            config, truth_path=truth, output_path=tmp_path / "a.tsv"
+        )
+
+
 def test_a_recursive_run_gets_no_path_rather_than_a_wrong_one(tmp_path: Path) -> None:
     """`hierarchy_error` is the one metric that notices a hierarchy at all.
 
@@ -296,15 +367,15 @@ def test_a_recursive_run_gets_no_path_rather_than_a_wrong_one(tmp_path: Path) ->
 
     config = _run_artifacts(
         tmp_path,
-        mapping=_mapping(["c0"], ["T cell"]),
+        mapping=_mapping(["c0", "c1"], ["T cell", "T cell"]),
         labels={
             "L1.tsv": _labels([("0", "T cell", "CL:0000084", 0.9)]),
             "L2.tsv": _labels(
-                [("0", "CD4-positive T cell", "CL:0000624", 0.8)], level="L2"
+                [("1", "CD4-positive T cell", "CL:0000624", 0.8)], level="L2"
             ),
         },
     )
-    truth = _truth(["c0"], ["T cell"], __path=tmp_path / "truth.tsv")
+    truth = _truth(["c0", "c1"], ["T cell"] * 2, __path=tmp_path / "truth.tsv")
     output = tmp_path / "predictions.tsv"
 
     receipt = export_benchmark_predictions(config, truth_path=truth, output_path=output)

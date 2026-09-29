@@ -42,7 +42,7 @@ from typing import Any
 import pandas as pd
 
 from .config import CellCuratorConfig
-from .contracts import ContractError, require_columns, sha256
+from .contracts import ContractError, identifier_text, measured_float, require_columns, sha256
 from .provenance import atomic_publish, publish_json
 
 # The truth side is a third-party artifact, so its contract is declared here
@@ -66,53 +66,63 @@ EMITTED_COLUMNS = (
 )
 
 
-def _label_lookups(
-    frames: list[pd.DataFrame],
-) -> tuple[dict[str, str], dict[str, float], dict[str, str]]:
-    """Index the label tables by label text, refusing any label that disagrees with itself.
+def _cluster_rows(frames: list[pd.DataFrame]) -> pd.DataFrame:
+    """Index the label tables by the parent scope and cluster they describe.
 
-    A label reaching two levels or two parent scopes is already a contract
-    violation elsewhere, but it would corrupt the export quietly here: one of the
-    two Cell Ontology identifiers would win by row order. Refusing is the only
-    outcome that names the problem.
+    Confidence and the Cell Ontology identifier are properties of a *cluster's*
+    decision, not of a label's text. A label reaches many clusters, and a run
+    whose clusters mostly abstain produces a different confidence for every one
+    of them under the same text, so looking these up by label conflates distinct
+    measurements. The first benchmark run refused to export for exactly that
+    reason, having compared two clusters' confidences under one `Unknown`.
+
+    Joining on the cluster is also the only join that can detect a label
+    appearing at two levels or in two parent scopes: a cluster that the mapping
+    places in a scope the label table does not describe is a hole in the
+    vocabulary, and refusing names it instead of letting a neighbouring cluster's
+    value fill the gap.
     """
 
-    cl_id: dict[str, str] = {}
-    confidence: dict[str, float] = {}
-    path: dict[str, str] = {}
+    rows: list[dict[str, object]] = []
     for frame in frames:
         for row in frame.to_dict("records"):
-            label = str(row.get("label", ""))
-            if not label:
-                continue
-            accession = str(row.get("cl_id", "") or "")
-            previous = cl_id.get(label)
-            if previous is not None and previous != accession:
+            confidence = measured_float(row.get("confidence"))
+            if confidence is not None and not 0.0 <= confidence <= 1.0:
                 raise ContractError(
-                    f"label {label!r} carries conflicting Cell Ontology ids: "
-                    f"{previous!r} and {accession!r}"
+                    f"cluster {row.get('cluster_id')!r} carries confidence {confidence} "
+                    "outside [0, 1]"
                 )
-            cl_id[label] = accession
-            raw_confidence = str(row.get("confidence", "") or "").strip()
-            if raw_confidence:
-                value = float(raw_confidence)
-                if not 0.0 <= value <= 1.0:
-                    raise ContractError(
-                        f"label {label!r} carries confidence {value} outside [0, 1]"
-                    )
-                recorded = confidence.get(label)
-                if recorded is not None and abs(recorded - value) > 1e-9:
-                    raise ContractError(
-                        f"label {label!r} carries conflicting confidence: {recorded} and {value}"
-                    )
-                confidence[label] = value
-            rendered = "/".join(
-                str(row.get(column, "")).strip()
-                for column in ("level", "parent_scope", "label")
+            parent_scope = str(row.get("parent_scope", ""))
+            cluster_id = str(row.get("cluster_id", ""))
+            rows.append(
+                {
+                    "parent_scope": parent_scope,
+                    "cluster_id": cluster_id,
+                    "level": str(row.get("level", "")),
+                    "label": str(row.get("label", "")),
+                    "cl_id": identifier_text(row.get("cl_id")),
+                    "confidence": confidence,
+                    "path": "/".join(
+                        str(row.get(column, "")).strip()
+                        for column in ("level", "parent_scope", "label")
+                    ),
+                }
             )
-            if not path.setdefault(label, rendered) == rendered:
-                path[label] = ""
-    return cl_id, confidence, path
+    if not rows:
+        raise ContractError("run label tables contain no rows to index")
+    table = pd.DataFrame(rows)
+    # A label is one biological identity, so one accession. Two clusters reaching
+    # the same label with different accessions means one of them is wrong, and
+    # picking between them by row order would put an unearned id in a published
+    # metric.
+    for label, block in table[table["cl_id"].astype(str).ne("")].groupby("label"):
+        accessions = sorted(set(block["cl_id"].astype(str)))
+        if len(accessions) > 1:
+            raise ContractError(
+                f"label {label!r} carries conflicting Cell Ontology ids across clusters: "
+                f"{accessions}"
+            )
+    return table
 
 
 def _load_truth(truth_path: Path) -> pd.DataFrame:
@@ -177,9 +187,49 @@ def export_benchmark_predictions(
     if not label_paths:
         raise ContractError(f"run has no durable label tables to export: {root / 'labels'}")
     frames = [pd.read_csv(path, sep="\t", keep_default_na=False) for path in label_paths]
-    cl_lookup, confidence_lookup, path_lookup = _label_lookups(frames)
+    clusters = _cluster_rows(frames)
 
     single_level = len({str(frame["level"].iloc[0]) for frame in frames if len(frame)}) == 1
+    # `mapping.scope` is the input's scope column and `parent_scope` is the
+    # vocabulary's parent, and on a configured run those are different things --
+    # the AIDA run set its scope column to "ROOT" so they happened to agree, and a
+    # run that stratifies by lineage does not. `canonical_parent` is the
+    # cluster, and that is the only column the two artifacts genuinely share.
+    described = set(clusters["cluster_id"].astype(str))
+    duplicated = sorted(
+        clusters.loc[clusters["cluster_id"].astype(str).duplicated(keep=False), "cluster_id"]
+        .astype(str)
+        .unique()
+    )
+    if duplicated:
+        raise ContractError(
+            "the same cluster is described at more than one level or parent scope, so "
+            f"its evidence cannot be attached to it unambiguously: {duplicated[:5]}. "
+            "Export one level at a time, or use a run whose cluster ids are unique."
+        )
+    undescribed = sorted(
+        set(mapping["canonical_parent"].astype(str)).difference(described)
+    )
+    if undescribed:
+        raise ContractError(
+            "the run mapping places cells in parents the label tables do not describe, "
+            f"so no evidence can be attached to them: {sorted(set(undescribed))[:5]}. "
+            "This means the vocabulary and the executed scopes disagree."
+        )
+    clusters = clusters.drop_duplicates(subset=["cluster_id"], keep="last")
+    mapping = mapping.merge(
+        clusters[["cluster_id", "cl_id", "confidence", "path"]].rename(
+            columns={
+                "cluster_id": "canonical_parent",
+                "cl_id": "_cl_id",
+                "confidence": "_confidence",
+                "path": "_path",
+            }
+        ),
+        on="canonical_parent",
+        how="left",
+        validate="many_to_one",
+    )
     truth = _load_truth(truth_file)
 
     labelled = set(mapping["barcode"])
@@ -198,21 +248,49 @@ def export_benchmark_predictions(
         )
 
     joined = truth.merge(
-        mapping[["barcode", "cell_type", "cell_state", "canonical_parent", "scope"]],
+        mapping[
+            [
+                "barcode",
+                "cell_type",
+                "cell_state",
+                "canonical_parent",
+                "scope",
+                "_cl_id",
+                "_confidence",
+                "_path",
+            ]
+        ],
         on="barcode",
         how="inner",
         validate="one_to_one",
     )
     joined["predicted_label"] = joined["cell_type"].astype(str)
-    joined["predicted_cl_id"] = joined["predicted_label"].map(cl_lookup).fillna("")
+    # An abstention has no term, so it carries no accession even when its cluster
+    # was decided against a named program. The cluster's own decision is kept in
+    # the label table; what the cell received is `Unknown`, and reporting an
+    # accession for it would put a term in the ontology metrics that the system
+    # never asserted. This is the same rule the label builder uses.
+    abstained = joined["predicted_label"].eq("Unknown")
+    joined["predicted_cl_id"] = [
+        "" if is_abstention else str(accession)
+        for is_abstention, accession in zip(abstained, joined["_cl_id"], strict=True)
+    ]
     joined["confidence"] = [
-        confidence_lookup.get(label, "") for label in joined["predicted_label"]
+        "" if value is None or (isinstance(value, float) and pd.isna(value)) else value
+        for value in joined["_confidence"]
     ]
     joined["cluster_id"] = joined["canonical_parent"].astype(str)
     for column in ("true_cl_id", "true_path"):
         joined[column] = joined[column].astype(str)
     if single_level:
-        joined["predicted_path"] = joined["predicted_label"].map(path_lookup).fillna("")
+        joined["predicted_path"] = [
+            ""
+            if is_abstention
+            or not str(value).strip()
+            or str(value).endswith("/")
+            else str(value)
+            for is_abstention, value in zip(abstained, joined["_path"], strict=True)
+        ]
     else:
         joined["predicted_path"] = ""
 
