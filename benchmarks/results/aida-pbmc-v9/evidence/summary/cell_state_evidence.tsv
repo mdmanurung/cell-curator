@@ -1,1 +1,0 @@
-schema_version	run_id	cluster_id	label	axis	parent_label	cl_id	assay	representation	capability_level	feature_space	score	positive_signal	negative_signal	positive_coverage	negative_violation	program_coverage	measured_positive	total_positive	measured_negative	total_negative	missing_positive	missing_negative	detection_valid	source	lane_key

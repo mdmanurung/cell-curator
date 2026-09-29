@@ -24,5 +24,10 @@ dist/
 benchmarks/data/**/*_clustered.h5ad
 benchmarks/data/**/aida_pbmc_wide.h5ad
 
+# A run directory is intermediate state, hundreds of MB of evidence tables and
+# HTML reports. What is published is `benchmarks/results/<dataset>.<system>.json`,
+# which is small, immutable, and hash-bound, and nothing here is one of those.
+benchmarks/results/*/
+
 docs/_build/
 docs/_generated/
