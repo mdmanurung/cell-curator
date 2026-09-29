@@ -1,0 +1,26 @@
+{
+  "artifact_kind": "cell_curator_hierarchy_checkpoint",
+  "artifact_sha256": {
+    "critic_packet": "2244a3e7179647999494bbddd6965bc0fc547898821a52efd2a13a512ab9fc27",
+    "full_report": "39661ac3a37e545e744aabc54e3ea91d100cdebbfb83fa127ab575d7b1d77770",
+    "labels": "23dea2d3aa7c0a96b2c324cd87a40210089a87f35fb1614ab49e6faa713e8771",
+    "level_report": "c42ea466cef63375d5f628f2d6bde880a7ea34e7b6b772df6cff852039c96130"
+  },
+  "artifacts": {
+    "critic_packet": "/exports/para-lipg-hpc/mdmanurung/cell-curator/benchmarks/results/aida-pbmc-v9/review/critic_packet.json",
+    "full_report": "/exports/para-lipg-hpc/mdmanurung/cell-curator/benchmarks/results/aida-pbmc-v9/review/report.html",
+    "labels": "/exports/para-lipg-hpc/mdmanurung/cell-curator/benchmarks/results/aida-pbmc-v9/labels/L1.tsv",
+    "level_report": "/exports/para-lipg-hpc/mdmanurung/cell-curator/benchmarks/results/aida-pbmc-v9/review/report_L1.html"
+  },
+  "assumption_scopes": [
+    "global",
+    "L1::ROOT"
+  ],
+  "assumptions_sha256": "d4951a1d56f1d4d813224ebb20ef5d272e15d57eb7da9b50734cfafb3c857b52",
+  "config_sha256": "d93477b373fd3cddb9a506fa670fb49313b8b80fe0648658415e210fcee31ee7",
+  "input_sha256": "a8c5e3324801d6e321b809f7f9ddd10303f733c31f0be27e75efdc8b195c8380",
+  "level": "L1",
+  "parent": "ROOT",
+  "schema_version": 3,
+  "status": "complete"
+}

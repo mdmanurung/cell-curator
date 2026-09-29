@@ -1,0 +1,114 @@
+{
+  "artifact_kind": "cell_curator_run_validation",
+  "artifacts": {
+    "adaptive/doublet_summary.tsv": {
+      "bytes": 1250,
+      "sha256": "3484188315524f905bb2eece23566540330b5f03189881db23af4a683c3bd80c"
+    },
+    "adaptive/technical_summary.tsv": {
+      "bytes": 2490,
+      "sha256": "963e22e6bee559ee959dc21f965f4b4c5cc3667b46fdb32100e896867036a10b"
+    },
+    "adaptive_parent_audit.tsv": {
+      "bytes": 4260,
+      "sha256": "beaa283307de3c73240d9f9a91797dce730f0c00528cc6368fcdeb1a85f5ed2a"
+    },
+    "assumptions.json": {
+      "bytes": 9974,
+      "sha256": "c22e81946abf278e4fd4defd1af93fab418effedb93a5f52745c332ede453d2f"
+    },
+    "comparators/comparator_manifest.json": {
+      "bytes": 303,
+      "sha256": "66f7a5bb4506f248ba7a442846784801a84b40bea1425d0be6e2793f4faf77fc"
+    },
+    "context.json": {
+      "bytes": 5825,
+      "sha256": "3101b1f9983e931609e2d4ed151247ab797042031ed5f53e99797acaae70dd40"
+    },
+    "decisions/candidate_evidence.manifest.json": {
+      "bytes": 427,
+      "sha256": "e1aed7f3ec9a9103cbc317ff0f55671f057a2e297ea643c66d44121f0b0f3e91"
+    },
+    "decisions/parent_decision_summary.tsv": {
+      "bytes": 3423,
+      "sha256": "b8f746b13a6eba03cf97d3654b5408c8d0a65e0348fb9f0d6ed3a183bf40cea7"
+    },
+    "discovery/discovery.manifest.json": {
+      "bytes": 279,
+      "sha256": "1626d009bcf255c99791c5bbd7a479bc1a84733ef5c41dc191ff6c3cdf64fa5c"
+    },
+    "environment.json": {
+      "bytes": 1309,
+      "sha256": "51051015f3f57aa5cc475191f9da45ec264596abb9260123126744b2cdc3cd4d"
+    },
+    "evidence/receipts.validated.json": {
+      "bytes": 540,
+      "sha256": "8368badb375a2c664ae0698a5c4fe46844ad8eb5f8353a416ceeac6f047f5574"
+    },
+    "evidence/summary/evidence.manifest.json": {
+      "bytes": 669,
+      "sha256": "fe66febe6ea177fad32ec6588455800c1b89e898c99fb026cca6cd66d17c4683"
+    },
+    "evidence/summary/program_cooccurrence.tsv": {
+      "bytes": 370588,
+      "sha256": "6a8b8284f67baa98a5d70173e7121977571489935b70cedec5d4323958f1d0e5"
+    },
+    "evidence/summary/source_corroboration.tsv": {
+      "bytes": 102989,
+      "sha256": "0166847e365de938a24f89efda33dfc87db6ead4eff23b6accc8bd04da461271"
+    },
+    "input_contract.manifest.json": {
+      "bytes": 16961,
+      "sha256": "cbebcf4d9642a6eaee92f2e9f9318385baed59c75c4ef628bf74c15f90c852a5"
+    },
+    "mapping/mapping.validation.json": {
+      "bytes": 525,
+      "sha256": "dd19e8326e7e330d7fa5e95eb0e2541af1052a2d8f32553d49d6744f8edffbad"
+    },
+    "plan.json": {
+      "bytes": 4800,
+      "sha256": "b9d225ea5aa03da1a53949608d021f13b5a5416ffbebcac3df2e80631bd26ed6"
+    },
+    "qc/cell_metrics.tsv": {
+      "bytes": 1905323,
+      "sha256": "56add5271f664d19d134120e8265b5bd1fb25c6b217b43801667885271797f09"
+    },
+    "qc/qc.manifest.json": {
+      "bytes": 1677,
+      "sha256": "22cd41f2a8a60a932c594de4d37b3d3daa7eb73b0f13a59b3eddd0a6de0a6619"
+    },
+    "review/colors.json": {
+      "bytes": 256,
+      "sha256": "b6942db6b5d3e0562534c96347cf7ffbf102c53ff678259129fcc737d6dcca10"
+    },
+    "review/critic_packet.json": {
+      "bytes": 1474,
+      "sha256": "2244a3e7179647999494bbddd6965bc0fc547898821a52efd2a13a512ab9fc27"
+    },
+    "review/report.html": {
+      "bytes": 2412570,
+      "sha256": "39661ac3a37e545e744aabc54e3ea91d100cdebbfb83fa127ab575d7b1d77770"
+    },
+    "review/report.manifest.json": {
+      "bytes": 6098,
+      "sha256": "87ab0133505103cabf8361988ea969bb8d3c6e947127c241df3d27276e228bf2"
+    }
+  },
+  "critics_reconciled": true,
+  "mapping_invariants": {
+    "canonical_parent_membership_unchanged": true,
+    "one_cell_one_leaf": true,
+    "one_parent_per_label": true,
+    "one_row_per_input_cell": true,
+    "parent_counts_conserved": true,
+    "unknown_permitted": true,
+    "unsplit_membership_unchanged": true
+  },
+  "ontology_status": "unavailable-cl-free",
+  "promotion_status": "computationally_complete_pending_human_review",
+  "run_id": "aida-pbmc-v9",
+  "schema_version": 3,
+  "source_unchanged": true,
+  "status": "complete",
+  "writeback_permitted": false
+}

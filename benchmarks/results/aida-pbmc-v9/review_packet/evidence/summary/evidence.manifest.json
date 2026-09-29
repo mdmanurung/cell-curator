@@ -1,0 +1,14 @@
+{
+  "artifact_kind": "cell_curator_multimodal_evidence",
+  "cell_state_evidence_sha256": "2ffae02f298e8627e5db8e5027c37968dcc61fb4554f0b1530320bb22cba1922",
+  "evidence_sha256": "b5cf3d274c3601077e291612baa7682fe025af7d229d70f2ceb30dc993e82251",
+  "n_clusters": 28,
+  "n_lanes": 1,
+  "n_unknown": 27,
+  "program_cooccurrence_sha256": "6a8b8284f67baa98a5d70173e7121977571489935b70cedec5d4323958f1d0e5",
+  "proposals_sha256": "b2c5e8697fc7386f15be1bccfeb669d647ad0895e9d9d9efae82f62a3c92c33b",
+  "run_id": "aida-pbmc-v9",
+  "schema_version": 3,
+  "source_corroboration_sha256": "0166847e365de938a24f89efda33dfc87db6ead4eff23b6accc8bd04da461271",
+  "status": "complete"
+}

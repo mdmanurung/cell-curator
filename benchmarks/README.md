@@ -100,6 +100,59 @@ for the dataset in `manifests/rna.json` (unobtainable *and* Azimuth-derived, per
 multimodal PBMC set, which *is* the Azimuth reference at 161,764 cells; Tabula
 Sapiens, since Pan-human Azimuth was trained on it.
 
+## Why the pre-declared evidence bar is not met, measured rather than guessed
+
+Two runs, differing only in measured panel width. Both label one cluster of 28.
+
+| | 2,000 genes | 8,000 genes |
+| --- | --- | --- |
+| cells / clusters | 17,394 / 28 | 17,394 / 28 (clusters reused) |
+| clustering ceiling | 0.636 | 0.636 (same clusters) |
+| marker programs below the 0.5 coverage bar | 3 | 1 |
+| clusters labelled | 1 of 28 | 1 of 28 |
+| per-cell coverage | 0.009 | 0.009 |
+
+Widening the panel helped exactly where it was predicted to and nowhere else.
+Programs whose markers the panel could not measure became measurable, so the
+coverage bar was met by more of the vocabulary. The number of labels did not move,
+because the bar they are failing is not the coverage bar.
+
+The gate they fail is the negative-marker one, and it is failing correctly. On 24
+of 28 clusters the winning program's negative markers are flagged, and the
+evidence shows why: the winning row for a *correct* call carries
+`negative_signal = 0.0` with `negative_violation = 0.5`, and 0.5 is one violated
+marker out of two. A cluster whose dominant true type is natural killer cell has
+half its cells expressing CD3D, because the cluster is not half natural killer
+cells. The ceiling says exactly this -- roughly a third of every cluster belongs to
+a neighbouring lineage, so a neighbouring lineage's marker clears the 20% violation
+threshold in most clusters. The gate is measuring cluster impurity and declining to
+name a cluster that does not warrant the name.
+
+**Resolution does not fix it, and this was measured rather than assumed.** Louvain
+from 17 to 53 clusters moves the ceiling from 0.423 to 0.448. It is not a
+granularity problem: the cells of different AIDA subtypes overlap in expression
+space on this representation, so splitting further splits an impure cluster into
+smaller impure clusters. The missing ingredient is donor integration across 394
+donors, and this machine has no `scanpy`, `leidenalg`, `harmony`, or `scvi-tools`
+available. Batch correction is explicitly outside this package's scope, so it
+cannot be done by the tool under test and would have to be declared as input
+preparation rather than performed silently.
+
+One finding separates from the failure. The 8,000-gene slice clusters *worse*
+than the 2,000-gene one on its own gene set: ceiling 0.44 against 0.64. The cause
+is that log-normalisation depth depends on panel size, so a wider panel is a
+different representation, not strictly more information. Clustering on the 2,000
+most variable of the measured genes is therefore not a compromise, it is the
+better input, and the wider panel's value is confined to marker measurement.
+
+A second finding is about the vocabulary rather than the input.
+Dispersion-based HVG selection systematically drops lineage-restricted genes --
+CD34, TRDC, TRGC1, TRGC2, RORC, KIT, CRHBP -- so the cells it defines are exactly
+the ones whose programs become uncallable. On this dataset hematopoietic stem cell
+reaches 5 of 11 markers even at 8,000 genes. Widening a panel of highly variable
+genes is the wrong lever for rare lineages; a panel not selected by dispersion
+would be the right one.
+
 ## The input caps this evaluation before any annotator runs
 
 The clustering is fixed a priori, not chosen: unit-variance scaling, 50 PCs, 15
@@ -109,11 +162,20 @@ purity 0.718 against AIDA truth, and a hard ceiling of 0.636 on per-cell
 accuracy contributed by the clustering alone** — no annotator, however good, can
 exceed it on this input.
 
-The cause is the 2,000-gene panel plus 394 donors with no batch correction, both
-forced by a 4 GB machine on which no `scanpy`, `leidenalg`, or `harmony` is
-available. Widening the gene panel does not fit in memory, and resolution was
+The cause is a narrow gene panel plus 394 donors with no batch correction, on a
+machine where `scanpy`, `leidenalg`, and `harmony` are unavailable. Resolution was
 deliberately not tuned against purity, because tuning a clustering by its
 agreement with the ground truth fits the input to the answer.
+
+**Two corrections to the first draft of this section, both because a stated
+constraint turned out to be false.** It said the gene panel could not be widened
+because it would not fit in memory. That was doubly wrong: the 4 GB figure was a
+budget the acquisition script set for itself, not a limit of the machine, which
+has 3.9 TB of RAM and no cgroup cap. Nothing constrained the panel width. The
+benchmark runs on 8,000 genes, with the cell set, the clustering recipe, the
+marker vocabulary, and all four thresholds unchanged, so the 2,000-gene and
+8,000-gene runs differ only in how many genes were measured and the comparison
+between them is clean.
 
 **This is recorded before the run and it governs how every number may be read.**
 The literature's fine-PBMC figures of 52–75% sit *at or above* this ceiling, so

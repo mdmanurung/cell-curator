@@ -1,0 +1,108 @@
+{
+  "approved_assumptions_sha256": "c22e81946abf278e4fd4defd1af93fab418effedb93a5f52745c332ede453d2f",
+  "assumptions_approved": true,
+  "assumptions_sha256": "c22e81946abf278e4fd4defd1af93fab418effedb93a5f52745c332ede453d2f",
+  "blockers": [],
+  "canonical_membership_sha256": "6e849e29813c12ac2801cc5d6e0f437dff810cb0650328f00be26a3d22a4db1b",
+  "completed_phases": [
+    "INPUT_FROZEN",
+    "SCENE_SET",
+    "PARENTS_AUDITED",
+    "CANDIDATES_DISCOVERED",
+    "EVIDENCE_COMPLETE",
+    "DECISIONS_PROPOSED",
+    "MAPPING_VALIDATED",
+    "REVIEW_PACKET_READY",
+    "COMPUTATIONALLY_COMPLETE"
+  ],
+  "compute": {
+    "accelerator": "none",
+    "ambiguity_reason": null,
+    "apple_silicon": false,
+    "blockers": [],
+    "compute_profile": "scheduler",
+    "configured_cpu_resources": {},
+    "configured_gpu_requested": false,
+    "configured_gpu_resources": {},
+    "cpu_count": 128,
+    "cuda_candidate": false,
+    "cuda_candidate_reasons": [],
+    "detection_only": true,
+    "gpu_validation": null,
+    "gpu_validation_error": null,
+    "machine": "x86_64",
+    "next_action": "Use the detected scheduler profile only through an explicitly authorized job submission workflow.",
+    "profile_candidates": [
+      "scheduler"
+    ],
+    "requires_confirmation": false,
+    "resource_limits": [
+      {
+        "kind": "cpu",
+        "source": "cgroup_v1_cpuset",
+        "value": 128
+      },
+      {
+        "kind": "cpu",
+        "source": "process_affinity",
+        "value": 8
+      },
+      {
+        "kind": "memory",
+        "source": "host_physical",
+        "value": 4328760139776
+      }
+    ],
+    "scheduler": {
+      "active_job": true,
+      "commands": [
+        "sbatch",
+        "squeue"
+      ],
+      "detected_by": [
+        "environment",
+        "path"
+      ],
+      "environment_keys": [
+        "SLURM_JOB_ID"
+      ],
+      "job_id": "25651641",
+      "kind": "slurm"
+    },
+    "system": "Linux",
+    "total_ram_bytes": 4328760139776,
+    "usable_cpu_count": 8,
+    "usable_ram_bytes": 4328760139776
+  },
+  "compute_profile": "scheduler",
+  "config_sha256": "d93477b373fd3cddb9a506fa670fb49313b8b80fe0648658415e210fcee31ee7",
+  "context_complete": true,
+  "critics_reconciled": false,
+  "current_level": "L1",
+  "current_parent": "ROOT",
+  "decisions": [],
+  "human_approval": false,
+  "input_path": "/exports/para-lipg-hpc/mdmanurung/cell-curator/benchmarks/data/aida-phase1-v2-pbmc-hvg2000/aida_pbmc_wide_clustered.h5ad",
+  "input_sha256": "a8c5e3324801d6e321b809f7f9ddd10303f733c31f0be27e75efdc8b195c8380",
+  "interactive": false,
+  "labels_permitted": true,
+  "mode": "annotation",
+  "next_action": "continue to the next planned hierarchy scope or final validation",
+  "phase": "COMPUTATIONALLY_COMPLETE",
+  "plan_complete": true,
+  "preauthorized": true,
+  "progress": {
+    "checkpoints": [
+      "L1::ROOT"
+    ],
+    "completed_levels": []
+  },
+  "run_id": "aida-pbmc-v9",
+  "schema_version": 3,
+  "signed_off_scopes": [
+    "*"
+  ],
+  "stage": "execute",
+  "updated_utc": "2026-09-29T10:02:25.753758+00:00",
+  "writeback_permitted": false
+}

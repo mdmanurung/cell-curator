@@ -11,12 +11,18 @@
 # per parent, so a parent carried by one donor is indistinguishable here from one
 # carried evenly.
 #
-# `min_positive_coverage: 0.5` is a quality bar chosen before the run, not a value
-# that makes the vocabulary pass. On this 2,000-gene panel it means three
-# programs are expected to fall below it and become uncallable -- gamma-delta T at
-# 3 of 8 measured markers, ILC at 5 of 11, HSPC at 4 of 11 -- which is the
-# designed behaviour for a panel that cannot measure them, not a failure to tune
-# away.
+# The measured panel is 8,000 highly variable genes; the clustering is the 2,000-gene
+# run's, reused unchanged so the two runs differ only in how many genes were
+# measured.
+#
+# `min_positive_coverage: 0.5` is a quality bar chosen before any run, not a value
+# that makes the vocabulary pass. On this panel exactly one program falls below it
+# and becomes uncallable -- hematopoietic stem cell at 5 of 11 measured markers --
+# because dispersion-based HVG selection systematically drops lineage-restricted
+# genes such as CD34, TRDC, and RORC, which is a property of the selection method
+# rather than of these cells. On the earlier 2,000-gene panel three programs fell
+# below it. That is the designed behaviour for a panel that cannot measure a
+# program, not a failure to tune away.
 #
 # `input.keys.scope: annotation_scope` is a constant "ROOT" column. Declaring the
 # eight true AIDA lineages as scopes would hand the annotator the coarse partition,
@@ -27,13 +33,13 @@
 schema_version: 3
 
 run:
-  run_id: aida-pbmc-v7
+  run_id: aida-pbmc-v9
   output_root: /exports/para-lipg-hpc/mdmanurung/cell-curator/benchmarks/results
   mode: annotation
 
 input:
   kind: h5ad
-  path: /exports/para-lipg-hpc/mdmanurung/cell-curator/benchmarks/data/aida-phase1-v2-pbmc-hvg2000/aida_pbmc_clustered.h5ad
+  path: /exports/para-lipg-hpc/mdmanurung/cell-curator/benchmarks/data/aida-phase1-v2-pbmc-hvg2000/aida_pbmc_wide_clustered.h5ad
   expected_sha256: ""
   assays:
     transcriptome:

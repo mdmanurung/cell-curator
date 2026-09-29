@@ -17,5 +17,12 @@ dist/
 .gpu-validation/
 .venv-gpu/
 
+# Derived benchmark inputs. The dataset the manifest names is committed so a
+# published result can be checked against real bytes; the clustered variants are
+# regenerated from benchmarks/README.md, whose clustering recipe is the only thing
+# needed to reproduce them, and at 300-750 MB they do not belong in the history.
+benchmarks/data/**/*_clustered.h5ad
+benchmarks/data/**/aida_pbmc_wide.h5ad
+
 docs/_build/
 docs/_generated/

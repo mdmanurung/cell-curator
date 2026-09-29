@@ -1,0 +1,33 @@
+{
+  "artifact_kind": "cell_curator_backend_receipt",
+  "artifact_sha256": {
+    "bottom_up_markers": "eee6d32a2e7febd521670ab4ecd6ca2a4185e7c848dccdf5481cdcf4f4fd4f83",
+    "program_evidence": "afe4b24d0d9c75b98f3b0dc4711ff9015231c1ce01e4d199b0fb4ac0c4fb7179"
+  },
+  "backend": "scipy_mannwhitney",
+  "capability_level": "annotation-capable",
+  "config_sha256": "d93477b373fd3cddb9a506fa670fb49313b8b80fe0648658415e210fcee31ee7",
+  "convergence_validated": null,
+  "cpu_fallback_available": false,
+  "cpu_fallback_used": false,
+  "created_utc": "2026-09-29T10:01:12.542556+00:00",
+  "fallback_used": false,
+  "feature_order_sha256": "9d2f8610e34e606f29e098245a6f8cebb1c38290690e27a3caca680c7f7c2a37",
+  "group_membership_sha256": "cccb7d8341d2a2337012f94cdaf38ccf049e3f86272e4a79377829f7598e0f6e",
+  "input_sha256": "a8c5e3324801d6e321b809f7f9ddd10303f733c31f0be27e75efdc8b195c8380",
+  "lane_key": "transcriptome__lognorm",
+  "limitations": [
+    "direct gene-expression identity evidence"
+  ],
+  "marker_methods": [],
+  "output_sha256": "afe4b24d0d9c75b98f3b0dc4711ff9015231c1ce01e4d199b0fb4ac0c4fb7179",
+  "run_id": "aida-pbmc-v9",
+  "runtime": {
+    "executable": "/exports/para-lipg-hpc/mdmanurung/cell-curator/.venv/bin/python3",
+    "implementation": "CPython",
+    "platform": "Linux-4.18.0-553.156.1.el8_10.x86_64-x86_64-with-glibc2.28",
+    "python": "3.11.12"
+  },
+  "schema_version": 3,
+  "status": "complete"
+}
