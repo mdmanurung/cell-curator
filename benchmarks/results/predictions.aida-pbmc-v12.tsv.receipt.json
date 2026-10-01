@@ -1,0 +1,31 @@
+{
+  "accuracy_claimed": false,
+  "artifact_kind": "cell_curator_prediction_export",
+  "columns": [
+    "barcode",
+    "true_label",
+    "predicted_label",
+    "confidence",
+    "cluster_id",
+    "true_path",
+    "predicted_path",
+    "true_cl_id",
+    "predicted_cl_id"
+  ],
+  "coverage": 0.5898585719213523,
+  "granularity": "per-cluster, carried to each cell of the cluster",
+  "hierarchy_paths_emitted": true,
+  "label_tables_sha256": {
+    "L1.tsv": "78f77667408a11fc661fd70a5f1db6faf4bc164d6e5a66db93317a8643fd1186"
+  },
+  "mapping_sha256": "299eaec5dd4567f74c37edcc29aa5b4df4794d5a11ac9aba883e322d19b41578",
+  "n_cells": 17394,
+  "n_predicted_unknown": 7134,
+  "neutral_format": true,
+  "prediction_sha256": "236e0a687d71aa5dce3c8719d83dd0d890fac9099a601592fddb8d8a7d510df5",
+  "run_id": "aida-pbmc-v12",
+  "run_root": "/exports/para-lipg-hpc/mdmanurung/cell-curator/benchmarks/results/aida-pbmc-v12",
+  "schema_version": 3,
+  "truth_path": "/exports/para-lipg-hpc/mdmanurung/cell-curator/benchmarks/data/aida-phase1-v2-pbmc-hvg2000/ground_truth.tsv",
+  "truth_sha256": "c4a9f8334a89e2ef6c635981cb1c3f09ad9d795bfe11ae914bf075597aaddc0a"
+}

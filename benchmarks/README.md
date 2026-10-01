@@ -307,6 +307,17 @@ byte-identical to the clean run's. Result: `results/aida-pbmc-v11.cell-curator.j
 | `ontology_distance_error` | — | 0.165 |
 | Brier / ECE, exact tier | — | 0.532 / 0.585 |
 
+The freeze requires backoff calls on their own row (called cells only):
+
+| v3 | clusters | cells | exact | relaxed | distance |
+| --- | --- | --- | --- | --- | --- |
+| direct calls | 15 | 9,919 | 0.297 | 0.876 | 0.136 |
+| backoff calls | 3 | 715 | 0.000 | 0.850 | 0.559 |
+
+`relaxed_accuracy` credits any coarser ancestor, so it counts the 374 cells
+labelled "anatomical structure" (below) as correct. That inflates the backoff row
+only. The direct row carries the granularity reading on its own.
+
 **The expectation held.** v3 called more than 10 of 28 clusters, and exact
 selective accuracy is below the 0.636 ceiling. The diagnosis was right: the
 scoring and the plumbing caused the 1-of-28 coverage, not caution.
@@ -343,6 +354,28 @@ The engine commit also carries the network guard (`2aa511f`), which makes
 `offline` the default. This config declares no remote provider and v3 made no
 request, so the guard should change only the wording of route reasons in
 `plan.json`, not a score or a label. The v3-to-v4 comparison checks this.
+
+### What v4 measured
+
+Recorded 2026-10-01 from `aida-pbmc-v12`, a clean checkout of `5c23c69`. Result:
+`results/aida-pbmc-v12.cell-curator.json`.
+
+**The declared effect is the only effect.** Cluster 14 is Unknown. No other
+proposal, label row, or per-label score differs from v3: 1 of 28 label rows and
+0 of 364 score rows changed. `plan.json` differs only in the run directory, so
+even the route reasons are unchanged.
+
+| v4 | clusters | cells | exact | relaxed | distance |
+| --- | --- | --- | --- | --- | --- |
+| direct calls | 15 | 9,919 | 0.297 | 0.876 | 0.136 |
+| backoff calls | 2 | 341 | 0.000 | 0.686 | 0.261 |
+| all calls | 17 of 28 | 10,260 | 0.287 | 0.870 | 0.141 |
+
+Coverage is 0.590, `descendant_accuracy` 0.338 (the taxonomy stop rule still
+fires), and Brier / ECE 0.517 / 0.571. Of the backoffs, lymphocyte (230 cells)
+is an ancestor of every truth label in its cluster. Mature αβ T cell (111 cells)
+is not an ancestor of the cluster's truth, double-negative regulatory T cell,
+which CL places outside it. So that call is wrong at every tier.
 
 ## Why the pre-declared evidence bar is not met, measured rather than guessed
 
