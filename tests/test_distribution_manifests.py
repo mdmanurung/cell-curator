@@ -13,6 +13,7 @@ import re
 import tomllib
 from pathlib import Path
 
+import pytest
 from conftest import REPO_ROOT, SKILL_ROOT
 
 PLUGIN_ROOT = REPO_ROOT / ".claude-plugin"
@@ -138,3 +139,30 @@ def test_every_harness_finds_the_skill_and_asks_before_approvals() -> None:
     assert {"assumptions approve", "write-back apply"} <= {
         key.strip("*").removeprefix("cell-curator ") for key in permission
     }
+
+
+def test_an_installed_wheel_finds_its_template_under_the_prefix(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Wheel data lands in <prefix>/share, recorded as ../../../share/... from site-packages."""
+
+    import importlib.metadata as metadata
+
+    from cell_curator import session
+
+    site = tmp_path / "lib" / "python3.11" / "site-packages"
+    template = tmp_path / "share" / "cell-curator" / "assets" / "config.template.yaml"
+    template.parent.mkdir(parents=True)
+    site.mkdir(parents=True)
+    template.write_text("schema_version: 3\nmarker: from-the-wheel\n")
+
+    class Installed:
+        files = [
+            metadata.PackagePath("../../../share/cell-curator/assets/config.template.yaml")
+        ]
+
+        def locate_file(self, item: object) -> Path:
+            return site / str(item)
+
+    monkeypatch.setattr(metadata, "distribution", lambda _name: Installed())
+    assert session.default_config_template()["marker"] == "from-the-wheel"

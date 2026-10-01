@@ -180,6 +180,14 @@ def apply_proposals(
             }
         )
         if reason or entry is None:
+            if cluster_id in updated:
+                decision = updated[cluster_id]
+                updated[cluster_id] = decision.model_copy(
+                    update={
+                        "rationale": f"{decision.rationale}; LLM proposal "
+                        f"{label or 'set'} from {', '.join(models)} refused: {reason}"
+                    }
+                )
             continue
         candidate = next(item for item in entry["candidates"] if item["label"] == label)
         cited = {gene for item in proposals for gene in item.cited_genes}

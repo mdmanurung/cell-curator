@@ -211,7 +211,7 @@ keeps it on localhost and `knowledge.allowed_hosts`. `llm packet` is for answeri
 as the host agent. **Do not read the packet yourself unless the user confirms your
 model may see it:** your harness sends what you read to its model, outside the
 guard. The command refuses unless `knowledge.network` is `online` or the user set
-`evidence.llm.host_agent_local: true`. If you answer, write `proposals.json` as
+`evidence.llm.host_agent_local: true`. The same holds for every run output you read: if the user asked for local-only work and your model is remote, say so first. If you answer, write `proposals.json` as
 `{"schema_version": 3, "payload_sha256": "<packet sha256>", "proposals": [{"cluster_id",
 "label", "cited_genes", "rationale", "model"}]}`. Then set
 `evidence.llm.proposals` in a config with a new `run.run_id` and run it from

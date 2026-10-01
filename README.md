@@ -140,17 +140,19 @@ Every HTTP request goes through one guard, set by `knowledge.network`:
 | `online` | any host | remote tables, live ontology lookups, Census, CellTypist models |
 
 An `allowed_hosts` entry that starts with `.` allows that domain's subdomains.
-Redirects are checked too, so an allowed host cannot send a request outside. Census
-and CellTypist use their own network clients, so their routes run only in
-`online` mode. `reference acquire-azimuth` and `acquire-scimilarity` are downloads
-a person runs by name, each one GET for a public, checksum-pinned file.
-`reference acquire-census` queries Census through tiledb, outside the guard.
+Redirects are checked too, so an allowed host cannot send a request outside.
+CellTypist routes use cached models only and never download. Plan offers a
+Census route only in `online` mode. `reference acquire-azimuth` and
+`acquire-scimilarity` are downloads a person runs by name, each one GET for a
+public, checksum-pinned file. `reference acquire-census` queries Census through tiledb, outside the guard.
 
 LLM tie-breaks follow the same rule: `cell-curator llm propose` reaches only what
 `network` allows, so `institution` with a local Ollama or vLLM server keeps every
 payload inside the institution. A host agent that reads `llm packet` output sends
 it to its own model, so that command refuses unless `network` is `online` or
 `evidence.llm.host_agent_local` is set.
+
+**What `network` cannot govern: the agent itself.** In Claude Code or Codex with a cloud model, every file the agent reads goes to that vendor, and the evidence cards, reports, and score tables carry the same numbers as the LLM packet. Nothing leaves the institution only when the harness model is local too (for example OpenCode with Ollama), or when you run the CLI or Python without a cloud agent.
 
 ## Execute the workflow
 

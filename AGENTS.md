@@ -26,7 +26,9 @@ anything.
 An LLM, including you, may only break a near-tie that the measured markers left
 open, and only through `evidence.llm.proposals`. It never overrules a call.
 
-`knowledge.network` decides what may leave the machine: `offline`, `institution`
+`knowledge.network` decides what the package may send: `offline`, `institution`
 (localhost and allowed hosts), or `online`. Reading `cell-curator llm packet` output
 sends it to your model provider. Do not read it unless the network is `online` or
 the user set `evidence.llm.host_agent_local: true`.
+
+The network setting does not cover you. If your model is not local, everything you read from a run (cards, reports, score tables) leaves the institution. When the user asks for local-only work and your model is remote, say so before reading run outputs.

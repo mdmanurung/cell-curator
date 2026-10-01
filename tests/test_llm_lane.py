@@ -136,13 +136,16 @@ def test_every_gate_refuses_its_own_failure(first_run) -> None:
     digest = packet_sha256(packet)
 
     def outcome(*answers: Proposal) -> dict:
-        _, outcomes = apply_proposals(
+        updated, outcomes = apply_proposals(
             config,
             packet,
             ProposalSet(payload_sha256=digest, proposals=list(answers)),
             decisions,
             aggregate,
         )
+        if outcomes[0]["reason"]:
+            # A reviewer reads the cluster's rationale, not llm/receipt.json.
+            assert outcomes[0]["reason"] in updated[0].rationale
         return outcomes[0]
 
     assert outcome(_answer(packet, "Type A", ("A1",)))["status"] == "accepted"

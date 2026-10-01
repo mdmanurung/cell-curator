@@ -504,9 +504,12 @@ def test_interactive_equivalent_end_to_end_requires_named_gate_approval(
     assert not (tmp_path / "unconfirmed.h5ad").exists()
 
 
+@pytest.mark.parametrize("optional_noise_lane", [False, True])
 def test_stored_refinement_promotes_only_evidence_backed_children(
-    tmp_path: Path,
+    tmp_path: Path, optional_noise_lane: bool
 ) -> None:
+    """With ``optional_noise_lane``, a second lane that cannot separate the children
+    is configured as not required: it may corroborate, but it must not veto."""
     rng = np.random.default_rng(11)
     n = 40
     barcodes = [f"split-{index:02d}" for index in range(n)]
@@ -532,6 +535,7 @@ def test_stored_refinement_promotes_only_evidence_backed_children(
     )
     adata.layers["counts"] = counts
     adata.layers["logcounts"] = np.log1p(counts)
+    adata.layers["noise"] = rng.permutation(np.log1p(counts).ravel()).reshape(counts.shape)
     adata.obsm["X_pca"] = np.column_stack(
         [
             np.r_[rng.normal(-4, 0.1, 20), rng.normal(4, 0.1, 20)],
@@ -566,6 +570,16 @@ def test_stored_refinement_promotes_only_evidence_backed_children(
     config["adaptive"]["stored_candidates"].update(
         {"min_parent_fraction": 0.1, "max_parent_fraction": 0.9}
     )
+    if optional_noise_lane:
+        representations = config["input"]["assays"]["transcriptome"]["representations"]
+        representations["noise"] = {**representations["logcounts"], "key": "noise"}
+        config["evidence"]["lanes"].append(
+            {
+                "assay": "transcriptome",
+                "representation": "noise",
+                "required_for_acceptance": False,
+            }
+        )
     config_path.write_text(yaml.safe_dump(config, sort_keys=False))
 
     packet = run_annotation(config_path)
@@ -579,8 +593,9 @@ def test_stored_refinement_promotes_only_evidence_backed_children(
     assert registry["parent_purity"].eq(1.0).all()
     assert registry["parent_fraction"].eq(0.5).all()
     manifest = pd.read_csv(root / "comparators" / "comparator_manifest.tsv", sep="\t")
-    assert len(manifest) == 4
-    assert manifest["lane_id"].nunique() == 4
+    lanes = 2 if optional_noise_lane else 1
+    assert len(manifest) == 4 * lanes
+    assert manifest["lane_id"].nunique() == 4 * lanes
     assert all(
         (root / "evidence" / "candidate_lanes" / lane_id / "receipt.json").is_file()
         for lane_id in manifest["lane_id"].astype(str)
@@ -954,3 +969,23 @@ def test_a_cli_failure_is_one_json_object_with_its_own_exit_code(
         "message": "Gate A blocks biological labels",
         "exit_code": 2,
     }
+
+
+def test_a_full_run_and_write_back_open_no_socket(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Offline is the default, and the whole path works with the network gone."""
+
+    import socket
+
+    def no_network(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("cell-curator opened a network connection")
+
+    monkeypatch.setattr(socket.socket, "connect", no_network)
+    monkeypatch.setattr(socket.socket, "connect_ex", no_network)
+    monkeypatch.setattr(socket, "create_connection", no_network)
+    _, config, root = _completed_synthetic_run(tmp_path)
+    assert config.knowledge.network == "offline"
+    output = tmp_path / "offline.h5ad"
+    write_back(config, root, output_path=output, confirm=_confirm)
+    assert set(ad.read_h5ad(output).obs["cell_curator_type"].astype(str)) == {"Type A", "Type B"}

@@ -48,11 +48,17 @@ def default_config_template() -> dict[str, Any]:
 
     from importlib.metadata import PackageNotFoundError, distribution
 
+    # Wheel data files land under <prefix>/share, which locate_file() does not
+    # resolve to: the RECORD lists them relative to site-packages ("../../../share/...").
     try:
-        located = distribution("cell-curator").locate_file(TEMPLATE_RELATIVE)
+        recorded = [
+            distribution("cell-curator").locate_file(item)
+            for item in distribution("cell-curator").files or ()
+            if str(item).endswith(TEMPLATE_RELATIVE)
+        ]
     except PackageNotFoundError:
-        located = None
-    candidates = [Path(str(located))] if located is not None else []
+        recorded = []
+    candidates = [Path(str(item)) for item in recorded]
     candidates.append(Path(__file__).resolve().parents[2] / SOURCE_RELATIVE)
     for candidate in candidates:
         if candidate.is_file():
