@@ -289,6 +289,55 @@ exact or backoff, with exact-tier selective accuracy at or below the 0.636 ceili
 If v3 calls 3 of 28 or fewer, the diagnosis is wrong and is reported that way.
 The stop rules below apply unchanged.
 
+### What v3 measured
+
+Recorded 2026-10-01 from run `aida-pbmc-v11`, executed in a clean checkout of the
+freeze commit `bad7532`. A first execution overlapped uncommitted edits to the
+network modules. It was set aside, and its label table and proposals are
+byte-identical to the clean run's. Result: `results/aida-pbmc-v11.cell-curator.json`.
+
+| | v1 | v3 |
+| --- | --- | --- |
+| clusters labelled | 1 of 28 | 18 of 28 (3 by backoff) |
+| cells called | 153 | 10,634 |
+| per-cell coverage | 0.0088 | 0.611 |
+| selective accuracy, exact | 0.961 (147/153) | 0.277 (2,942/10,634) |
+| `relaxed_accuracy` (called cells; a coarser ancestor counts) | — | 0.874 |
+| `descendant_accuracy` | — | 0.326 |
+| `ontology_distance_error` | — | 0.165 |
+| Brier / ECE, exact tier | — | 0.532 / 0.585 |
+
+**The expectation held.** v3 called more than 10 of 28 clusters, and exact
+selective accuracy is below the 0.636 ceiling. The diagnosis was right: the
+scoring and the plumbing caused the 1-of-28 coverage, not caution.
+
+**A stop rule fires, and it is reported rather than worked around.**
+`descendant_accuracy` is 0.326, under 0.60, so the main limit is label taxonomy.
+The vocabulary is a 13-way PBMC split. AIDA labels most T cells one or two levels
+finer: the vocabulary says CD4-positive αβ T cell, the truth says naive or
+central-memory CD4-positive αβ T cell. Every such call is exact-wrong and
+relaxed-right, which is why the two tiers are 0.277 and 0.874. The exact-tier
+calibration is poor for the same reason. Vote share measures how pure a cluster is
+at the vocabulary's granularity, not whether the label matches AIDA's finer one.
+
+**Errors, by cluster.**
+- Cluster 14 (374 cells, truth naive CD8 T) was labelled "anatomical structure"
+  (UBERON:0000061). This is a bug. HSC, T cell, and ILC programs tied, and their
+  shared ancestors are all on the floor list, but the snapshot imports UBERON terms
+  and backoff climbed into one.
+- Cluster 12 (126 cells, truth NK) is called platelet at 0.94, as in v2.
+- Cluster 25 (100 cells, truth CD141-positive mDC) is called CD1c-positive mDC, a
+  sibling.
+
+## Protocol v4: backoff stays inside the Cell Ontology
+
+**Declared 2026-10-01, after v3 was seen and before v4 runs.** The single change:
+a backoff ancestor must be a `CL:` term. Every other part of v3 is unchanged: input,
+vocabulary, thresholds, lanes, and scoring. The change follows from the cluster 14
+bug, not from tuning, and its only predicted effect is that cluster 14 becomes
+Unknown. Any other difference between v3 and v4 means the change did more than it
+says, and is reported as such. Run id `aida-pbmc-v12`.
+
 ## Why the pre-declared evidence bar is not met, measured rather than guessed
 
 Two runs, differing only in measured panel width. Both label one cluster of 28.
