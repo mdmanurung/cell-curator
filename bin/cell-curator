@@ -1,22 +1,21 @@
 #!/usr/bin/env bash
-# Put the CLI on PATH for a Claude Code session: the plugin root's bin/ is added
-# to PATH when this repository is installed as a plugin, so this shim is the only
-# thing standing between an installed plugin and a runnable `cell-curator`.
-#
-# Prefer the repository's own environment, fall back to uv, and say what to run
-# when neither is present rather than failing with a bare "command not found".
+# Puts the CLI on PATH for a Claude Code plugin session (the plugin's bin/ is on
+# PATH). It runs an installed cell-curator: this checkout's .venv, or one on PATH.
+# It never builds an environment of its own, because one built in the plugin cache
+# would lack the workflow extras and vanish on the next plugin update.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-
 if [[ -x "${root}/.venv/bin/cell-curator" ]]; then
   exec "${root}/.venv/bin/cell-curator" "$@"
 fi
+self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/cell-curator"
+while IFS= read -r candidate; do
+  if [[ "$(readlink -f "${candidate}")" != "$(readlink -f "${self}")" ]]; then
+    exec "${candidate}" "$@"
+  fi
+done < <(type -ap cell-curator)
 
-if command -v uv >/dev/null 2>&1; then
-  exec uv run --project "${root}" cell-curator "$@"
-fi
-
-printf 'cell-curator: no environment in %s\n' "${root}" >&2
-printf "Run 'uv sync --frozen --extra workflow' there, or install the wheel.\\n" >&2
+printf 'cell-curator is not installed. Install it once with:\n' >&2
+printf '  uv tool install "cell-curator[workflow] @ git+https://github.com/mdmanurung/cell-curator"\n' >&2
 exit 127

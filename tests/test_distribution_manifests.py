@@ -83,7 +83,9 @@ def test_readme_command_group_count_matches_the_parser() -> None:
         if isinstance(action, argparse._SubParsersAction)
     ]
     assert len(groups) == 1
-    claimed = re.search(r"lists all (\d+) command groups", (REPO_ROOT / "README.md").read_text())
+    claimed = re.search(
+        r"lists all (\d+) command groups", (REPO_ROOT / "README.md").read_text()
+    )
     assert claimed is not None, "the README no longer states a command-group count"
     assert int(claimed.group(1)) == len(groups[0].choices)
 
@@ -95,3 +97,44 @@ def test_no_tracked_path_the_manifests_promise_is_git_ignored() -> None:
     promised = [Path(".claude-plugin"), Path("skills"), Path("workflow"), Path("schemas")]
     for path in promised:
         assert f"{path}/" not in ignored and path.name not in ignored
+
+
+def test_every_harness_finds_the_skill_and_asks_before_approvals() -> None:
+    """Claude Code, Codex, and OpenCode share one skill and one pair of gated commands."""
+
+    import subprocess
+    import sys
+
+    linked = REPO_ROOT / ".agents" / "skills" / "cell-curator"
+    assert linked.is_symlink()
+    assert (linked / "SKILL.md").resolve() == (
+        REPO_ROOT / "skills/cell-curator/SKILL.md"
+    ).resolve()
+    assert (REPO_ROOT / "CLAUDE.md").read_text().strip() == "@AGENTS.md"
+    assert "write-back apply" in (REPO_ROOT / "AGENTS.md").read_text()
+
+    gated = [
+        "cell-curator assumptions approve --config c.yaml --reviewer me",
+        "uv run cell-curator write-back apply --config c.yaml --output o.h5ad",
+    ]
+    for command, asks in [
+        (gated[0], True),
+        (gated[1], True),
+        ("cell-curator write-back preview --config c.yaml", False),
+    ]:
+        out = subprocess.run(
+            [sys.executable, str(REPO_ROOT / "hooks/ask-before-gates.py")],
+            input=json.dumps({"tool_input": {"command": command}}),
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+        assert ('"permissionDecision": "ask"' in out) is asks, command
+
+    rules = (REPO_ROOT / ".codex/rules/cell-curator.rules").read_text()
+    assert rules.count('decision = "prompt"') == 2
+    permission = json.loads((REPO_ROOT / "opencode.json").read_text())["permission"]["bash"]
+    assert set(permission.values()) == {"ask"}
+    assert {"assumptions approve", "write-back apply"} <= {
+        key.strip("*").removeprefix("cell-curator ") for key in permission
+    }

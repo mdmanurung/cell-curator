@@ -1,0 +1,10 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["AGENTS.md"],
+  "permission": {
+    "bash": {
+      "*cell-curator assumptions approve*": "ask",
+      "*cell-curator write-back apply*": "ask"
+    }
+  }
+}

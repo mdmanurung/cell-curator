@@ -1,0 +1,15 @@
+# Ask a person before the commands that stand in for human approval.
+prefix_rule(
+    pattern = ["cell-curator", "assumptions", "approve"],
+    decision = "prompt",
+    justification = "Gate A: a person approves annotation assumptions.",
+    match = ["cell-curator assumptions approve --config c.yaml --reviewer me"],
+    not_match = ["cell-curator assumptions list --config c.yaml"],
+)
+prefix_rule(
+    pattern = ["cell-curator", "write-back", "apply"],
+    decision = "prompt",
+    justification = "Write-back changes the user's data; a person confirms it.",
+    match = ["cell-curator write-back apply --config c.yaml --output o.h5ad"],
+    not_match = ["cell-curator write-back preview --config c.yaml"],
+)

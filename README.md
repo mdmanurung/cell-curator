@@ -31,18 +31,28 @@ The wheel installs the workflow, schemas, templates, and agent skill under
 `<prefix>/share/cell-curator/`. Available extras are `workflow`, `celltypist`,
 `reference-models`, `census`, and `scimilarity`.
 
-To make the bundled skill available to Claude Code, run:
+### Agent harnesses
 
-```text
-/plugin marketplace add https://github.com/mdmanurung/cell-curator
-/plugin install cell-curator@cell-curator
-```
-
-For Codex, link the skill directory:
+The skill and the CLI work the same in Claude Code, Codex, and OpenCode. Install
+the CLI once, so every harness can run it:
 
 ```bash
-ln -s "$PWD/skills/cell-curator" ~/.codex/skills/cell-curator
+uv tool install "cell-curator[workflow] @ git+https://github.com/mdmanurung/cell-curator"
 ```
+
+Inside this repository nothing else is needed. Codex and OpenCode find the skill
+at `.agents/skills/cell-curator` and read `AGENTS.md`, and Claude Code reads
+`CLAUDE.md`. To use the skill from any project:
+
+| Harness | Skill | Ask before approvals |
+| --- | --- | --- |
+| Claude Code | `/plugin marketplace add https://github.com/mdmanurung/cell-curator`, then `/plugin install cell-curator@cell-curator` | the plugin's `hooks/hooks.json` |
+| Codex | `mkdir -p ~/.agents/skills && ln -s "$PWD/skills/cell-curator" ~/.agents/skills/` | copy `.codex/rules/cell-curator.rules` to `~/.codex/rules/` |
+| OpenCode | the same `~/.agents/skills` link | merge `opencode.json`'s `permission.bash` into your config |
+
+The approval rules make the harness ask a person before `cell-curator
+assumptions approve` (Gate A) and `cell-curator write-back apply`, the two commands
+that stand in for a human decision.
 
 ## Agent-guided run
 
