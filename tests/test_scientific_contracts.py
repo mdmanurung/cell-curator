@@ -374,3 +374,58 @@ def test_immutable_atomic_publisher_resumes_identical_and_refuses_overwrite(
         atomic_publish(path, b"replacement\n")
     assert path.read_text() == "complete\n"
     assert stale.read_text() == "incomplete\n"
+
+
+def test_confidence_is_the_cluster_share_voting_for_the_label(config: dict) -> None:
+    """A cluster that is 80% T cells is called T at confidence 0.8, whatever else is in the
+    vocabulary, and the 20% B cells in it do not count against T's expected negatives."""
+
+    model = _model(config)
+    capabilities = build_capability_registry(model)
+    features = pd.Index(["CD3E", "MS4A1", "LYZ", *[f"X{i}" for i in range(5)]])
+    t, b, m = (np.eye(len(features))[i] * 5.0 for i in range(3))
+    matrix = np.vstack([t] * 80 + [b] * 20 + [b] * 100 + [m] * 100)
+    groups = pd.Series(["0"] * 100 + ["1"] * 100 + ["2"] * 100)
+    core = [
+        MarkerProgram(label="T", positive=("CD3E",), negative=("MS4A1", "LYZ")),
+        MarkerProgram(label="B", positive=("MS4A1",), negative=("CD3E", "LYZ")),
+        MarkerProgram(label="Mono", positive=("LYZ",), negative=("CD3E", "MS4A1")),
+    ]
+    padding = [MarkerProgram(label=f"Pad{i}", positive=(f"X{i}",)) for i in range(5)]
+
+    def call(programs: list[MarkerProgram]):
+        evidence = score_marker_programs(
+            matrix,
+            groups,
+            features,
+            programs,
+            detection=matrix,
+            run_id=model.run.run_id,
+            assay="transcriptome",
+            representation="logcounts",
+            capability=capabilities[0],
+        )
+        _, decisions = aggregate_multimodal_evidence(
+            evidence, capabilities, model, scope="global", cluster_ids=["0", "1", "2"]
+        )
+        return evidence, {item.cluster_id: item for item in decisions}
+
+    evidence, decisions = call(core)
+    t_in_0 = evidence[evidence["cluster_id"].eq("0") & evidence["label"].eq("T")].iloc[0]
+    assert t_in_0["vote_fraction"] == pytest.approx(0.8)
+    assert t_in_0["n_voters"] == 80
+    assert t_in_0["negative_violation"] == 0.0
+    assert [decisions[c].cell_type for c in "012"] == ["T", "B", "Mono"]
+    assert decisions["0"].confidence == pytest.approx(0.8)
+    assert decisions["0"].margin == pytest.approx(0.6)
+
+    _, padded = call(core + padding)
+    assert padded["0"].cell_type == "T"
+    assert padded["0"].confidence == pytest.approx(0.8)
+
+
+def test_an_exact_tie_reports_bounded_entropy() -> None:
+    from cell_curator.evidence import _normalized_entropy
+
+    # Five-way tie: unclipped, rounding gives 1.0000000000000002, which the model refuses.
+    assert _normalized_entropy(np.full(5, 1 / 5)) <= 1.0

@@ -392,35 +392,6 @@ def compute_gpu_bottom_up_markers(
     return result
 
 
-def _group_summaries(
-    matrix: Any,
-    detection: Any | None,
-    groups: pd.Series,
-) -> tuple[list[str], np.ndarray, np.ndarray]:
-    labels = sorted(groups.astype(str).unique())
-    group_values = groups.astype(str).to_numpy()
-    means = []
-    fractions = []
-    for label in labels:
-        mask = group_values == label
-        values = _matrix_rows(matrix, mask)
-        means.append(np.asarray(values.mean(axis=0)).ravel())
-        if detection is None:
-            fractions.append(np.full(matrix.shape[1], np.nan))
-        else:
-            fractions.append(
-                np.asarray((_matrix_rows(detection, mask) > 0).mean(axis=0)).ravel()
-            )
-    return labels, np.vstack(means), np.vstack(fractions)
-
-
-def _zscore_columns(values: np.ndarray) -> np.ndarray:
-    center = np.nanmean(values, axis=0)
-    spread = np.nanstd(values, axis=0)
-    spread = np.where(spread <= 1e-12, 1.0, spread)
-    return (values - center) / spread
-
-
 def score_marker_programs(
     matrix: Any,
     groups: pd.Series,
@@ -434,41 +405,139 @@ def score_marker_programs(
     capability: Capability,
     positive_detection_threshold: float = 0.1,
 ) -> pd.DataFrame:
-    """Score signed programs without treating unmeasured features as negatives."""
+    """Score signed programs without treating unmeasured features as negatives.
 
-    cluster_ids, means, fractions = _group_summaries(matrix, detection, groups)
-    standardized = _zscore_columns(means)
+    Genes are standardised across cells, not across cluster means: a z-score over
+    the handful of cluster means ignored expression magnitude and moved with the
+    cluster composition. Each cell then votes for its best program among the
+    siblings sharing a parent and axis, so ``vote_fraction`` is the share of the
+    cluster that looks like the program, which is the cluster's purity for that
+    label. The expected-negative test is run on the cells that voted for the
+    program: a neighbouring lineage's cells in an impure cluster no longer veto
+    the call, while a negative marker expressed by the supporting cells still does.
+    """
+
+    group_values = groups.astype(str).to_numpy()
+    cluster_ids = sorted(set(group_values))
+    cluster_index = {cluster: index for index, cluster in enumerate(cluster_ids)}
+    cell_cluster = np.asarray([cluster_index[value] for value in group_values])
+    n_clusters = len(cluster_ids)
+    cluster_sizes = np.bincount(cell_cluster, minlength=n_clusters)
     positions = {str(feature): index for index, feature in enumerate(features)}
-    rows: list[dict[str, Any]] = []
+    compatible_spaces = {capability.feature_space}
+    if capability.assay_kind.value == "gene_activity":
+        compatible_spaces.add("gene")
+    scored: list[tuple[MarkerProgram, list[int], list[int], tuple[str, ...], tuple[str, ...]]] = []
     for program in programs:
-        compatible_spaces = {capability.feature_space}
-        if capability.assay_kind.value == "gene_activity":
-            compatible_spaces.add("gene")
         if program.feature_space not in compatible_spaces:
             continue
         positive = [positions[item] for item in program.positive if item in positions]
         negative = [positions[item] for item in program.negative if item in positions]
-        missing_positive = tuple(item for item in program.positive if item not in positions)
-        missing_negative = tuple(item for item in program.negative if item not in positions)
         if not positive:
             continue
+        scored.append(
+            (
+                program,
+                positive,
+                negative,
+                tuple(item for item in program.positive if item not in positions),
+                tuple(item for item in program.negative if item not in positions),
+            )
+        )
+    columns_used = sorted({index for _, pos, neg, _, _ in scored for index in (*pos, *neg)})
+    local = {feature: offset for offset, feature in enumerate(columns_used)}
+    n_cells = len(group_values)
+    width = len(columns_used)
+    cell_sum = np.zeros(width)
+    cell_square = np.zeros(width)
+    cluster_sum = np.zeros((n_clusters, width))
+    cluster_detected = np.zeros((n_clusters, width))
+    chunk = 20_000
+
+    def block(source: Any, start: int, stop: int) -> np.ndarray:
+        rows = source[start:stop]
+        rows = rows[:, columns_used] if width else rows[:, :0]
+        return rows.toarray() if sparse.issparse(rows) else np.asarray(rows, dtype=float)
+
+    for start in range(0, n_cells, chunk):
+        stop = min(start + chunk, n_cells)
+        values = block(matrix, start, stop).astype(float)
+        cell_sum += values.sum(axis=0)
+        cell_square += (values**2).sum(axis=0)
+        np.add.at(cluster_sum, cell_cluster[start:stop], values)
+        if detection is not None:
+            np.add.at(
+                cluster_detected, cell_cluster[start:stop], block(detection, start, stop) > 0
+            )
+    mean = cell_sum / max(n_cells, 1)
+    spread = np.sqrt(np.maximum(cell_square / max(n_cells, 1) - mean**2, 0.0))
+    spread = np.where(spread <= 1e-12, 1.0, spread)
+    sizes = np.maximum(cluster_sizes, 1)[:, None]
+    standardized = (cluster_sum / sizes - mean) / spread
+    fractions = cluster_detected / sizes if detection is not None else None
+
+    # Per-cell votes among siblings: programs compete only with those that share
+    # their parent and axis, never with their own parent or with cell states.
+    competitions: dict[tuple[str, str], list[int]] = {}
+    for index, (program, *_rest) in enumerate(scored):
+        competitions.setdefault((program.parent or "", program.axis), []).append(index)
+    votes = np.zeros((n_clusters, len(scored)))
+    voter_detected = [np.zeros((n_clusters, len(neg))) for _, _, neg, _, _ in scored]
+    for start in range(0, n_cells, chunk):
+        stop = min(start + chunk, n_cells)
+        z = (block(matrix, start, stop) - mean) / spread
+        detected = block(detection, start, stop) > 0 if detection is not None else None
+        clusters = cell_cluster[start:stop]
+        for members in competitions.values():
+            cell_scores = np.column_stack(
+                [
+                    z[:, [local[i] for i in scored[m][1]]].mean(axis=1)
+                    - (
+                        np.maximum(z[:, [local[i] for i in scored[m][2]]], 0.0).mean(axis=1)
+                        if scored[m][2]
+                        else 0.0
+                    )
+                    for m in members
+                ]
+            )
+            winner = np.asarray(members)[np.argmax(cell_scores, axis=1)]
+            for m in members:
+                voted = winner == m
+                np.add.at(votes[:, m], clusters[voted], 1)
+                if detected is not None and scored[m][2]:
+                    np.add.at(
+                        voter_detected[m],
+                        clusters[voted],
+                        detected[np.ix_(voted, [local[i] for i in scored[m][2]])],
+                    )
+
+    rows: list[dict[str, Any]] = []
+    for m, (program, positive, negative, missing_positive, missing_negative) in enumerate(scored):
         program_coverage = len(positive) / len(program.positive)
+        pos_local = [local[i] for i in positive]
+        neg_local = [local[i] for i in negative]
         for row_index, cluster_id in enumerate(cluster_ids):
-            positive_signal = float(np.mean(standardized[row_index, positive]))
+            positive_signal = float(np.mean(standardized[row_index, pos_local]))
             negative_signal = (
-                float(np.mean(np.maximum(standardized[row_index, negative], 0.0)))
+                float(np.mean(np.maximum(standardized[row_index, neg_local], 0.0)))
                 if negative
                 else 0.0
             )
-            if detection is not None:
+            voters = votes[row_index, m]
+            if fractions is not None:
                 positive_coverage = float(
-                    np.mean(fractions[row_index, positive] >= positive_detection_threshold)
+                    np.mean(fractions[row_index, pos_local] >= positive_detection_threshold)
                 )
                 if missing_negative:
                     negative_violation = float("nan")
                 elif negative:
+                    observed = (
+                        voter_detected[m][row_index] / voters
+                        if voters > 0
+                        else fractions[row_index, neg_local]
+                    )
                     negative_violation = float(
-                        np.mean(fractions[row_index, negative] >= positive_detection_threshold)
+                        np.mean(observed >= positive_detection_threshold)
                     )
                 else:
                     negative_violation = 0.0
@@ -505,6 +574,8 @@ def score_marker_programs(
                     "missing_negative": ";".join(missing_negative),
                     "detection_valid": detection is not None,
                     "source": program.source,
+                    "vote_fraction": float(voters / max(cluster_sizes[row_index], 1)),
+                    "n_voters": int(voters),
                 }
             )
     columns = [
@@ -533,6 +604,8 @@ def score_marker_programs(
         "missing_negative",
         "detection_valid",
         "source",
+        "vote_fraction",
+        "n_voters",
     ]
     return pd.DataFrame(rows, columns=columns)
 
@@ -547,7 +620,9 @@ def _normalized_entropy(probabilities: np.ndarray) -> float:
     if len(probabilities) <= 1:
         return 0.0
     values = probabilities[probabilities > 0]
-    return float(-(values * np.log(values)).sum() / math.log(len(probabilities)))
+    # An exact tie reaches log(n) up to rounding, which the [0, 1] field rejects.
+    entropy = -(values * np.log(values)).sum() / math.log(len(probabilities))
+    return float(min(max(entropy, 0.0), 1.0))
 
 
 def _call_cell_state(
@@ -704,6 +779,7 @@ def aggregate_multimodal_evidence(
         for label in labels:
             label_block = block[block["label"].astype(str).eq(label)]
             weighted_scores = []
+            weighted_votes: list[float] = []
             weights = []
             passing_lanes: set[str] = set()
             annotation_lanes: set[str] = set()
@@ -748,8 +824,11 @@ def aggregate_multimodal_evidence(
                     if capability.level is CapabilityLevel.ANNOTATION:
                         annotation_lanes.add(configured_key)
                 weighted_scores.append(float(item["score"]) * weight)
+                vote = measured_float(item.get("vote_fraction"))
+                weighted_votes.append(math.nan if vote is None else vote * weight)
                 weights.append(weight)
             score = sum(weighted_scores) / sum(weights) if sum(weights) else -math.inf
+            support = sum(weighted_votes) / sum(weights) if sum(weights) else math.nan
             # The table arrives as text, so these are reductions over parsed
             # measurements rather than pandas reductions on the column. A numeric
             # reduction on this column set sorts them as strings, which silently
@@ -774,6 +853,7 @@ def aggregate_multimodal_evidence(
                     "label": label,
                     "axis": "cell_type",
                     "score": score,
+                    "support": support,
                     "positive_coverage": (
                         sum(measured_positive) / len(measured_positive)
                         if measured_positive
@@ -795,13 +875,24 @@ def aggregate_multimodal_evidence(
                     ),
                 }
             )
-        label_rows.sort(key=lambda item: (-item["score"], item["label"]))
         finite = [item for item in label_rows if np.isfinite(item["score"])]
-        if not finite:
-            probabilities = np.array([])
+        # Per-cell votes make confidence the share of the cluster that looks like
+        # the label, which does not move with vocabulary size the way a softmax
+        # over cluster scores does. Score tables from elsewhere carry no votes and
+        # keep the softmax.
+        voted = bool(finite) and all(np.isfinite(item["support"]) for item in finite)
+        if voted:
+            finite.sort(key=lambda item: (-item["support"], -item["score"], item["label"]))
+            probabilities = np.asarray([item["support"] for item in finite])
         else:
-            probabilities = _softmax(np.asarray([item["score"] for item in finite]))
+            finite.sort(key=lambda item: (-item["score"], item["label"]))
+            probabilities = (
+                _softmax(np.asarray([item["score"] for item in finite]))
+                if finite
+                else np.array([])
+            )
         for item, probability in zip(finite, probabilities, strict=True):
+            item.pop("support")
             item["probability"] = float(probability)
             rows.append(
                 {
@@ -828,7 +919,12 @@ def aggregate_multimodal_evidence(
                 if len(probabilities) > 1
                 else confidence
             )
-            entropy = _normalized_entropy(probabilities)
+            total = float(probabilities.sum())
+            entropy = (
+                _normalized_entropy(probabilities / total)
+                if total > 0
+                else 1.0
+            )
         observed_required = set(block["lane_key"].astype(str))
         required_complete = required_lanes.issubset(observed_required)
         thresholds = config.evidence
