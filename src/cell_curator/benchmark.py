@@ -123,6 +123,11 @@ def _hierarchy_error(frame: pd.DataFrame) -> float | None:
     ):
         truth = [item for item in str(true_path).split("/") if item]
         prediction = [item for item in str(predicted_path).split("/") if item]
+        # A blank side is unmeasured: no truth path, or an abstention. Scoring
+        # blank against blank as an exact match made the metric equal coverage.
+        # Abstentions are left out, as in the ontology metrics.
+        if not truth or not prediction:
+            continue
         common = 0
         for left, right in zip(truth, prediction, strict=False):
             if left != right:

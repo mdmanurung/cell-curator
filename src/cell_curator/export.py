@@ -102,9 +102,12 @@ def _cluster_rows(frames: list[pd.DataFrame]) -> pd.DataFrame:
                     "label": str(row.get("label", "")),
                     "cl_id": identifier_text(row.get("cl_id")),
                     "confidence": confidence,
+                    # Biological ancestry only: level and ROOT tokens never match
+                    # a truth path, which made every correct call a full error.
                     "path": "/".join(
-                        str(row.get(column, "")).strip()
-                        for column in ("level", "parent_scope", "label")
+                        item
+                        for item in (parent_scope.strip(), str(row.get("label", "")).strip())
+                        if item and item != "ROOT"
                     ),
                 }
             )

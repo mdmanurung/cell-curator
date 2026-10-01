@@ -213,11 +213,11 @@ def test_a_completed_export_carries_both_sides_of_every_comparable_column(
     # the cell received was `Unknown`, and anything else would put a term into
     # the ontology metrics that the system never asserted.
     assert table["predicted_path"].tolist() == [
-        "L1/ROOT/T cell",
-        "L1/ROOT/B cell",
-        "L1/ROOT/T cell",
+        "T cell",
+        "B cell",
+        "T cell",
         "",
-        "L1/ROOT/T cell",
+        "T cell",
     ]
 
     assert receipt["n_cells"] == 5

@@ -225,7 +225,11 @@ def test_hierarchy_error_handles_exact_and_root_boundary_paths() -> None:
         }
     )
     result = evaluate_predictions(frame, system="fixture", dataset="hierarchy-boundary")
-    assert result.hierarchy_error == pytest.approx(0.5)
+    # The blank truth path is unmeasured, so only the exact match is scored.
+    assert result.hierarchy_error == pytest.approx(0.0)
+    # No truth paths at all is no measurement, not a perfect score for abstaining.
+    blank = frame.assign(true_path="", predicted_path=["", "B"])
+    assert evaluate_predictions(blank, system="fixture", dataset="blank").hierarchy_error is None
 
 
 def test_critic_findings_and_reconciliation_import_atomically(tmp_path: Path) -> None:
