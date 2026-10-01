@@ -22,7 +22,7 @@ from .contracts import (
 from .data import canonicalize, inspect
 from .knowledge import collect_programs, programs_digest, providers_from_config
 from .models import RunMode, RunState
-from .ontology import BACKOFF_ASSUMPTION
+from .ontology import BACKOFF_ASSUMPTION, ontology_from_config
 from .provenance import atomic_publish, atomic_replace, publish_json, replace_json
 
 
@@ -690,6 +690,33 @@ def construct_plan(config_path: str | Path) -> dict[str, Any]:
         )
     if any(item.kind in {"ontology", "remote_ontology"} for item in config.knowledge.providers):
         assumption_values.append(("global", BACKOFF_ASSUMPTION, True))
+        ontology = ontology_from_config(config)
+        # Each cell votes for one sibling, so a label and its own ancestor split the
+        # votes of every cell that fits both. The reviewer decides whether to keep it.
+        for (level, parent), block in vocabulary.groupby(["level", "parent_scope"]):
+            if ontology is None:
+                break
+            terms = {
+                str(row["label"]): str(row["cl_id"])
+                for row in block.to_dict("records")
+                if str(row.get("cl_id", "")) in ontology.terms
+            }
+            for label, cl_id in sorted(terms.items()):
+                below = sorted(
+                    other
+                    for other, other_id in terms.items()
+                    if other != label and cl_id in ontology.ancestors(other_id)
+                )
+                if below:
+                    assumption_values.append(
+                        (
+                            f"{level}::{parent}",
+                            f"{label} competes with its Cell Ontology descendants "
+                            f"{', '.join(below)}; cells matching both split their votes, "
+                            "so a pure descendant cluster can lose confidence or back off.",
+                            True,
+                        )
+                    )
     _, digest = add_assumptions(root, assumption_values)
     plan = {
         "schema_version": 3,
@@ -932,7 +959,6 @@ def assumption_scope_sha256(
         separators=(",", ":"),
     ).encode()
     return hashlib.sha256(payload).hexdigest()
-
 
 
 def require_fresh_checkpoints(root: str | Path) -> int:

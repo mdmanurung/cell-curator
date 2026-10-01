@@ -313,9 +313,7 @@ def test_writeback_confirmation_binds_the_previewed_diff(
     other = validate_writeback(config, root, output_path=tmp_path / "other.h5ad")
     assert other["approval_token"] != preview["approval_token"]
     with pytest.raises(ContractError, match="does not match"):
-        write_back(
-            config, root, output_path=output, confirm=lambda _p: "0" * 12
-        )
+        write_back(config, root, output_path=output, confirm=lambda _p: "0" * 12)
     assert not output.exists()
     write_back(config, root, output_path=output, confirm=_typed(preview))
     assert output.is_file()
@@ -731,16 +729,20 @@ def test_the_documented_review_loop_still_validates_after_critics(tmp_path: Path
 
 
 def test_a_finer_level_abstention_keeps_the_supported_parent_label() -> None:
-    mapping = pd.DataFrame(
-        {"barcode": ["b1"], "leaf_id": ["c1"], "canonical_parent": ["c1"]}
-    )
+    mapping = pd.DataFrame({"barcode": ["b1"], "leaf_id": ["c1"], "canonical_parent": ["c1"]})
     rows = [
         ("L1", "ROOT", "c1", "T cell"),
         ("L2", "T cell", "c1", "Unknown"),
     ]
     labels = pd.DataFrame(
         [
-            {"level": lv, "parent_scope": ps, "cluster_id": cid, "label": lab, "cell_state": "normal"}
+            {
+                "level": lv,
+                "parent_scope": ps,
+                "cluster_id": cid,
+                "label": lab,
+                "cell_state": "normal",
+            }
             for lv, ps, cid, lab in rows
         ]
     )
@@ -759,10 +761,24 @@ def test_a_doublet_mixed_parent_abstains_on_identity_in_the_durable_labels(
     base = dict.fromkeys(LABEL_COLUMNS, "")
     pd.DataFrame(
         [
-            {**base, "level": "L1", "parent_scope": "ROOT", "cluster_id": "0", "label": "Type A",
-             "cell_state": "normal", "rationale": "markers"},
-            {**base, "level": "L1", "parent_scope": "ROOT", "cluster_id": "1", "label": "Type B",
-             "cell_state": "normal", "rationale": "markers"},
+            {
+                **base,
+                "level": "L1",
+                "parent_scope": "ROOT",
+                "cluster_id": "0",
+                "label": "Type A",
+                "cell_state": "normal",
+                "rationale": "markers",
+            },
+            {
+                **base,
+                "level": "L1",
+                "parent_scope": "ROOT",
+                "cluster_id": "1",
+                "label": "Type B",
+                "cell_state": "normal",
+                "rationale": "markers",
+            },
         ]
     ).to_csv(tmp_path / "labels/L1.tsv", sep="\t", index=False)
     pd.DataFrame(
@@ -790,9 +806,20 @@ def test_ontology_backoff_is_a_plan_assumption_only_when_an_ontology_is_configur
     source = tmp_path / "input.h5ad"
     _synthetic_input(source)
     markers = tmp_path / "markers.json"
-    markers.write_text(json.dumps({"Type A": {"pos": ["A1"]}, "Type B": {"pos": ["B1"]}}))
+    markers.write_text(
+        json.dumps(
+            {
+                "myeloid cell": {"pos": ["A1"], "cl_id": "CL:0000763"},
+                "monocyte": {"pos": ["B1"], "cl_id": "CL:0000576"},
+            }
+        )
+    )
     obo = tmp_path / "cl.obo"
-    obo.write_text("format-version: 1.2\n\n[Term]\nid: CL:0000000\nname: cell\n")
+    obo.write_text(
+        "format-version: 1.2\n\n[Term]\nid: CL:0000000\nname: cell\n\n"
+        "[Term]\nid: CL:0000763\nname: myeloid cell\nis_a: CL:0000000\n\n"
+        "[Term]\nid: CL:0000576\nname: monocyte\nis_a: CL:0000763 ! myeloid cell\n"
+    )
     for run_id, with_ontology in (("cl-free", False), ("with-cl", True)):
         config_path = _config(tmp_path, source, markers)
         value = yaml.safe_load(config_path.read_text())
@@ -803,9 +830,16 @@ def test_ontology_backoff_is_a_plan_assumption_only_when_an_ontology_is_configur
             )
         config_path.write_text(yaml.safe_dump(value, sort_keys=False))
         construct_plan(config_path)
-        statements = {
-            row["statement"]
-            for row in load_assumptions(tmp_path / "results" / run_id)
-            if row["scope"] == "global"
-        }
+        rows = load_assumptions(tmp_path / "results" / run_id)
+        statements = {row["statement"] for row in rows if row["scope"] == "global"}
         assert (BACKOFF_ASSUMPTION in statements) is with_ontology
+        # A label and its own ancestor as siblings is put to the reviewer.
+        assert (
+            any(
+                row["statement"].startswith(
+                    "myeloid cell competes with its Cell Ontology descendants monocyte"
+                )
+                for row in rows
+            )
+            is with_ontology
+        )
