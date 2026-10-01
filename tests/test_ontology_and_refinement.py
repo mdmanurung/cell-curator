@@ -563,3 +563,53 @@ def test_a_live_provider_never_becomes_required_for_a_label(
         }
     )
     assert validate_durable_label_ontology(labels, ontology)["status"] == "complete"
+
+
+def test_obo_parsing_keeps_qualified_edges_exact_synonyms_and_alt_ids(tmp_path: Path) -> None:
+    from cell_curator.ontology import CellOntology
+
+    obo = tmp_path / "mini.obo"
+    obo.write_text(
+        """format-version: 1.2
+
+[Term]
+id: CL:0000000
+name: cell
+
+[Term]
+id: CL:0000084
+name: T cell
+alt_id: CL:0000085
+synonym: "T lymphocyte" EXACT []
+synonym: "lymphocyte" BROAD []
+is_a: CL:0000000 {is_inferred="true"} ! cell
+
+[Term]
+id: CL:0000624
+name: CD4-positive, alpha-beta T cell
+is_a: CL:0000084 ! T cell
+"""
+    )
+    ontology = CellOntology.load(obo)
+    assert ontology.depth("CL:0000624") == 2, "a qualifier block must not cut the edge"
+    assert ontology.resolve("T lymphocyte").accession == "CL:0000084"
+    with pytest.raises(ContractError, match="unknown"):
+        ontology.resolve("lymphocyte")  # BROAD synonyms name other terms
+    assert ontology.resolve("CL:0000085").accession == "CL:0000084"
+    assert ontology.resolve("CL_0000084").accession == "CL:0000084"
+    assert ontology.resolve("http://purl.obolibrary.org/obo/CL_0000624").name.startswith("CD4")
+    with pytest.raises(ContractError, match="inconsistent"):
+        ontology.validate_term("CL:0000084", expected_name="lymphocyte")
+
+
+def test_the_shipped_cell_ontology_snapshot_is_one_connected_hierarchy() -> None:
+    from conftest import REPO_ROOT
+
+    from cell_curator.ontology import CellOntology
+
+    ontology = CellOntology.load(
+        REPO_ROOT / "benchmarks/data/aida-phase1-v2-pbmc-hvg2000/cl.obo"
+    )
+    assert ontology.depth("CL:0000084") > 0, "T cell must not be a root"
+    assert ontology.is_descendant("CL:0000624", "CL:0000084")  # CD4 alpha-beta T -> T cell
+    assert ontology.resolve("monocyte").accession == "CL:0000576"

@@ -32,6 +32,15 @@ class OntologyTerm:
     synonyms: tuple[str, ...] = ()
     obsolete: bool = False
     replaced_by: str | None = None
+    alt_ids: tuple[str, ...] = ()
+
+
+def normalize_accession(value: str) -> str:
+    """Return the ``PREFIX:LOCAL`` CURIE for a CURIE, underscore form, or OBO IRI."""
+
+    text = str(value).strip().rsplit("/", 1)[-1].rsplit("#", 1)[-1]
+    match = re.fullmatch(r"([A-Za-z]+)[:_](\w+)", text)
+    return f"{match.group(1).upper()}:{match.group(2)}" if match else str(value).strip()
 
 
 class CellOntology:
@@ -39,6 +48,9 @@ class CellOntology:
         self.terms = terms
         self.source = source
         self._names: dict[str, set[str]] = {}
+        self._aliases: dict[str, str] = {
+            alias: accession for accession, term in terms.items() for alias in term.alt_ids
+        }
         for accession, term in terms.items():
             for name in (term.name, *term.synonyms):
                 self._names.setdefault(name.casefold(), set()).add(accession)
@@ -85,14 +97,21 @@ class CellOntology:
                     replaced_by=(
                         str(current["replaced_by"]) if current.get("replaced_by") else None
                     ),
+                    alt_ids=tuple(map(str, current.get("alt_ids", []))),
                 )
             current = None
+
+        def identifier(value: str) -> str:
+            # `is_a: CL:0000084 {is_inferred="true"} ! T cell`: the trailing
+            # qualifier block and comment are not part of the identifier, and
+            # keeping them disconnected 1,320 edges of the real Cell Ontology.
+            return value.split(" ! ", 1)[0].split(" {", 1)[0].strip()
 
         for raw in path.read_text().splitlines():
             line = raw.strip()
             if line == "[Term]":
                 commit()
-                current = {"parents": [], "synonyms": []}
+                current = {"parents": [], "synonyms": [], "alt_ids": []}
                 continue
             if line.startswith("["):
                 commit()
@@ -100,13 +119,19 @@ class CellOntology:
             if current is None or ": " not in line:
                 continue
             key, value = line.split(": ", 1)
-            if key in {"id", "name", "replaced_by"}:
-                current[key] = value.split(" ! ", 1)[0]
+            if key in {"id", "replaced_by"}:
+                current[key] = identifier(value)
+            elif key == "name":
+                current[key] = value.strip()
             elif key == "is_a":
-                current["parents"].append(value.split(" ! ", 1)[0])
+                current["parents"].append(identifier(value))
+            elif key == "alt_id":
+                current["alt_ids"].append(identifier(value))
             elif key == "synonym":
-                match = re.match(r'"([^"]+)"', value)
-                if match:
+                # Only EXACT synonyms name the same term; BROAD, NARROW, and RELATED
+                # ones name other terms and made common names ambiguous.
+                match = re.match(r'"([^"]+)"\s+(EXACT|BROAD|NARROW|RELATED)\b', value)
+                if match and match.group(2) == "EXACT":
                     current["synonyms"].append(match.group(1))
             elif key == "is_obsolete":
                 current["obsolete"] = value.lower() == "true"
@@ -164,11 +189,11 @@ class CellOntology:
                     resource = child.attrib.get(rdf_resource, "")
                     if "CL_" in resource:
                         parents.append(resource.rsplit("/", 1)[-1].replace("CL_", "CL:"))
-                elif "synonym" in local.lower() and child.text:
+                elif local == "hasExactSynonym" and child.text:
                     synonyms.append(child.text.strip())
                 elif local == "deprecated" and child.text:
                     obsolete = child.text.strip().lower() == "true"
-                elif local == "replacedBy":
+                elif local in {"replacedBy", "IAO_0100001"}:  # IAO_0100001: term replaced by
                     resource = child.attrib.get(rdf_resource, "")
                     if "CL_" in resource:
                         replaced_by = resource.rsplit("/", 1)[-1].replace("CL_", "CL:")
@@ -182,6 +207,10 @@ class CellOntology:
         value = value.strip()
         if value in self.terms:
             return self.terms[value]
+        accession = normalize_accession(value)
+        accession = self._aliases.get(accession, accession)
+        if accession in self.terms:
+            return self.terms[accession]
         matches = self._names.get(value.casefold(), set())
         if not matches:
             raise ContractError(f"ontology term is unknown: {value}")
