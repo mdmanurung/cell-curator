@@ -35,6 +35,7 @@ Read only the contract needed for the current decision.
 | Compute and resume | [compute-and-snakemake.md](references/compute-and-snakemake.md) |
 | Completion criteria | [validation.md](references/validation.md) |
 | Capability mapping | [quadbio-parity.md](references/quadbio-parity.md) |
+| LLM annotators compared | [llm-annotators.md](references/llm-annotators.md) |
 
 Copy [config.template.yaml](assets/config.template.yaml). Declare the input, cluster
 key, assays, representations, detection source, biological context, knowledge
@@ -71,16 +72,18 @@ assumptions. It uses the same gates and ledger as an interactive run.
 ## 2. Build and approve the plan
 
 Construct the parent-scoped vocabulary, profile the measured panel, compute markers,
-score signed programs, and select a cross-check:
+score signed programs, and select a cross-check. `CLUSTER_KEY` is the config's
+`input.keys.canonical_parent`, and `results/RUN/canonical/input.h5ad` is the frozen
+working copy (`.h5mu` for MuData) the run freezes under `run.output_root`:
 
 ```bash
 cell-curator markers assemble --config config.yaml
 cell-curator markers compute --config config.yaml --assay transcriptome \
-  --representation logcounts --group-key canonical_cluster
+  --representation logcounts --group-key CLUSTER_KEY
 cell-curator markers profile --config config.yaml --assay transcriptome \
-  --representation logcounts --group-key canonical_cluster
+  --representation logcounts --group-key CLUSTER_KEY
 cell-curator markers score --config config.yaml --assay transcriptome \
-  --representation logcounts --group-key canonical_cluster
+  --representation logcounts --group-key CLUSTER_KEY
 cell-curator route select --request route-request.json
 cell-curator run plan --config config.yaml
 cell-curator assumptions list --config config.yaml
@@ -145,20 +148,20 @@ Use only applicable cross-checks. Inspect `unavailable` receipts and their state
 remediation. Automated predictions remain hypotheses.
 
 ```bash
-cell-curator crosscheck obs-pred --input canonical.h5ad \
-  --prediction-column predicted_label --cluster-column canonical_cluster \
+cell-curator crosscheck obs-pred --input results/RUN/canonical/input.h5ad \
+  --prediction-column predicted_label --cluster-column CLUSTER_KEY \
   --output-dir results/RUN/crosschecks
 cell-curator crosscheck celltypist-discover --output-dir results/RUN/crosschecks
-cell-curator crosscheck celltypist-predict --input canonical.h5ad \
-  --model MODEL --cluster-column canonical_cluster \
+cell-curator crosscheck celltypist-predict --input results/RUN/canonical/input.h5ad \
+  --model MODEL --cluster-column CLUSTER_KEY \
   --output-dir results/RUN/crosschecks
-cell-curator crosscheck reference-knn --query canonical.h5ad \
+cell-curator crosscheck reference-knn --query results/RUN/canonical/input.h5ad \
   --reference reference.h5ad --reference-label cell_type --backend cpu \
   --output-dir results/RUN/crosschecks
-cell-curator crosscheck azimuth --query canonical.h5ad \
+cell-curator crosscheck azimuth --query results/RUN/canonical/input.h5ad \
   --reference reference.h5ad --reference-label cell_type \
   --output-dir results/RUN/crosschecks
-cell-curator crosscheck scimilarity --input canonical.h5ad \
+cell-curator crosscheck scimilarity --input results/RUN/canonical/input.h5ad \
   --model-path models/scimilarity --output-dir results/RUN/crosschecks
 cell-curator reference acquire-census --organism homo_sapiens --tissue blood \
   --output references/census.h5ad --version CENSUS_VERSION --max-cells 50000 \
@@ -169,7 +172,7 @@ cell-curator reference acquire-scimilarity --url https://HOST/PATH \
   --output models/scimilarity.tar.gz --expected-sha256 SHA256
 cell-curator reference train-scanvi --reference references/census.h5ad \
   --labels-key cell_type --counts-layer counts --output-dir models/scanvi
-cell-curator reference map-scarches --query canonical.h5ad \
+cell-curator reference map-scarches --query results/RUN/canonical/input.h5ad \
   --model-dir models/scanvi --output-dir results/RUN/crosschecks
 ```
 
@@ -177,9 +180,12 @@ Add `--help` to a route for its remaining flags. A `.h5mu` input additionally
 requires `--input-modality`, `--query-modality`, or `--reference-modality`.
 `--backend gpu` on `reference-knn` runs only after GPU validation passes.
 
-Each `acquire-*` route is bounded by `--max-bytes` and `--timeout-seconds`, is
-pinned by a required `--expected-sha256`, and writes a receipt recording the
-cache hit and checksum result. A bundle is stored as published; extract it
+`acquire-azimuth` and `acquire-scimilarity` are bounded by `--max-bytes` and
+`--timeout-seconds` and pinned by a required `--expected-sha256`. `acquire-census`
+is a Census query bounded by `--max-cells` and `--timeout-seconds`, pinned by
+`--version`, and checked against `--expected-sha256` when you give one. It reaches
+Census outside the network guard. Every route writes a receipt recording the cache
+hit and checksum result. A bundle is stored as published; extract it
 yourself before passing it to `--reference` or `--model-path`.
 
 ### Optional: LLM tie-breaks

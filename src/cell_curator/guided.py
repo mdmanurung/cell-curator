@@ -1075,9 +1075,43 @@ def status(config_path: str | Path) -> dict[str, Any]:
         },
         "blockers": list(state.blockers),
         "next_action": state.next_action,
+        "next_command": _next_command(config_path, root, state),
         "artifacts": {
             "context": str(root / "context.json"),
             "assumptions": str(root / "assumptions.json"),
             "plan": str(root / "plan.json"),
         },
     }
+
+
+def _next_command(config_path: str | Path, root: Path, state: RunState) -> str:
+    """The one command that moves the run forward, for an agent to run or hand over."""
+
+    config = f"--config {config_path}"
+    if not (root / "context.json").is_file():
+        return f"cell-curator run scene {config}"
+    if not state.context_complete:
+        return f"cell-curator run confirm-context {config} --input CONTEXT.json --reviewer NAME"
+    if not state.plan_complete:
+        return f"cell-curator run plan {config}"
+    if not state.assumptions_approved:
+        return (
+            f"cell-curator assumptions list {config}  "
+            "# then a person runs: cell-curator assumptions approve "
+            f"{config} --reviewer NAME"
+        )
+    if not (root / "review_packet" / "review_packet.manifest.json").is_file():
+        return f"cell-curator run execute {config}"
+    from .review import validate_reconciliation
+
+    try:
+        validate_reconciliation(root)
+    except (ContractError, OSError, ValueError):
+        return (
+            f"cell-curator critic import-findings {config} --input FINDINGS.tsv  "
+            f"# then: cell-curator critic reconcile {config} --input RECONCILIATION.tsv"
+        )
+    return (
+        f"cell-curator write-back preview {config} --output OUT.h5ad  "
+        f"# then a person runs: cell-curator write-back apply {config} --output OUT.h5ad"
+    )

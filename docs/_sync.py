@@ -41,6 +41,7 @@ PAGES: dict[str, str] = {
             "compute-and-snakemake",
             "validation",
             "quadbio-parity",
+            "llm-annotators",
         )
     },
 }

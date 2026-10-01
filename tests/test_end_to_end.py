@@ -916,3 +916,41 @@ def test_an_ontology_backoff_label_reaches_the_written_h5ad(tmp_path: Path) -> N
     written = ad.read_h5ad(output).obs
     assert set(written["cell_curator_type"].astype(str).iloc[:30]) == {"Shared parent"}
     assert set(written["cell_curator_type"].astype(str).iloc[30:]) == {"Type N"}
+
+
+def test_progress_status_names_the_next_command_at_each_stage(tmp_path: Path) -> None:
+    from cell_curator.guided import status
+
+    _, config, root = _completed_synthetic_run(tmp_path)
+    config_path = tmp_path / "config.yaml"
+    assert status(config_path)["next_command"].startswith("cell-curator write-back preview")
+    (root / "review" / "critic_reconciliation.tsv").unlink()
+    assert status(config_path)["next_command"].startswith("cell-curator critic import-findings")
+    (root / "review_packet" / "review_packet.manifest.json").unlink()
+    assert (
+        status(config_path)["next_command"]
+        == f"cell-curator run execute --config {config_path}"
+    )
+
+
+def test_a_cli_failure_is_one_json_object_with_its_own_exit_code(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from cell_curator import cli
+
+    def refuse(_args: object) -> None:
+        raise ContractError("Gate A blocks biological labels")
+
+    monkeypatch.setattr(cli, "dispatch", refuse)
+    monkeypatch.setattr(
+        "sys.argv", ["cell-curator", "progress", "status", "--config", "c.yaml"]
+    )
+    with pytest.raises(SystemExit) as stopped:
+        cli.main()
+    assert stopped.value.code == 2
+    error = json.loads(capsys.readouterr().err.strip().splitlines()[-1])
+    assert error == {
+        "error": "ContractError",
+        "message": "Gate A blocks biological labels",
+        "exit_code": 2,
+    }

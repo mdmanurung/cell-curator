@@ -27,6 +27,7 @@ _generated/reference/artifact-schemas
 _generated/reference/compute-and-snakemake
 _generated/reference/validation
 _generated/reference/quadbio-parity
+_generated/reference/llm-annotators
 ```
 
 # cell-curator

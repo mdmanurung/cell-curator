@@ -989,6 +989,16 @@ def _terminal_confirmation(preview: dict[str, Any]) -> str:
 setattr(_terminal_confirmation, "approval_mode", "interactive_confirmed")  # noqa: B010
 
 
+# ContractError first: it subclasses RuntimeError, and it means a gate or contract
+# refused the request, which is the case an agent must not retry blindly.
+EXIT_CODES: tuple[tuple[type[BaseException], int], ...] = (
+    (ContractError, 2),
+    (OSError, 3),
+    (ValueError, 4),
+    (RuntimeError, 5),
+)
+
+
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
@@ -999,8 +1009,14 @@ def main() -> None:
     try:
         result = dispatch(args)
     except (ContractError, ValueError, OSError, RuntimeError) as exc:
-        LOG.error("%s", exc)
-        raise SystemExit(2) from exc
+        # One JSON object on stderr, and a distinct exit code per kind, so an agent
+        # can tell a refused gate from a missing file without parsing prose.
+        code = next(code for kind, code in EXIT_CODES if isinstance(exc, kind))
+        print(
+            json.dumps({"error": type(exc).__name__, "message": str(exc), "exit_code": code}),
+            file=sys.stderr,
+        )
+        raise SystemExit(code) from exc
     if result is not None:
         _json(result)
 
