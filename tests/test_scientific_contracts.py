@@ -582,3 +582,19 @@ def test_cells_without_marker_signal_do_not_vote(config: dict) -> None:
     assert cluster.loc["T", "vote_fraction"] == pytest.approx(0.5)
     assert cluster.loc["B", "n_voters"] == 0
     assert cluster.loc["Mono", "n_voters"] == 0
+
+
+def test_backoff_never_leaves_the_cell_ontology() -> None:
+    """AIDA v3 cluster 14: HSC, T cell, and ILC programs tied, and their deepest
+    shared ancestor in the snapshot was UBERON:0000061 "anatomical structure"."""
+
+    from cell_curator.ontology import CellOntology, backoff_term
+
+    ontology = CellOntology.load(CL_SNAPSHOT)
+    tied = [
+        ("CL:0000624", 0.30),
+        ("CL:0000037", 0.25),
+        ("CL:0000625", 0.22),
+        ("CL:0001065", 0.20),
+    ]
+    assert backoff_term(ontology, tied, min_margin=0.2, min_confidence=0.6) is None

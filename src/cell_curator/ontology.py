@@ -823,7 +823,9 @@ def backoff_term(
     common = {
         item
         for item in set.intersection(*(closure[cl_id] for cl_id, _ in tied))
-        if item in ontology.terms and item not in BACKOFF_FLOOR
+        # CL only: snapshots import UBERON and BFO, and a tie across lineages
+        # would otherwise back off to "anatomical structure".
+        if item.startswith("CL:") and item in ontology.terms and item not in BACKOFF_FLOOR
     }
     if not common:
         return None
