@@ -92,13 +92,21 @@ def _confidence_values(frame: pd.DataFrame) -> np.ndarray:
 def _calibration(frame: pd.DataFrame, bins: int = 10) -> tuple[float | None, float | None]:
     if "confidence" not in frame:
         return None, None
+    # Calibration asks whether a call's confidence matches how often calls are
+    # right. An abstention asserts no label, so its confidence (that of the
+    # rejected winner) is not a claim to score, and Unknown == Unknown is not a
+    # correct call.
     confidence = _confidence_values(frame)
+    called = ~frame["predicted_label"].astype(str).eq("Unknown").to_numpy()
+    if not called.any():
+        return None, None
+    confidence = confidence[called]
     correct = (
         frame["true_label"]
         .astype(str)
         .eq(frame["predicted_label"].astype(str))
         .astype(float)
-        .to_numpy()
+        .to_numpy()[called]
     )
     brier = float(np.mean((confidence - correct) ** 2))
     edges = np.linspace(0, 1, bins + 1)

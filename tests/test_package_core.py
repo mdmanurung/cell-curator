@@ -190,8 +190,9 @@ def test_neutral_benchmark_measures_abstention_and_calibration() -> None:
     assert result.n == 4
     assert result.coverage == 0.5
     assert result.unknown_precision == 0.5
-    assert result.brier_score == pytest.approx(0.175)
-    assert result.expected_calibration_error == pytest.approx(0.35)
+    # Calibration is over the two calls (a right at 0.9, d wrong at 0.7), not the abstentions.
+    assert result.brier_score == pytest.approx((0.1**2 + 0.7**2) / 2)
+    assert result.expected_calibration_error == pytest.approx((0.1 + 0.7) / 2)
     assert result.hierarchy_error == pytest.approx((1 / 3 + 1 / 2) / 4)
     assert result.hierarchical_accuracy == pytest.approx(1 - (1 / 3 + 1 / 2) / 4)
     assert result.mixed_detection_f1 == 1.0

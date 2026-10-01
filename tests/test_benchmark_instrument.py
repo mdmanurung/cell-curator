@@ -30,6 +30,14 @@ REPO = Path(__file__).resolve().parents[1]
 FIXTURE = REPO / "benchmarks" / "fixtures" / "synthetic_predictions.tsv"
 COMMITTED = REPO / "benchmarks" / "results" / "synthetic.json"
 MANIFEST = REPO / "benchmarks" / "manifests" / "synthetic.json"
+# Metrics whose definition changed after the immutable synthetic result was published.
+PENDING = {
+    "ontology_distance_error",
+    "descendant_accuracy",
+    "relaxed_accuracy",
+    "brier_score",
+    "expected_calibration_error",
+}
 
 
 def test_the_committed_result_is_reproducible_from_its_fixture(tmp_path: Path) -> None:
@@ -45,7 +53,10 @@ def test_the_committed_result_is_reproducible_from_its_fixture(tmp_path: Path) -
     recorded 0.0625, which was `hierarchy_error` under a second name; the alias
     is gone and a table with no Cell Ontology ids makes no ontology claim, so
     the honest answer is `None`. `relaxed_accuracy` did not exist when the
-    artifact was published, so the artifact predates it. Superseding the
+    artifact was published, so the artifact predates it. `brier_score` and
+    `expected_calibration_error` were computed over abstentions too, scoring the
+    two `Unknown == Unknown` rows at 0.88 and 0.83 as confident correct calls;
+    calibration now covers calls only. Superseding the
     immutable artifact is deferred until the first real benchmark result lands,
     and `test_the_committed_artifact_still_awaiting_supersession` is the strict
     marker that fails the moment that deferral is resolved either way.
@@ -60,7 +71,7 @@ def test_the_committed_result_is_reproducible_from_its_fixture(tmp_path: Path) -
     ).model_dump(mode="json")
 
     for key, value in recomputed.items():
-        if key in {"ontology_distance_error", "descendant_accuracy", "relaxed_accuracy"}:
+        if key in PENDING:
             continue
         assert committed[key] == value, f"{key} drifted from the committed result"
     assert committed["prediction_path"] == str(FIXTURE.resolve())
@@ -70,6 +81,12 @@ def test_the_committed_result_is_reproducible_from_its_fixture(tmp_path: Path) -
     for key in ("descendant_accuracy", "relaxed_accuracy"):
         assert key not in committed
         assert recomputed[key] is None
+    assert committed["brier_score"] == pytest.approx(0.0337875)
+    assert recomputed["brier_score"] == pytest.approx(
+        (0.05**2 + 0.08**2 + 0.1**2 + 0.14**2 + 0.11**2) / 5
+    )
+    assert committed["expected_calibration_error"] == pytest.approx(0.14875)
+    assert recomputed["expected_calibration_error"] != committed["expected_calibration_error"]
 
 
 @pytest.mark.xfail(
@@ -77,7 +94,7 @@ def test_the_committed_result_is_reproducible_from_its_fixture(tmp_path: Path) -
     reason=(
         "the committed synthetic result records ontology_distance_error from the "
         "alias that was removed once the metric became a real is_a-graph "
-        "measurement; superseding the immutable artifact is deferred until the "
+        "measurement, and calibration that scored abstentions; superseding the immutable artifact is deferred until the "
         "first real benchmark result lands"
     ),
 )
@@ -145,15 +162,11 @@ def test_evaluate_file_chooses_its_separator_from_the_suffix(tmp_path: Path) -> 
     row = "barcode\ttrue_label\tpredicted_label\nx\tT cell\tT cell\n"
     tsv = tmp_path / "predictions.tsv"
     tsv.write_text(row)
-    assert evaluate_file(
-        tsv, system="s", dataset="d", output_path=tmp_path / "a.json"
-    ).n == 1
+    assert evaluate_file(tsv, system="s", dataset="d", output_path=tmp_path / "a.json").n == 1
 
     csv = tmp_path / "predictions.csv"
     csv.write_text(row.replace("\t", ","))
-    assert evaluate_file(
-        csv, system="s", dataset="d", output_path=tmp_path / "b.json"
-    ).n == 1
+    assert evaluate_file(csv, system="s", dataset="d", output_path=tmp_path / "b.json").n == 1
 
 
 def test_evaluate_file_refuses_to_rewrite_a_result_with_new_numbers(tmp_path: Path) -> None:
@@ -227,9 +240,7 @@ def _frame(labels: list[str]) -> pd.DataFrame:
 def test_the_scrambled_8000_gene_result_stays_retracted() -> None:
     """The v10 result ran on a row-scrambled input; its retraction cannot vanish."""
 
-    retraction = json.loads(
-        (COMMITTED.parent / "aida-pbmc-v10.retraction.json").read_text()
-    )
+    retraction = json.loads((COMMITTED.parent / "aida-pbmc-v10.retraction.json").read_text())
     assert retraction["input_sha256"].startswith("a8c5e332")
     for path in retraction["retracts"]:
         assert (COMMITTED.parents[2] / path).is_file(), path
