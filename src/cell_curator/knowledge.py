@@ -18,6 +18,7 @@ from scipy import sparse
 from .config import ProviderConfig
 from .contracts import ContractError, sha256
 from .models import MarkerProgram
+from .net import OFFLINE, NetworkPolicy, urlopen
 
 
 def _features(value: object) -> tuple[str, ...]:
@@ -120,13 +121,13 @@ class RemoteTableProvider(CachedTableProvider):
         expected_sha256: str,
         version: str,
         timeout_seconds: float = 30.0,
-        allow_network: bool = True,
+        policy: NetworkPolicy = OFFLINE,
     ) -> None:
         super().__init__(cache_path, version=version)
         self.url = url
         self.expected_sha256 = expected_sha256
         self.timeout_seconds = timeout_seconds
-        self.allow_network = allow_network
+        self.policy = policy
 
     @property
     def identity(self) -> str:
@@ -136,7 +137,7 @@ class RemoteTableProvider(CachedTableProvider):
         if self.path.is_file():
             self._validate_checksum()
             return self.path
-        if not self.allow_network:
+        if self.policy.mode == "offline":
             raise ContractError(
                 "optional remote enhancement is disabled and the checksum-pinned "
                 f"cache is absent: {self.path}"
@@ -150,7 +151,7 @@ class RemoteTableProvider(CachedTableProvider):
             headers={"User-Agent": "cell-curator/0.2"},
         )
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
+            with urlopen(request, timeout=self.timeout_seconds, policy=self.policy) as response:
                 partial.write_bytes(response.read())
             observed = sha256(partial)
             if observed != self.expected_sha256:
@@ -240,7 +241,7 @@ class ReferenceProvider:
 def providers_from_config(
     configs: Iterable[ProviderConfig],
     *,
-    allow_remote_enhancement: bool = True,
+    policy: NetworkPolicy = OFFLINE,
 ) -> list[MarkerProvider]:
     providers: list[MarkerProvider] = []
     for item in configs:
@@ -249,7 +250,7 @@ def providers_from_config(
         elif item.kind == "cached_table":
             providers.append(CachedTableProvider(item.path, version=item.version))
         elif item.kind == "remote_table":
-            if not allow_remote_enhancement and not Path(item.cache_path).is_file():
+            if policy.mode == "offline" and not Path(item.cache_path).is_file():
                 # The run-level knowledge manifest records this configured provider
                 # as unavailable.  It is deliberately omitted from execution so a
                 # local vocabulary can proceed without hidden network I/O.
@@ -261,7 +262,7 @@ def providers_from_config(
                     expected_sha256=item.sha256,
                     version=item.version,
                     timeout_seconds=item.timeout_seconds,
-                    allow_network=allow_remote_enhancement,
+                    policy=policy,
                 )
             )
         elif item.kind == "reference":

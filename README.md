@@ -119,6 +119,22 @@ ontologies, or labeled references under `knowledge.providers`. Use a new
 [assay-routing.md](skills/cell-curator/references/assay-routing.md) for the full
 representation contract.
 
+## Network: offline, institution, or online
+
+Every HTTP request goes through one guard, set by `knowledge.network`:
+
+| `network` | Reaches | Use it for |
+| --- | --- | --- |
+| `offline` (default) | nothing | local markers and a local Cell Ontology |
+| `institution` | localhost and `knowledge.allowed_hosts` | a local or institutional model server, ontology mirror, or table server; nothing leaves the institution |
+| `online` | any host | remote tables, live ontology lookups, Census, CellTypist models |
+
+An `allowed_hosts` entry that starts with `.` allows that domain's subdomains.
+Redirects are checked too, so an allowed host cannot send a request outside. Census
+and CellTypist use their own network clients, so their routes run only in
+`online` mode. The `acquire-*` commands are downloads a person runs by name: each
+sends one GET for a public, checksum-pinned file.
+
 ## Execute the workflow
 
 With `config.yaml` prepared, use the guided CLI to move through each review boundary:

@@ -288,7 +288,7 @@ def assemble_marker_programs_from_config(
         [
             *providers_from_config(
                 config.knowledge.providers,
-                allow_remote_enhancement=config.knowledge.allow_optional_remote_enhancement,
+                policy=config.knowledge.policy,
             ),
             *source,
         ],
@@ -1392,7 +1392,7 @@ def run_marker_analysis_from_config(
     providers: list[MarkerSource] = list(
         providers_from_config(
             model.knowledge.providers,
-            allow_remote_enhancement=model.knowledge.allow_optional_remote_enhancement,
+            policy=model.knowledge.policy,
         )
     )
     providers.extend(additional_sources)

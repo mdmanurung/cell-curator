@@ -10,6 +10,7 @@ import yaml
 from pydantic import Field, ValidationError, field_validator, model_validator
 
 from .models import SCHEMA_VERSION, RunMode, StrictModel
+from .net import NetworkPolicy
 
 SAFE_COMPONENT = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
 
@@ -182,7 +183,28 @@ class ProviderConfig(StrictModel):
 class KnowledgeConfig(StrictModel):
     providers: list[ProviderConfig] = Field(default_factory=list)
     require_local_grounding_for_labels: bool = True
-    allow_optional_remote_enhancement: bool = True
+    # offline: no request leaves the process. institution: localhost and
+    # allowed_hosts only. online: any host. See net.py.
+    network: Literal["offline", "institution", "online"] = "offline"
+    allowed_hosts: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def legacy_remote_switch(cls, value: Any) -> Any:
+        # Configs written before `network` existed say true/false here.
+        if isinstance(value, dict) and "allow_optional_remote_enhancement" in value:
+            value = dict(value)
+            legacy = value.pop("allow_optional_remote_enhancement")
+            value.setdefault("network", "online" if legacy else "offline")
+        return value
+
+    @property
+    def allow_optional_remote_enhancement(self) -> bool:
+        return self.network != "offline"
+
+    @property
+    def policy(self) -> NetworkPolicy:
+        return NetworkPolicy(self.network, tuple(self.allowed_hosts))
 
     @field_validator("require_local_grounding_for_labels")
     @classmethod

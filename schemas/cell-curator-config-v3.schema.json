@@ -748,10 +748,22 @@
     "KnowledgeConfig": {
       "additionalProperties": false,
       "properties": {
-        "allow_optional_remote_enhancement": {
-          "default": true,
-          "title": "Allow Optional Remote Enhancement",
-          "type": "boolean"
+        "allowed_hosts": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowed Hosts",
+          "type": "array"
+        },
+        "network": {
+          "default": "offline",
+          "enum": [
+            "offline",
+            "institution",
+            "online"
+          ],
+          "title": "Network",
+          "type": "string"
         },
         "providers": {
           "items": {

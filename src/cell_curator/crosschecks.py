@@ -27,6 +27,7 @@ from scipy.spatial import cKDTree
 
 from .contracts import ContractError, sha256
 from .data import gene_symbols, load_gene_mapping
+from .net import ONLINE, NetworkPolicy, urlopen
 from .provenance import atomic_publish, publish_json
 
 
@@ -1283,6 +1284,7 @@ def fetch_pinned_reference_bundle(
     expected_sha256: str,
     max_bytes: int,
     timeout_seconds: float = 600.0,
+    policy: NetworkPolicy = ONLINE,
 ) -> dict[str, Any]:
     """Acquire one pinned reference bundle under a declared size and checksum.
 
@@ -1355,7 +1357,7 @@ def fetch_pinned_reference_bundle(
     written = 0
     try:
         request = urllib.request.Request(url, headers={"User-Agent": "cell-curator/0.2"})
-        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+        with urlopen(request, timeout=timeout_seconds, policy=policy) as response:
             with partial.open("wb") as handle:
                 while True:
                     chunk = response.read(1 << 20)

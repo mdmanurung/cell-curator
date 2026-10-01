@@ -436,7 +436,7 @@ def test_provider_manifest_hashes_local_files_and_disabled_remote_never_networks
     def reject_network(*_args: object, **_kwargs: object) -> object:
         pytest.fail("disabled optional remote enhancement attempted network I/O")
 
-    monkeypatch.setattr("urllib.request.urlopen", reject_network)
+    monkeypatch.setattr("cell_curator.net._open", reject_network)
     initialize(config_path)
     root = run_directory(load_config(config_path))
     manifest = json.loads((root / "knowledge.manifest.json").read_text())

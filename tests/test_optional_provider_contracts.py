@@ -693,11 +693,11 @@ class _FakeResponse:
 def _serve(monkeypatch: pytest.MonkeyPatch, payload: bytes) -> list[str]:
     requested: list[str] = []
 
-    def fake_urlopen(request: Any, timeout: float = 0.0) -> _FakeResponse:
+    def fake_urlopen(request: Any, timeout: float = 0.0, policy: Any = None) -> _FakeResponse:
         requested.append(request.full_url)
         return _FakeResponse(payload)
 
-    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("cell_curator.net._open", fake_urlopen)
     return requested
 
 
@@ -858,10 +858,10 @@ def test_an_unreachable_bundle_url_is_a_receipt_not_an_exception(
 ) -> None:
     """Offline is an expected state for an optional provider, not a crash."""
 
-    def refuse(request: Any, timeout: float = 0.0) -> _FakeResponse:
+    def refuse(request: Any, timeout: float = 0.0, policy: Any = None) -> _FakeResponse:
         raise OSError("network is unreachable")
 
-    monkeypatch.setattr("urllib.request.urlopen", refuse)
+    monkeypatch.setattr("cell_curator.net._open", refuse)
     destination = tmp_path / "azimuth.h5ad"
 
     status = fetch_azimuth_reference(

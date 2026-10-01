@@ -521,7 +521,7 @@ def construct_plan(config_path: str | Path) -> dict[str, Any]:
     programs = collect_programs(
         providers_from_config(
             config.knowledge.providers,
-            allow_remote_enhancement=config.knowledge.allow_optional_remote_enhancement,
+            policy=config.knowledge.policy,
         )
     )
     vocabulary, missing_parents = (
@@ -660,7 +660,9 @@ def construct_plan(config_path: str | Path) -> dict[str, Any]:
             developmental_stage=str(biological_context["developmental_stage"]),
             health_context=health_context,
             technology=technology,
-            allow_network=config.knowledge.allow_optional_remote_enhancement,
+            # Census, CellTypist, and similar clients bypass net.py, so they need
+            # online mode; institution mode reaches only hosts net.py can check.
+            allow_network=config.knowledge.network == "online",
             existing_predictions=existing_resources,
             reference_models=model_resources,
             labeled_references=reference_resources,

@@ -91,7 +91,7 @@ def _programs(config: CellCuratorConfig):
     programs = collect_programs(
         providers_from_config(
             config.knowledge.providers,
-            allow_remote_enhancement=config.knowledge.allow_optional_remote_enhancement,
+            policy=config.knowledge.policy,
         )
     )
     plan_path = run_root(config) / "plan.json"

@@ -403,7 +403,7 @@ def validate_knowledge_providers(config_path: str | Path) -> dict[str, Any]:
     programs = collect_programs(
         providers_from_config(
             config.knowledge.providers,
-            allow_remote_enhancement=config.knowledge.allow_optional_remote_enhancement,
+            policy=config.knowledge.policy,
         )
     )
     ontology = ontology_from_config(config)

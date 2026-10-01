@@ -371,11 +371,11 @@ def _serve_ols(monkeypatch: pytest.MonkeyPatch, payload: object) -> list[str]:
         def __exit__(self, *exc: object) -> bool:
             return False
 
-    def fake_urlopen(request: Any, timeout: float = 0.0) -> Any:
+    def fake_urlopen(request: Any, timeout: float = 0.0, policy: Any = None) -> Any:
         requested.append(request.full_url)
         return _Response(json.dumps(payload).encode())
 
-    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("cell_curator.net._open", fake_urlopen)
     return requested
 
 
@@ -391,6 +391,7 @@ def _with_live_provider(config: dict, tmp_path: Path, **overrides: Any) -> CellC
         {"kind": "ontology", "path": str(_cl_obo(tmp_path)), "version": "local-v1"},
         provider,
     ]
+    config["knowledge"]["network"] = "online"
     return CellCuratorConfig.model_validate(config)
 
 
@@ -427,8 +428,10 @@ def test_live_corroboration_without_a_provider_never_attempts_the_network(
 def test_live_corroboration_disabled_by_policy_never_attempts_the_network(
     config: dict, tmp_path: Path
 ) -> None:
-    config["knowledge"]["allow_optional_remote_enhancement"] = False
     model = _with_live_provider(config, tmp_path)
+    model = model.model_copy(
+        update={"knowledge": model.knowledge.model_copy(update={"network": "offline"})}
+    )
     status = corroborate_terms_live(model, ["CL:0000084"])
     assert status["status"] == "unavailable"
     assert status["network_attempted"] is False
@@ -519,10 +522,10 @@ def test_live_corroboration_reports_obsolescence_and_name_disagreement(
 def test_an_unreachable_ontology_service_is_a_receipt_not_an_exception(
     monkeypatch: pytest.MonkeyPatch, config: dict, tmp_path: Path
 ) -> None:
-    def refuse(request: Any, timeout: float = 0.0) -> Any:
+    def refuse(request: Any, timeout: float = 0.0, policy: Any = None) -> Any:
         raise OSError("network is unreachable")
 
-    monkeypatch.setattr("urllib.request.urlopen", refuse)
+    monkeypatch.setattr("cell_curator.net._open", refuse)
     model = _with_live_provider(config, tmp_path)
 
     status = corroborate_terms_live(model, ["CL:0000084"])
@@ -542,10 +545,10 @@ def test_a_live_provider_never_becomes_required_for_a_label(
     ontology must still resolve terms and still validate durable labels.
     """
 
-    def refuse(request: Any, timeout: float = 0.0) -> Any:
+    def refuse(request: Any, timeout: float = 0.0, policy: Any = None) -> Any:
         raise OSError("network is unreachable")
 
-    monkeypatch.setattr("urllib.request.urlopen", refuse)
+    monkeypatch.setattr("cell_curator.net._open", refuse)
     model = _with_live_provider(config, tmp_path)
 
     ontology = ontology_from_config(model)

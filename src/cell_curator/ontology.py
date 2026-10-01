@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any
 import pandas as pd
 
 from .contracts import ContractError, safe_path_component, sha256
+from .net import urlopen
 
 if TYPE_CHECKING:
     from .config import CellCuratorConfig
@@ -360,7 +361,7 @@ def ontology_from_config(config: CellCuratorConfig) -> CellOntology | None:
             expected_sha256=provider.sha256,
             version=provider.version,
             timeout_seconds=provider.timeout_seconds,
-            allow_network=config.knowledge.allow_optional_remote_enhancement,
+            policy=config.knowledge.policy,
         ).provision()
         ontology = CellOntology.load(cache)
     except (ContractError, OSError) as exc:
@@ -686,7 +687,7 @@ def corroborate_terms_live(
     if not config.knowledge.allow_optional_remote_enhancement:
         return unavailable(
             "optional remote enhancement is disabled",
-            "Authorize knowledge.allow_optional_remote_enhancement to corroborate CL terms; "
+            "Set knowledge.network to institution or online to corroborate CL terms; "
             "local validation and CL-free annotation remain available.",
             attempted=False,
         )
@@ -708,7 +709,9 @@ def corroborate_terms_live(
             request = urllib.request.Request(
                 query, headers={"User-Agent": "cell-curator/0.2", "Accept": "application/json"}
             )
-            with urllib.request.urlopen(request, timeout=provider.timeout_seconds) as response:
+            with urlopen(
+                request, timeout=provider.timeout_seconds, policy=config.knowledge.policy
+            ) as response:
                 payload = json.loads(response.read().decode("utf-8"))
         except (OSError, ValueError) as exc:
             rows.append({**row, "status": "unavailable", "findings": [str(exc)]})

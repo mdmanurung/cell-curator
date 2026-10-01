@@ -12,7 +12,11 @@ knowledge:
   # corroborates the authoritative local ontology and may never ground a label.
   providers: []
   require_local_grounding_for_labels: true
-  allow_optional_remote_enhancement: true
+  # offline: no request leaves the process. institution: localhost and the hosts in
+  # allowed_hosts only (an entry starting with "." allows that domain's subdomains), so
+  # nothing leaves the institution. online: any host, including Census and CellTypist.
+  network: offline
+  allowed_hosts: []
 
 input:
   kind: h5ad  # h5ad supports one root assay; h5mu supports one or more assays
