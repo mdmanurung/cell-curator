@@ -453,3 +453,35 @@ def test_a_gene_cannot_be_both_expected_and_forbidden() -> None:
                 Source(MarkerProgram(label="CD8 T", negative=("NKG7",))),
             ]
         )
+
+
+def test_a_two_group_comparison_ranks_programs_by_effect_not_by_name(config: dict) -> None:
+    """Two group means z-score to exactly +/-1, so a 3-unit and a 0.25-unit shift
+    used to tie and 'Alpha' won alphabetically."""
+
+    model = _model(config)
+    capabilities = build_capability_registry(model)
+    rng = np.random.default_rng(0)
+    candidate = np.column_stack([rng.normal(3.0, 0.3, 50), rng.normal(1.25, 0.3, 50)])
+    reference = np.column_stack([rng.normal(0.0, 0.3, 50), rng.normal(1.0, 0.3, 50)])
+    matrix = np.clip(np.vstack([candidate, reference]), 0, None)
+    evidence = score_marker_programs(
+        matrix,
+        pd.Series(["candidate"] * 50 + ["reference"] * 50),
+        pd.Index(["ZE1", "AL1"]),
+        [
+            MarkerProgram(label="Alpha subtype", positive=("AL1",)),
+            MarkerProgram(label="Zeta subtype", positive=("ZE1",)),
+        ],
+        detection=matrix,
+        run_id=model.run.run_id,
+        assay="transcriptome",
+        representation="logcounts",
+        capability=capabilities[0],
+    )
+    target = evidence[evidence["cluster_id"].eq("candidate")].sort_values(
+        ["score", "label"], ascending=[False, True]
+    )
+    assert target.iloc[0]["label"] == "Zeta subtype"
+    assert target.iloc[0]["score"] > target.iloc[1]["score"]
+    assert target.iloc[0]["vote_fraction"] > 0.5
