@@ -49,8 +49,11 @@ exactly `level`, `parent_scope`, and `path`, plus optional `state_path`. Paths a
 absolute or relative to the manifest directory. Optional top-level fields are
 `vocabulary_path`, `minimum_confidence`, and `minimum_margin`.
 
-Every score TSV contains `cluster_id`, `label`, and finite numeric `score`; optional
-`specificity`, `agreement`, and `coverage` columns feed advisory confidence. Below
+Every score TSV contains `cluster_id`, `label`, and finite numeric `score`. An
+optional `vote_fraction` column (emitted by program scoring) makes vote share the
+ranking, the confidence, and the margin, gated by `minimum_confidence` and
+`minimum_margin`. Without it, optional `specificity`, `agreement`, and `coverage`
+columns feed an advisory confidence that is reported but not gated. Below
 the first level a row may refine only a cluster its parent level routed into that
 scope: either its `cluster_id` is that cluster, or an optional `parent_cluster_id`
 column names it (for subclusters). Any other row is refused, and a routed cluster
