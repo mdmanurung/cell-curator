@@ -140,11 +140,17 @@ def _durable_replace(source: Path, target: Path) -> None:
 
     _fsync(source)
     os.replace(source, target)
-    directory = os.open(target.parent, os.O_RDONLY)
+    # Best effort: Windows cannot open a directory, and some FUSE and SMB mounts
+    # refuse to fsync one. The rename has happened; failing now would discard the
+    # pending receipt and wedge the run behind its own output.
     try:
-        os.fsync(directory)
-    finally:
-        os.close(directory)
+        directory = os.open(target.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    except OSError:
+        pass
 
 
 def _approval(

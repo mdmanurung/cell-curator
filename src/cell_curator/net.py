@@ -10,9 +10,8 @@ Every HTTP request the package makes goes through :func:`urlopen`, under a
 - ``online`` allows any host.
 
 Redirects are re-checked, so an allowed host cannot bounce a request outside.
-Routes that use third-party clients (Census through tiledb, CellTypist model
-downloads) do not pass through here; routing refuses them unless the mode is
-``online``.
+Census uses its own client (tiledb), so plan offers a Census route only in
+``online`` mode. CellTypist routes read cached models and never download.
 """
 
 from __future__ import annotations

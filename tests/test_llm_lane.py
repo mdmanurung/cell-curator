@@ -290,3 +290,33 @@ def test_lane_bottom_up_reads_every_configured_lane(first_run) -> None:
     _, config, root, packet = first_run
     assert set(lane_bottom_up(config, root)["cluster_id"].astype(str)) >= {"0"}
     assert build_packet(config, [], pd.DataFrame(), pd.DataFrame(), {})["clusters"] == []
+
+
+def test_model_text_reaches_the_report_escaped(first_run, tmp_path: Path) -> None:
+    config_path, _, _, packet = first_run
+    hostile = "<script>alert(1)</script>"
+    answers = tmp_path / "hostile.json"
+    answers.write_text(
+        ProposalSet(
+            payload_sha256=packet_sha256(packet),
+            proposals=[_answer(packet, hostile, ("A1",), model="<img src=x onerror=1>")],
+        ).model_dump_json()
+    )
+    value = yaml.safe_load(config_path.read_text())
+    value["run"]["run_id"] = "hostile-llm"
+    value["evidence"]["llm"] = {"proposals": str(answers)}
+    config = tmp_path / "hostile.yaml"
+    config.write_text(yaml.safe_dump(value, sort_keys=False))
+    run_annotation(config)
+    root = run_root(load_config(config))
+    rationale = (
+        pd.read_csv(
+            root / "evidence/summary/annotation_proposals.tsv", sep="\t", keep_default_na=False
+        )
+        .set_index("cluster_id")
+        .loc[0, "rationale"]
+    )
+    assert hostile in rationale  # the refusal is recorded verbatim in the data...
+    report = (root / "review" / "report.html").read_text()
+    assert "<script>alert" not in report and "<img src=x" not in report  # ...not as markup
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in report

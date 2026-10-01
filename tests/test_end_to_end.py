@@ -1031,3 +1031,27 @@ def test_repeating_a_completed_write_back_returns_the_same_output(tmp_path: Path
     first = sha256(output)
     assert write_back(config, root, output_path=output, confirm=None) == output
     assert sha256(output) == first
+
+
+def test_a_filesystem_that_cannot_fsync_a_directory_still_completes_write_back(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import os
+    import stat
+
+    from cell_curator import writeback
+
+    _, config, root = _completed_synthetic_run(tmp_path)
+    real_fsync = os.fsync
+
+    def no_directory_fsync(fd: int) -> None:
+        if stat.S_ISDIR(os.fstat(fd).st_mode):
+            raise OSError(22, "Invalid argument")
+        real_fsync(fd)
+
+    monkeypatch.setattr(writeback.os, "fsync", no_directory_fsync)
+    output = tmp_path / "fuse.h5ad"
+    write_back(config, root, output_path=output, confirm=_confirm)
+    assert json.loads((root / "writeback/receipt.json").read_text())["output_sha256"] == sha256(
+        output
+    )
