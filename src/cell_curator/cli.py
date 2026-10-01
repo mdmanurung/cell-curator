@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -405,7 +406,6 @@ def build_parser() -> argparse.ArgumentParser:
     apply = write_sub.add_parser("apply")
     _config_argument(apply)
     apply.add_argument("--output", type=Path)
-    apply.add_argument("--approval", required=True, type=Path)
     apply.add_argument("--ontology", type=Path)
     apply.add_argument("--in-place", action="store_true")
 
@@ -915,7 +915,7 @@ def dispatch(args: argparse.Namespace) -> Any:
                     config,
                     root,
                     output_path=output,
-                    approval_path=args.approval,
+                    confirm=_terminal_confirmation if sys.stdin.isatty() else None,
                     ontology=ontology,
                     in_place=args.in_place,
                 )
@@ -934,6 +934,25 @@ def dispatch(args: argparse.Namespace) -> Any:
             ).model_dump(mode="json")
         return validate_dataset_manifest(args.manifest)
     raise ContractError(f"unsupported command: {args.command}")
+
+
+
+def _terminal_confirmation(preview: dict[str, Any]) -> str:
+    """Show the diff a person is approving and read back its prefix."""
+
+    prefix = str(preview["approval_token"])
+    print(
+        f"write-back of run {preview['run_id']}: {preview['n_cells']} cells, "
+        f"{preview['n_cell_types']} cell types, {preview['n_unknown']} Unknown\n"
+        f"changed values per column: {preview['changed_by_column']}\n"
+        f"output: {preview['output_path']} (in place: {preview['in_place']})\n"
+        f"full diff: {preview['diff_path']}\n"
+        f"type {prefix} to approve: ",
+        end="",
+        file=sys.stderr,
+        flush=True,
+    )
+    return sys.stdin.readline()
 
 
 def main() -> None:

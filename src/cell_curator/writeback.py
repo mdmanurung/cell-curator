@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+import getpass
+import hashlib
 import json
 import os
+import socket
+from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -114,41 +119,52 @@ def _align_mapping(mapping: pd.DataFrame, obs_names: pd.Index) -> pd.DataFrame:
     return aligned.reset_index(drop=True)
 
 
+CONFIRMATION_PREFIX = 12
+
+
 def _approval(
     config: CellCuratorConfig,
     run_root: Path,
-    approval_path: Path,
     preview: dict[str, Any],
+    confirm: Callable[[dict[str, Any]], str] | None,
 ) -> dict[str, Any]:
-    if not approval_path.is_file():
-        raise ContractError("write-back requires an explicit approval JSON file")
-    value = json.loads(approval_path.read_text())
-    required_flags = ("approved", "assumptions_approved", "critics_reconciled")
-    missing_flags = [key for key in required_flags if value.get(key) is not True]
-    if missing_flags or not str(value.get("reviewer", "")).strip():
+    """Record who approved this exact diff, and how.
+
+    An approval used to be a JSON file echoing the preview's hashes, which the agent
+    the gate exists to check could write itself. Now the confirmation happens in the
+    process that writes: either a person types the diff prefix, or the run was
+    declared pre-authorized in the configuration frozen at scene setting.
+    """
+
+    from .guided import load_state
+
+    if confirm is not None:
+        typed = str(confirm(preview)).strip()
+        if typed != preview["approval_token"]:
+            raise ContractError(
+                "write-back confirmation does not match this preview's approval_token; "
+                "the reviewed state changed or the wrong token was typed"
+            )
+        mode = "interactive_confirmed"
+    elif (
+        config.guidance.preauthorized
+        and not config.guidance.interactive
+        and load_state(run_root).preauthorized
+    ):
+        mode = "preauthorized_non_interactive"
+    else:
         raise ContractError(
-            "write-back approval must name a reviewer and set approved, "
-            f"assumptions_approved, and critics_reconciled to true; missing {missing_flags}"
+            "write-back needs a person to confirm it: run `cell-curator write-back apply` "
+            "in a terminal and type the diff prefix it prints, or use a run whose "
+            "configuration set guidance.preauthorized before scene setting"
         )
-    expected = {
-        "run_id": config.run.run_id,
-        "input_sha256": preview["input_sha256"],
-        "mapping_sha256": preview["mapping_sha256"],
-        "labels_sha256": preview["labels_sha256"],
-        "diff_sha256": preview["diff_sha256"],
-        "assumptions_sha256": preview["assumptions_sha256"],
-        "report_manifest_sha256": preview["report_manifest_sha256"],
-        "report_sha256": preview["report_sha256"],
-        "critic_packet_sha256": preview["critic_packet_sha256"],
-        "critic_findings_sha256": preview["critic_findings_sha256"],
-        "critic_reconciliation_sha256": preview["critic_reconciliation_sha256"],
-        "output_path": preview["output_path"],
-        "in_place": preview["in_place"],
+    return {
+        "approval_mode": mode,
+        "reviewer": config.guidance.reviewer or getpass.getuser(),
+        "os_user": getpass.getuser(),
+        "host": socket.gethostname(),
+        "approved_utc": datetime.now(UTC).isoformat(),
     }
-    for key, expected_value in expected.items():
-        if value.get(key) != expected_value:
-            raise ContractError(f"write-back approval {key} does not match the reviewed run")
-    return value
 
 
 def validate_writeback(
@@ -159,6 +175,8 @@ def validate_writeback(
     output_path: Path | None = None,
     in_place: bool = False,
 ) -> dict[str, Any]:
+    if config.run.mode.value != "annotation":
+        raise ContractError("evidence-only runs cannot write biological labels")
     ontology = ontology or ontology_from_config(config)
     source_path = Path(config.input.path)
     target = output_path or (
@@ -221,8 +239,6 @@ def validate_writeback(
         [labels],
         cell_membership=mapping[["barcode", "leaf_id"]],
     )
-    if config.run.mode.value != "annotation":
-        raise ContractError("evidence-only runs cannot write biological labels")
     context_path = run_root / "context.json"
     prefix = config.guidance.context.writeback_prefix
     if context_path.is_file():
@@ -351,7 +367,7 @@ def validate_writeback(
     missing_review = [str(path) for path in review_paths.values() if not path.is_file()]
     if missing_review:
         raise ContractError(f"write-back review artifacts are absent: {missing_review}")
-    return {
+    preview = {
         "schema_version": 3,
         "artifact_kind": "cell_curator_writeback_preview",
         "status": "complete",
@@ -378,6 +394,12 @@ def validate_writeback(
         "diff_sha256": sha256(diff_path),
         "category_and_color_contract": planned_contract,
     }
+    # One token over everything the preview binds (diff, labels, assumptions, report,
+    # critic ledgers, target), so a person confirming it approves exactly this state.
+    preview["approval_token"] = hashlib.sha256(
+        json.dumps(preview, sort_keys=True, default=str).encode()
+    ).hexdigest()[:CONFIRMATION_PREFIX]
+    return preview
 
 
 def write_back(
@@ -385,7 +407,7 @@ def write_back(
     run_root: Path,
     *,
     output_path: Path,
-    approval_path: Path,
+    confirm: Callable[[dict[str, Any]], str] | None = None,
     ontology: CellOntology | None = None,
     in_place: bool = False,
 ) -> Path:
@@ -396,7 +418,6 @@ def write_back(
         output_path=output_path,
         in_place=in_place,
     )
-    _approval(config, run_root, approval_path, preview)
     source = Path(config.input.path)
     source_sha256 = sha256(source)
     receipt_path = run_root / "writeback" / "receipt.json"
@@ -407,13 +428,13 @@ def write_back(
             and prior.get("in_place") is in_place
             and output_path.is_file()
             and prior.get("output_sha256") == sha256(output_path)
-            and prior.get("approval_sha256") == sha256(approval_path)
             and all(prior.get(key) == preview.get(key) for key in preview)
         ):
             return output_path
         raise ContractError(
             "an immutable write-back receipt already exists for a different or drifted output"
         )
+    approval = _approval(config, run_root, preview, confirm)
     mapping = pd.read_csv(
         run_root / "mapping" / "parent_child_mapping.tsv",
         sep="\t",
@@ -490,7 +511,7 @@ def write_back(
             "artifact_kind": "cell_curator_writeback_receipt",
             "output_path": str(output_path.resolve()),
             "output_sha256": sha256(partial),
-            "approval_sha256": sha256(approval_path),
+            "approval": approval,
         }
         receipt_partial.write_text(
             json.dumps(receipt, indent=2, sort_keys=True, default=str) + "\n"

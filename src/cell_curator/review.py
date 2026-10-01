@@ -41,7 +41,9 @@ RECONCILIATION_COLUMNS = (
 )
 TERMINAL_RECONCILIATION_STATES = frozenset({"RESOLVED", "DISMISSED"})
 RECONCILIATION_STATES = TERMINAL_RECONCILIATION_STATES | {"OPEN"}
-CRITIC_SEVERITIES = frozenset({"BLOCKER", "ERROR", "WARNING", "INFO"})
+# NONE is a critic pass attesting that it found nothing; it still needs a reviewer
+# disposition, so "no findings" is a recorded claim rather than an absence.
+CRITIC_SEVERITIES = frozenset({"BLOCKER", "ERROR", "WARNING", "INFO", "NONE"})
 
 
 def build_evidence_cards(config: CellCuratorConfig, run_root: Path) -> list[Path]:
@@ -369,7 +371,24 @@ def import_critic_findings(run_root: Path, input_path: Path) -> dict[str, Any]:
             f"extra={sorted(extra)}"
         )
     frame = _validate_findings_frame(run_root, frame)
-    destination = _replace_review_table(run_root / "review" / "critic_findings.tsv", frame)
+    existing_path = run_root / "review" / "critic_findings.tsv"
+    if existing_path.is_file():
+        # Append-only: a later import adds findings and can never erase or rewrite
+        # one, so importing passes one at a time keeps every earlier BLOCKER.
+        existing = _validate_findings_frame(
+            run_root, pd.read_csv(existing_path, sep="\t", keep_default_na=False)
+        )
+        old = existing.set_index(existing["finding_id"].astype(str))
+        for _, row in frame.iterrows():
+            key = str(row["finding_id"])
+            if key in old.index and not old.loc[key].astype(str).equals(row.astype(str)):
+                raise ContractError(
+                    f"critic finding {key} already exists with different content; "
+                    "findings are append-only, import it under a new finding_id"
+                )
+        new_rows = frame[~frame["finding_id"].astype(str).isin(old.index)]
+        frame = pd.concat([existing, new_rows], ignore_index=True)
+    destination = _replace_review_table(existing_path, frame)
     return {
         "schema_version": 3,
         "artifact_kind": "cell_curator_critic_findings_import",
@@ -433,6 +452,13 @@ def import_reconciliation(run_root: Path, input_path: Path) -> dict[str, Any]:
     }
 
 
+def _configured_critic_passes(run_root: Path) -> set[str]:
+    packet_path = run_root / "review" / "critic_packet.json"
+    if not packet_path.is_file():
+        raise ContractError("critic reconciliation requires the critic packet; run critic packet")
+    return {str(value) for value in json.loads(packet_path.read_text()).get("critic_passes", [])}
+
+
 def validate_reconciliation(run_root: Path) -> dict[str, Any]:
     findings_path = run_root / "review" / "critic_findings.tsv"
     reconciliation_path = run_root / "review" / "critic_reconciliation.tsv"
@@ -453,8 +479,21 @@ def validate_reconciliation(run_root: Path) -> dict[str, Any]:
             "critic reconciliation IDs must exactly match findings; "
             f"missing={sorted(expected - observed)}, extra={sorted(observed - expected)}"
         )
+    configured = _configured_critic_passes(run_root)
+    observed_passes = set(findings["critic_pass"].astype(str))
     if findings.empty:
-        return {"status": "complete", "n_findings": 0, "all_reconciled": True}
+        raise ContractError(
+            "no critic pass has recorded anything; each configured pass must import "
+            "findings or a severity NONE attestation before reconciliation can pass"
+        )
+    if configured:
+        missing_passes = sorted(configured - observed_passes)
+        unknown_passes = sorted(observed_passes - configured)
+        if missing_passes or unknown_passes:
+            raise ContractError(
+                "critic passes do not match review.critic_passes; "
+                f"missing={missing_passes}, unconfigured={unknown_passes}"
+            )
     ordered = indexed.loc[findings["finding_id"].astype(str)]
     terminal = ordered["status"].astype(str).str.upper().isin(TERMINAL_RECONCILIATION_STATES)
     if not terminal.all():
@@ -1041,7 +1080,6 @@ def check_report_completeness(
                 "strict report requires colors, critic packet, and an evidence card per label"
             )
         validate_critic_packet(run_root)
-        validate_reconciliation(run_root)
         colors = json.loads(colors_path.read_text())
         for contract in colors.get("columns", {}).values():
             categories = list(map(str, contract.get("categories", [])))
@@ -1189,8 +1227,9 @@ def build_html_report(
             mapping_path
         ):
             raise ContractError("strict report requires a validated mapping")
+        # The report is what critics review, so it renders the current reconciliation
+        # state; `critic validate` and write-back are what require it to be complete.
         validate_critic_packet(run_root)
-        validate_reconciliation(run_root)
     style = """
 body{font-family:system-ui,sans-serif;max-width:1400px;margin:2rem auto;padding:0 1rem;color:#17212b}
 h1,h2{color:#123a52}.grid{display:grid;grid-template-columns:minmax(300px,1fr) minmax(500px,2fr);gap:1.5rem}

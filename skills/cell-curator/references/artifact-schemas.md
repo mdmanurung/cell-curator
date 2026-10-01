@@ -78,3 +78,19 @@ Report canonical parents, accepted candidates, remainder leaves, effective
 leaves by lineage, and global effective leaves. The effective leaf count is the
 number of unique final leaf IDs, not canonical parents plus accepted-parent
 count.
+
+## Critic ledgers and write-back receipt
+
+`review/critic_findings.tsv` is append-only: an import adds findings, and re-importing
+an existing `finding_id` with different content is refused. Every pass named in
+`review.critic_passes` must contribute at least one row; a pass that found nothing
+records one row with severity `NONE`. Every row needs a terminal reconciliation
+(`RESOLVED` or `DISMISSED`) with a reviewer and resolution.
+
+`writeback/receipt.json` is the preview plus `output_sha256` and an `approval`
+object: `approval_mode` (`interactive_confirmed` or
+`preauthorized_non_interactive`), `reviewer`, `os_user`, `host`, and
+`approved_utc`. The preview's `approval_token` is a 12-character digest over every
+other preview field. An interactive `write-back apply` writes only after that token
+is typed back, so a change to labels, assumptions, report, critic ledgers, diff, or
+target invalidates a confirmation given earlier.

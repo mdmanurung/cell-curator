@@ -6,7 +6,7 @@ evidence. It records uncertainty and preserves `Unknown` when evidence is
 insufficient.
 
 Runs are local and review-gated, and the source object remains unchanged. Writing an
-annotated output requires a separate, hash-bound approval. Running cell-curator
+annotated output requires a person to confirm the exact reviewed state. Running cell-curator
 requires Python 3.11 or newer and an existing clustering.
 
 ## Install
@@ -87,7 +87,7 @@ packet = cur.annotate()
 cur.validate_run()
 ```
 
-`annotate()` resumes completed phases. Write-back requires a separate approval. A
+`annotate()` resumes completed phases. Write-back requires a person to confirm it. A
 tested example is available in
 [quickstart_synthetic.ipynb](examples/quickstart_synthetic.ipynb).
 
@@ -155,19 +155,21 @@ Before executing a new configuration, use `--dry-run`. The Slurm profile is in
 
 After the run completes and before write-back, review the artifacts under
 `run.output_root/run.run_id`. They include evidence receipts, hierarchy decisions,
-critic reconciliation, the review packet, and provenance. Preview the complete
-mapping before creating an approval:
+critic reconciliation, the review packet, and provenance. Every configured critic
+pass must record findings, or a severity `NONE` attestation, before write-back
+proceeds. Preview the complete mapping, then apply it from your own terminal:
 
 ```bash
 uv run cell-curator write-back preview --config config.yaml --output annotated.h5ad
-uv run cell-curator write-back apply --config config.yaml \
-  --approval approval.json --output annotated.h5ad
+uv run cell-curator write-back apply --config config.yaml --output annotated.h5ad
 ```
 
-The approval binds the run, source, labels, assumptions, report, critic findings,
-preview diff, and output path. See
+`apply` prints a summary and an approval token covering the run, source, labels,
+assumptions, report, critic ledgers, diff, and output path, and writes only after you
+type the token. A non-interactive run writes only when its configuration set
+`guidance.preauthorized: true` before scene setting. See
 [artifact-schemas.md](skills/cell-curator/references/artifact-schemas.md) for the
-schema.
+receipt.
 
 ## Analytical constraints
 

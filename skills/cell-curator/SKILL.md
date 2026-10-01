@@ -179,7 +179,9 @@ yourself before passing it to `--reference` or `--model-path`.
 ## 4. Review and validate
 
 Create evidence cards, import independent critic findings, reconcile each finding,
-and build the self-contained report:
+and build the self-contained report. Every pass in `review.critic_passes` must
+import at least one finding; a pass that found nothing imports one row with severity
+`NONE`. Imports are append-only, so a later import cannot erase an earlier finding.
 
 ```bash
 cell-curator evidence-card scaffold --config config.yaml
@@ -234,16 +236,22 @@ Preview the complete mapping:
 cell-curator write-back preview --config config.yaml --output annotated.h5ad
 ```
 
-After assumptions, hierarchy, report, and critic validation pass, create an approval
-bound to the current run, source, labels, assumptions, report, findings, preview
-diff, output path, and in-place intent. Apply it atomically to a new file:
+After assumptions, hierarchy, report, and critic validation pass, **stop and ask the
+user to run write-back themselves** in their own terminal. The command prints a
+summary and an `approval_token` covering the run, source, labels, assumptions,
+report, critic ledgers, diff, and target, and writes only after the token is typed
+back. Never type the token for the user, and never write an approval file: an agent
+approving its own output is exactly what the gate exists to prevent.
 
 ```bash
-cell-curator write-back apply --config config.yaml \
-  --approval approval.json --output annotated.h5ad
+cell-curator write-back apply --config config.yaml --output annotated.h5ad
 cell-curator progress status --config config.yaml
 cell-curator run status --config config.yaml
 ```
+
+A non-interactive run writes only when its configuration set
+`guidance.preauthorized: true` before scene setting; the receipt records which mode
+approved it.
 
 Preserve category order and report colours. Modify the source only through the
 explicit in-place option.

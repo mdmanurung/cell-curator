@@ -83,4 +83,4 @@ write-back.
 - Missing features are unmeasured, not negative evidence.
 - A required RAPIDS result is produced only under its declared GPU contract.
 - `Unknown` is retained when the evidence is inadequate.
-- Write-back requires a separate, hash-bound approval.
+- Write-back requires a person to type the token of the exact reviewed state.

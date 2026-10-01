@@ -39,7 +39,6 @@ from .review import (
     build_critic_packet,
     build_evidence_cards,
     build_html_report,
-    validate_reconciliation,
 )
 
 LOG = logging.getLogger(__name__)
@@ -1197,7 +1196,8 @@ def validate(config_path: Path) -> dict[str, Any]:
             not assessment.get("reasons") for assessment in route["assessments"]
         ):
             raise ContractError("method routing omitted unavailable/unsuitable reasons")
-    reconciliation = validate_reconciliation(root)
+    # Critic reconciliation is not part of computational validation: critics review
+    # the frozen packet this produces, and write-back enforces their reconciliation.
     ontology = ontology_from_config(config)
     proposals = pd.read_csv(
         root / "evidence" / "summary" / "annotation_proposals.tsv",
@@ -1228,7 +1228,6 @@ def validate(config_path: Path) -> dict[str, Any]:
         "status": "complete",
         "promotion_status": "computationally_complete_pending_human_review",
         "source_unchanged": True,
-        "critics_reconciled": reconciliation["all_reconciled"],
         "ontology_status": "validated" if ontology is not None else "unavailable-cl-free",
         "mapping_invariants": {
             **mapping_validation["invariants"],

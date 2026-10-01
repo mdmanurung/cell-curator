@@ -6,7 +6,7 @@ package version and configuration models without importing the scientific stack.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -330,11 +330,15 @@ def apply_writeback(
     config_path: str | Path,
     *,
     output_path: str | Path,
-    approval_path: str | Path,
+    confirm: Callable[[dict[str, Any]], str] | None = None,
     ontology_path: str | Path | None = None,
     in_place: bool = False,
 ) -> Path:
-    """Apply an explicitly approved, atomic write-back to a new object by default."""
+    """Apply an atomic write-back to a new object by default.
+
+    ``confirm`` receives the preview and must return its ``approval_token``,
+    typed by a person. Without it, only a pre-authorized run writes.
+    """
 
     from .config import load_config
     from .ontology import CellOntology, ontology_from_config
@@ -351,7 +355,7 @@ def apply_writeback(
         config,
         run_root(config),
         output_path=Path(output_path),
-        approval_path=Path(approval_path),
+        confirm=confirm,
         ontology=ontology,
         in_place=in_place,
     )

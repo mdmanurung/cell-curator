@@ -21,6 +21,8 @@ from cell_curator.review import (
     build_evidence_cards,
     build_html_report,
     check_report_completeness,
+    import_critic_findings,
+    import_reconciliation,
     resolve_durable_mapping_values,
 )
 from cell_curator.writeback import validate_writeback, write_back
@@ -139,6 +141,7 @@ def _completed_synthetic_run(
     config_path = _config(tmp_path, source, markers)
     run_annotation(config_path)
     config = load_config(config_path)
+    _record_critics(config, run_root(config), tmp_path)
     return source, config, run_root(config)
 
 
@@ -149,26 +152,46 @@ def _rebuild_strict_review(config: CellCuratorConfig, root: Path) -> None:
     build_html_report(config, root, strict=True)
 
 
-def _writeback_approval(preview: dict[str, object], *, reviewer: str) -> dict[str, object]:
-    return {
-        "approved": True,
-        "assumptions_approved": True,
-        "critics_reconciled": True,
-        "reviewer": reviewer,
-        "run_id": preview["run_id"],
-        "input_sha256": preview["input_sha256"],
-        "mapping_sha256": preview["mapping_sha256"],
-        "labels_sha256": preview["labels_sha256"],
-        "diff_sha256": preview["diff_sha256"],
-        "assumptions_sha256": preview["assumptions_sha256"],
-        "report_manifest_sha256": preview["report_manifest_sha256"],
-        "report_sha256": preview["report_sha256"],
-        "critic_packet_sha256": preview["critic_packet_sha256"],
-        "critic_findings_sha256": preview["critic_findings_sha256"],
-        "critic_reconciliation_sha256": preview["critic_reconciliation_sha256"],
-        "output_path": preview["output_path"],
-        "in_place": preview["in_place"],
-    }
+def _record_critics(config: CellCuratorConfig, root: Path, tmp_path: Path) -> None:
+    """Every configured pass attests to finding nothing, and a reviewer signs it off."""
+
+    passes = config.review.critic_passes
+    findings = tmp_path / "critic-findings.tsv"
+    pd.DataFrame(
+        {
+            "finding_id": [f"none-{name}" for name in passes],
+            "target_kind": "run",
+            "target_id": config.run.run_id,
+            "critic_pass": passes,
+            "severity": "NONE",
+            "claim": "no issue found",
+            "evidence_path": "review/critic_packet.json",
+            "proposed_resolution": "none",
+        }
+    ).to_csv(findings, sep="\t", index=False)
+    import_critic_findings(root, findings)
+    reconciliation = tmp_path / "critic-reconciliation.tsv"
+    pd.DataFrame(
+        {
+            "finding_id": [f"none-{name}" for name in passes],
+            "status": "DISMISSED",
+            "resolution": "attestation accepted",
+            "reviewer": "fixture-reviewer",
+        }
+    ).to_csv(reconciliation, sep="\t", index=False)
+    import_reconciliation(root, reconciliation)
+    build_html_report(config, root, strict=True, level="L1")
+    build_html_report(config, root, strict=True)
+
+
+def _typed(prefix_from: dict[str, object]):
+    """A person typing the diff prefix shown for ``prefix_from``."""
+
+    return lambda _preview: str(prefix_from["approval_token"])
+
+
+def _confirm(preview: dict[str, object]) -> str:
+    return str(preview["approval_token"])
 
 
 def test_durable_mapping_resolution_uses_deepest_parent_scoped_review() -> None:
@@ -249,27 +272,22 @@ def test_independent_end_to_end_and_guarded_writeback(tmp_path: Path) -> None:
     assert not proposals["abstained"].astype(bool).any()
 
     output = tmp_path / "annotated.h5ad"
+    # A run no critic has looked at must not pass as "critics reconciled".
+    with pytest.raises(ContractError, match="no critic pass"):
+        validate_writeback(config, root, output_path=output)
+    _record_critics(config, root, tmp_path)
     preview = validate_writeback(config, root, output_path=output)
-    invalid_approval = tmp_path / "invalid-approval.json"
-    invalid_approval.write_text(json.dumps({"approved": True, "reviewer": "fixture-reviewer"}))
-    with pytest.raises(ContractError, match="assumptions_approved"):
+    with pytest.raises(ContractError, match="does not match"):
         write_back(
             config,
             root,
             output_path=tmp_path / "must-not-exist.h5ad",
-            approval_path=invalid_approval,
+            confirm=lambda _preview: "not-the-prefix",
         )
     assert not (tmp_path / "must-not-exist.h5ad").exists()
-    approval = tmp_path / "approval.json"
-    approval.write_text(
-        json.dumps(_writeback_approval(preview, reviewer="fixture-reviewer"))
-    )
-    write_back(
-        config,
-        root,
-        output_path=output,
-        approval_path=approval,
-    )
+    write_back(config, root, output_path=output, confirm=_confirm)
+    receipt = json.loads((root / "writeback/receipt.json").read_text())
+    assert receipt["approval"]["approval_mode"] == "interactive_confirmed"
     assert output.is_file()
     assert sha256(source) == source_before
     annotated = ad.read_h5ad(output)
@@ -277,51 +295,29 @@ def test_independent_end_to_end_and_guarded_writeback(tmp_path: Path) -> None:
 
     second_output = tmp_path / "second-annotated.h5ad"
     second_preview = validate_writeback(config, root, output_path=second_output)
-    second_approval = tmp_path / "second-approval.json"
-    second_approval.write_text(
-        json.dumps(_writeback_approval(second_preview, reviewer="fixture-reviewer"))
-    )
     first_hash = sha256(output)
     with pytest.raises(ContractError, match="immutable write-back receipt"):
-        write_back(
-            config,
-            root,
-            output_path=second_output,
-            approval_path=second_approval,
-        )
+        write_back(config, root, output_path=second_output, confirm=_confirm)
     assert not second_output.exists()
     assert sha256(output) == first_hash
 
 
-def test_writeback_approval_binds_review_and_target_intent(
+def test_writeback_confirmation_binds_the_previewed_diff(
     tmp_path: Path,
 ) -> None:
     _, config, root = _completed_synthetic_run(tmp_path)
     output = tmp_path / "bound-output.h5ad"
     preview = validate_writeback(config, root, output_path=output)
-    fields = (
-        "assumptions_sha256",
-        "report_manifest_sha256",
-        "report_sha256",
-        "critic_packet_sha256",
-        "critic_findings_sha256",
-        "critic_reconciliation_sha256",
-        "output_path",
-        "in_place",
-    )
-    for field in fields:
-        approval = _writeback_approval(preview, reviewer="fixture-reviewer")
-        approval[field] = not approval[field] if field == "in_place" else "stale"
-        approval_path = tmp_path / f"stale-{field}.json"
-        approval_path.write_text(json.dumps(approval))
-        with pytest.raises(ContractError, match=field):
-            write_back(
-                config,
-                root,
-                output_path=output,
-                approval_path=approval_path,
-            )
-        assert not output.exists()
+    # A prefix typed for a different target is a different diff and refuses.
+    other = validate_writeback(config, root, output_path=tmp_path / "other.h5ad")
+    assert other["approval_token"] != preview["approval_token"]
+    with pytest.raises(ContractError, match="does not match"):
+        write_back(
+            config, root, output_path=output, confirm=lambda _p: "0" * 12
+        )
+    assert not output.exists()
+    write_back(config, root, output_path=output, confirm=_typed(preview))
+    assert output.is_file()
 
 
 def test_review_rebuild_preserves_manual_reasoning_and_detects_tampering(
@@ -438,35 +434,21 @@ is_a: CL:0000000 ! cell
         "colors": ["#008800", "#880000"],
     }
 
-    stale_approval = tmp_path / "stale-approval.json"
-    stale_approval.write_text(json.dumps(_writeback_approval(preview, reviewer="reviewer-one")))
     labels.loc[0, "rationale"] = "Final manually reviewed rationale."
     labels.to_csv(labels_path, sep="\t", index=False)
     _rebuild_strict_review(config, root)
-    with pytest.raises(ContractError, match="labels_sha256"):
+    # The prefix a person read before the labels changed no longer approves them.
+    with pytest.raises(ContractError, match="does not match"):
         write_back(
             config,
             root,
             output_path=tmp_path / "stale-must-not-exist.h5ad",
-            approval_path=stale_approval,
+            confirm=_typed(preview),
             ontology=ontology,
         )
     assert not (tmp_path / "stale-must-not-exist.h5ad").exists()
 
-    current_preview = validate_writeback(
-        config, root, ontology=ontology, output_path=output
-    )
-    approval_path = tmp_path / "approval.json"
-    approval_path.write_text(
-        json.dumps(_writeback_approval(current_preview, reviewer="reviewer-one"))
-    )
-    write_back(
-        config,
-        root,
-        output_path=output,
-        approval_path=approval_path,
-        ontology=ontology,
-    )
+    write_back(config, root, output_path=output, confirm=_confirm, ontology=ontology)
     assert sha256(source) == source_before
     written = ad.read_h5ad(output)
     assert set(written.obs["cell_curator_type"].astype(str)) == {
@@ -513,6 +495,13 @@ def test_interactive_equivalent_end_to_end_requires_named_gate_approval(
     assert packet.is_dir()
     assert (root / "labels/L1.tsv").is_file()
     assert (root / "checkpoints/L1/ROOT.json").is_file()
+
+    # An interactive run writes only after a person types the approval token.
+    config = load_config(config_path)
+    _record_critics(config, root, tmp_path)
+    with pytest.raises(ContractError, match="needs a person to confirm"):
+        write_back(config, root, output_path=tmp_path / "unconfirmed.h5ad")
+    assert not (tmp_path / "unconfirmed.h5ad").exists()
 
 
 def test_stored_refinement_promotes_only_evidence_backed_children(

@@ -233,6 +233,10 @@ def test_critic_findings_and_reconciliation_import_atomically(tmp_path: Path) ->
     evidence_path = run_root / "evidence/summary/multimodal_label_scores.tsv"
     evidence_path.parent.mkdir(parents=True)
     evidence_path.write_text("cluster_id\tlabel\tscore\n0\tA\t1.0\n")
+    (run_root / "review").mkdir()
+    (run_root / "review/critic_packet.json").write_text(
+        json.dumps({"critic_passes": ["biology", "ontology"]})
+    )
     findings_input = tmp_path / "findings.tsv"
     reconciliation_input = tmp_path / "reconciliation.tsv"
     pd.DataFrame(
@@ -274,6 +278,32 @@ def test_critic_findings_and_reconciliation_import_atomically(tmp_path: Path) ->
                 "resolution": "Expected-negative evidence excludes the alternative.",
                 "reviewer": "fixture-reviewer",
             }
+        ]
+    ).to_csv(reconciliation_input, sep="\t", index=False)
+    # One of two configured passes has reported: reconciliation must refuse.
+    with pytest.raises(ContractError, match="missing=\\['ontology'\\]"):
+        import_reconciliation(run_root, reconciliation_input)
+
+    # A second import appends; it cannot rewrite or drop the first finding.
+    second = pd.read_csv(findings_input, sep="\t", keep_default_na=False)
+    second.loc[0, "evidence_path"] = "evidence/summary/multimodal_label_scores.tsv"
+    second.loc[0, "claim"] = "Rewritten claim."
+    second.to_csv(findings_input, sep="\t", index=False)
+    with pytest.raises(ContractError, match="append-only"):
+        import_critic_findings(run_root, findings_input)
+    second.loc[0, ["finding_id", "critic_pass", "severity"]] = ["f-2", "ontology", "NONE"]
+    second.to_csv(findings_input, sep="\t", index=False)
+    assert import_critic_findings(run_root, findings_input)["n_findings"] == 2
+
+    pd.DataFrame(
+        [
+            {
+                "finding_id": finding_id,
+                "status": "RESOLVED",
+                "resolution": "Expected-negative evidence excludes the alternative.",
+                "reviewer": "fixture-reviewer",
+            }
+            for finding_id in ("f-1", "f-2")
         ]
     ).to_csv(reconciliation_input, sep="\t", index=False)
     receipt = import_reconciliation(run_root, reconciliation_input)

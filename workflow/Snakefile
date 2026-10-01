@@ -435,9 +435,10 @@ rule build_review:
         profiles=rules.discover_refinement_candidates.output.profiles,
         profiles_manifest=rules.discover_refinement_candidates.output.profiles_manifest,
     output:
+        # The critic findings and reconciliation TSVs are human review ledgers, not
+        # outputs: Snakemake deletes a rule's outputs before rerunning it, so declaring
+        # them here would erase imported findings on any upstream change.
         critic=RUN / "review" / "critic_packet.json",
-        findings=RUN / "review" / "critic_findings.tsv",
-        reconciliation=RUN / "review" / "critic_reconciliation.tsv",
         report=RUN / "review" / "report.html",
         manifest=RUN / "review" / "report.manifest.json",
         checkpoint=RUN / "checkpoints" / FIRST_LEVEL / "ROOT.json",
@@ -480,12 +481,14 @@ rule apply_approved_writeback:
     input:
         config=CONFIG,
         final=rules.validate_finalization.output.provenance,
-        approval=RUN / "approval.json",
     output:
         annotated=RUN / "writeback" / f"annotated.{WRITEBACK_SUFFIX}",
         receipt=RUN / "writeback" / "receipt.json",
     log:
         RUN / "logs" / "writeback.log",
     shell:
+        # Non-interactive: writes only for a run whose configuration set
+        # guidance.preauthorized before scene setting. Otherwise run
+        # `cell-curator write-back apply` in a terminal and type the token it prints.
         "cell-curator write-back apply --config {input.config:q} "
-        "--approval {input.approval:q} --output {output.annotated:q} > {log:q} 2>&1"
+        "--output {output.annotated:q} < /dev/null > {log:q} 2>&1"
