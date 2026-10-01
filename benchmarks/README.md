@@ -210,6 +210,85 @@ because `Unknown` is spelled `Unknown` on the truth side only for a handful of
 cells, so the binary problem is nearly one-sided; the coverage figure is the one to
 read, and the protocol says so.
 
+## Protocol v3: per-cell votes, an ontology, and the unscrambled input
+
+**Frozen 2026-10-01, before any v3 run.** v1 and v2 stand as recorded. Nothing in
+this section has been run on AIDA, and nothing in it may change once it has: a
+change to a threshold, a marker, or the engine after the v3 result is seen is v4.
+Run config: `data/aida-pbmc-protocol-v3/config.yaml`, run id `aida-pbmc-v11`.
+
+**Engine.** Commit `6f11904`, 502 tests passing. Four changes since v2 decide the
+result:
+
+1. Genes are standardised across cells, not across the 28 cluster means. Each
+   cell votes for its best program among siblings, a cell no program fits does
+   not vote, and confidence is the share of the cluster voting for the winner.
+   v2's confidence was a softmax over cluster scores, which fell as the
+   vocabulary grew.
+2. The Cell Ontology parser keeps `is_a` edges that carry `{...}` qualifiers
+   (28,860 edges; T cell at depth 8, where v2's graph had it at 0).
+3. A cluster that fails only on confidence, margin, or entropy is labelled with
+   the unique deepest CL ancestor of its near-tied candidates, if that ancestor is
+   not a generic term (cell, leukocyte, mononuclear cell, and similar) and the
+   candidates under it hold 60% of the votes. The run plan states this as an
+   assumption.
+4. Calibration is computed over calls only, and `predicted_path` no longer
+   carries level and `ROOT` tokens.
+
+**Input.** `aida_pbmc_clustered.h5ad`, sha256 `440ba41a…97c159`: the v1 input,
+17,394 cells, 2,000 genes, 28 clusters, ceiling 0.636. The 8,000-gene file is not
+used. Alignment was checked before freezing, without looking at any annotation
+output. Truth labels match `obs` on 17,394 of 17,394 cells, and marker means follow
+the truth: CD14 is 1.99 in CD14 monocytes and at most 0.21 in five other types,
+PPBP is 6.23 in platelets.
+
+**Ontology.** `cl.obo`, `data-version: releases/2026-06-08`, sha256 `7e19b4ae…8fc51f`.
+v2 ran without one.
+
+**Vocabulary.** `data/aida-pbmc-protocol-v3/pbmc_markers.json`, sha256
+`8147b66e…d0e355`. It makes four edits to the v2 file. Each can be decided from the
+vocabulary and the ontology alone, and none comes from AIDA labels or output:
+
+1. Four labels take their CL names (for example "CD4-positive T cell" becomes
+   "CD4-positive, alpha-beta T cell"), so a label and its accession validate
+   together. Markers are unchanged, and repeated entries are deduplicated.
+2. The plasmacytoid dendritic cell program pointed at CL:0002010 (pre-conventional
+   dendritic cell). It now points at CL:0000784. Its markers (LILRA4, CLEC4C,
+   IL3RA) are pDC markers. Consequence, stated now: AIDA's 106 cells labelled
+   pre-conventional dendritic cell can no longer match exactly.
+3. CD8-positive T cell listed NKG7 as both positive and negative, which the
+   package now refuses. NKG7 stays positive, as a cytotoxic effector gene. The
+   negative slot takes CD14, the lineage negative the other programs use.
+4. "myeloid cell" is dropped. It is the CL ancestor of five other labels, and 6
+   of its 11 positives are monocyte markers, so per-cell votes cannot tell it from
+   its descendants. Its 530 AIDA cells are reachable only through backoff. Innate
+   lymphoid cell (ancestor of NK, distinct markers) and the CD14/CD16 monocyte pair
+   (a real CL `is_a`) stay, and the plan records both as assumptions.
+
+**Thresholds.** These are the v2 numbers, re-declared in vote-share units:
+- `min_confidence` 0.6: 60% of a cluster's cells vote for the call.
+- `min_margin` 0.2: a 20-point lead over the runner-up.
+- `max_normalized_entropy` 0.85.
+- `min_positive_coverage` 0.5.
+- `max_negative_violation` 0.5.
+
+**Lanes and arms.** Local markers only: no Census- or CellGuide-derived lane,
+because AIDA is in Census. This freeze covers the arm without an LLM lane. An
+LLM arm is an amendment pinned before it runs. It is reported separately and
+flagged for possible training leakage.
+
+**How backoff calls are scored.** The comparison with v1 is at the exact tier:
+`accuracy`, `selective_accuracy`, `coverage`. A backoff call is coarser than its
+truth by construction, so exact scoring and `descendant_accuracy` give it no
+credit. Backoff calls are counted on their own row, with `relaxed_accuracy`
+and `ontology_distance_error` reported alongside.
+
+**Expected, stated before measuring.** v1 called 1 of 28 clusters (coverage
+0.016). The scoring diagnosis predicts that v3 calls more than 10 of 28 clusters,
+exact or backoff, with exact-tier selective accuracy at or below the 0.636 ceiling.
+If v3 calls 3 of 28 or fewer, the diagnosis is wrong and is reported that way.
+The stop rules below apply unchanged.
+
 ## Why the pre-declared evidence bar is not met, measured rather than guessed
 
 Two runs, differing only in measured panel width. Both label one cluster of 28.

@@ -1,0 +1,202 @@
+# Benchmark run configuration for the AIDA PBMC slice, protocol v3.
+#
+# Frozen in benchmarks/README.md ("Protocol v3") before this config was run.
+# Against v2 it changes the input, the vocabulary file, and adds the ontology;
+# every threshold keeps its v2 number. See that section for what each now means.
+#
+# The input is the 2,000-gene file that v1 ran on. The 8,000-gene file was
+# row-scrambled (see "Retraction") and is not used.
+#
+# The marker vocabulary in pbmc_markers.json is the v2 pre-declaration with four
+# data-blind edits listed in benchmarks/README.md. Its self-authored provenance
+# remains a declared limitation.
+#
+# `donor_id` is NOT declared a composition covariate. The package's categorical
+# heuristic excludes it at 394 distinct values, and declaring it anyway is refused.
+#
+# `input.keys.scope: annotation_scope` is a constant "ROOT" column. Declaring the
+# eight true AIDA lineages as scopes would hand the annotator the coarse partition,
+# which is truth-derived structure. The annotation never reads `lineage`.
+
+schema_version: 3
+
+run:
+  run_id: aida-pbmc-v11
+  output_root: /exports/para-lipg-hpc/mdmanurung/cell-curator/benchmarks/results
+  mode: annotation
+
+input:
+  kind: h5ad
+  path: /exports/para-lipg-hpc/mdmanurung/cell-curator/benchmarks/data/aida-phase1-v2-pbmc-hvg2000/aida_pbmc_clustered.h5ad
+  expected_sha256: 440ba41a0508686457732508fc5868db719e1b3cf2c88f961c7ae315f097c159
+  assays:
+    transcriptome:
+      modality: root
+      kind: rna
+      feature_space: gene
+      feature_id_column: feature_name
+      gene_mapping_path: ""
+      capabilities:
+        - identity
+        - subtype
+        - ontology_markers
+      graph_representations:
+        - source: obsm
+          key: X_pca_bench
+      representations:
+        lognorm:
+          source: layer
+          key: lognorm
+          feature_space: gene
+          ranking_backend: scipy_mannwhitney
+          ontology_compatible: true
+          detection:
+            source: layer
+            key: counts
+            required: true
+            semantics: counts > 0
+  keys:
+    canonical_parent: bench_cluster
+    scope: annotation_scope
+    stored_resolutions: []
+    embedding: X_pca_bench
+    spatial: ""
+    donor: donor_id
+    capture: ""
+    doublet_class: ""
+    doublet_score: ""
+    sex: sex
+    batch: ""
+  required_obs_keys: []
+  guide_columns: []
+  technical_metrics: {}
+
+canonical_partitions:
+  ROOT:
+    parent_key: bench_cluster
+    expected_parent_count: 28
+
+adaptive:
+  parent_local:
+    enabled: false
+  outcomes:
+    - ACCEPT SPLIT
+    - RETAIN PARENT
+    - DOUBLET/MIXED
+    - TECHNICAL/UNRESOLVED
+  eligibility:
+    min_cells: 50
+    min_donors: null
+    min_captures: null
+    rare_exceptions_require_approval: true
+  audit:
+    guide_entropy_min: 0.6
+    meaningful_minority_fraction: 0.1
+    doublet_fraction_max: null
+    donor_max_fraction: null
+    capture_max_fraction: null
+    technical_effect_size_max: 0.15
+    technical_metric_robust_z_max: 3.0
+    incompatible_program_fraction_min: 0.15
+    incompatible_program_columns: []
+  stored_candidates:
+    min_parent_purity: 0.9
+    min_parent_fraction: 0.03
+    max_parent_fraction: 0.95
+    adjacent_jaccard_min: 0.8
+    min_adjacent_matches: 1
+
+knowledge:
+  providers:
+    - kind: local_markers
+      path: /exports/para-lipg-hpc/mdmanurung/cell-curator/benchmarks/data/aida-pbmc-protocol-v3/pbmc_markers.json
+      version: aida-pbmc-protocol-v3
+    - kind: ontology
+      path: /exports/para-lipg-hpc/mdmanurung/cell-curator/benchmarks/data/aida-phase1-v2-pbmc-hvg2000/cl.obo
+      version: releases/2026-06-08
+
+comparators:
+  roles:
+    - parent_remainder
+    - closest_sibling
+  closest_sibling_strategy: embedding_centroid
+
+review:
+  critic_passes:
+    - biological_coherence
+    - negative_markers_and_alternatives
+    - doublet_and_mixed
+    - technical_confounding
+    - ontology_hierarchy
+  require_reconciliation: true
+  require_explicit_human_approval: true
+  type_and_state_separate: true
+
+markers:
+  rapids_singlecell_version: "9.9.9"
+  rapids_distribution: rapids-singlecell-cu99
+  cuda_major: 99
+  allowed_gpu_contracts: []
+
+evidence:
+  lanes:
+    - assay: transcriptome
+      representation: lognorm
+      required_for_acceptance: true
+  adjusted_pvalue_max: 0.05
+  require_both_marker_methods: true
+  require_both_comparators: true
+  required_candidate_gates:
+    - stability_pass
+    - candidate_vs_parent_remainder_pass
+    - candidate_vs_closest_sibling_pass
+    - positive_program_pass
+    - expected_negative_program_pass
+    - cell_level_separation_pass
+    - source_corroboration_pass
+  min_positive_coverage: 0.5
+  # Protocol v2. See benchmarks/README.md for the derivation: the violation is the
+  # fraction of measured negative markers flagged, and a 0.636 clustering ceiling means
+  # contamination alone flags one marker in three. With three markers per program, 0.5
+  # separates one flag (contamination) from two (contradiction). v1 used 0.2.
+  max_negative_violation: 0.5
+  # Protocol v3: same numbers as v2, now in vote-share units. A call needs 60% of
+  # the cluster's cells to vote for it and a 20-point lead over the runner-up.
+  min_confidence: 0.6
+  min_margin: 0.2
+  max_normalized_entropy: 0.85
+
+guidance:
+  interactive: false
+  preauthorized: true
+  reviewer: aida-benchmark-protocol-v3
+  pause_after_each_level: false
+  assumptions:
+    - >-
+      The marker vocabulary in pbmc_markers.json is a pre-declaration written
+      from standard human PBMC immunology before any AIDA cluster was inspected,
+      and its self-authored provenance is a declared limitation rather than a
+      property this run can establish.
+    - >-
+      The clustering is fixed a priori and contributes a measured ceiling of
+      0.636 on per-cell accuracy, so no absolute number from this run is
+      comparable to a published figure and only the comparison between systems on
+      identical cells is in scope.
+    - >-
+      Ground truth is expert-reviewed CL-mapped AIDA author annotation, not
+      orthogonal protein-measured or FACS-sorted labels, so this run measures
+      agreement with those labels and not cell-type accuracy.
+  hierarchy_levels:
+    - L1
+  context:
+    organism: human
+    tissue: blood
+    developmental_stage: adult
+    condition: healthy
+    technology: dissociated
+    experimental_context: AIDA Phase 1 Data Freeze v2, CELLxGENE Census 2025-11-08
+    composition_covariates: []
+    vocabulary_contract: local PBMC marker programs, ~14-way conventional split
+    reference_contract: local_only
+    visualization_key: X_pca_bench
+    writeback_prefix: aida_bench
