@@ -121,6 +121,29 @@ def _align_mapping(mapping: pd.DataFrame, obs_names: pd.Index) -> pd.DataFrame:
 CONFIRMATION_PREFIX = 12
 
 
+def _same_preview(prior: dict[str, Any], preview: dict[str, Any]) -> bool:
+    """Whether a receipt records this preview. A receipt sets its own artifact_kind."""
+
+    return all(prior.get(key) == preview.get(key) for key in preview if key != "artifact_kind")
+
+
+def _fsync(path: Path) -> None:
+    with path.open("rb") as handle:
+        os.fsync(handle.fileno())
+
+
+def _durable_replace(source: Path, target: Path) -> None:
+    """Rename ``source`` over ``target`` so a crash leaves one or the other, whole."""
+
+    _fsync(source)
+    os.replace(source, target)
+    directory = os.open(target.parent, os.O_RDONLY)
+    try:
+        os.fsync(directory)
+    finally:
+        os.close(directory)
+
+
 def _approval(
     config: CellCuratorConfig,
     run_root: Path,
@@ -181,9 +204,7 @@ def validate_writeback(
     ontology = ontology or ontology_from_config(config)
     source_path = Path(config.input.path)
     target = output_path or (
-        source_path
-        if in_place
-        else run_root / "writeback" / f"annotated.{config.input.kind}"
+        source_path if in_place else run_root / "writeback" / f"annotated.{config.input.kind}"
     )
     source_resolved = source_path.resolve()
     target_resolved = target.resolve()
@@ -362,9 +383,7 @@ def validate_writeback(
         "report_sha256": run_root / "review" / "report.html",
         "critic_packet_sha256": run_root / "review" / "critic_packet.json",
         "critic_findings_sha256": run_root / "review" / "critic_findings.tsv",
-        "critic_reconciliation_sha256": run_root
-        / "review"
-        / "critic_reconciliation.tsv",
+        "critic_reconciliation_sha256": run_root / "review" / "critic_reconciliation.tsv",
     }
     missing_review = [str(path) for path in review_paths.values() if not path.is_file()]
     if missing_review:
@@ -430,12 +449,24 @@ def write_back(
             and prior.get("in_place") is in_place
             and output_path.is_file()
             and prior.get("output_sha256") == sha256(output_path)
-            and all(prior.get(key) == preview.get(key) for key in preview)
+            and _same_preview(prior, preview)
         ):
             return output_path
         raise ContractError(
             "an immutable write-back receipt already exists for a different or drifted output"
         )
+    # A crash between publishing the output and its receipt leaves both the output
+    # and the pending receipt. Finish that commit rather than refuse forever.
+    pending = receipt_path.with_name(f"{receipt_path.name}.pending")
+    if pending.is_file() and output_path.is_file():
+        prior = json.loads(pending.read_text())
+        if (
+            prior.get("output_path") == str(output_path.resolve())
+            and prior.get("output_sha256") == sha256(output_path)
+            and _same_preview(prior, preview)
+        ):
+            _durable_replace(pending, receipt_path)
+            return output_path
     approval = _approval(config, run_root, preview, confirm)
     mapping = pd.read_csv(
         run_root / "mapping" / "parent_child_mapping.tsv",
@@ -446,9 +477,7 @@ def write_back(
     output_columns = list(preview["output_columns"])
     color_contract = preview.get("category_and_color_contract", {})
     partial = output_path.with_name(f".{output_path.name}.partial.{os.getpid()}")
-    receipt_partial = receipt_path.with_name(
-        f".{receipt_path.name}.partial.{os.getpid()}"
-    )
+    published = False
     output_path.parent.mkdir(parents=True, exist_ok=True)
     receipt_path.parent.mkdir(parents=True, exist_ok=True)
     if output_path.exists() and output_path.resolve() != source.resolve():
@@ -515,14 +544,15 @@ def write_back(
             "output_sha256": sha256(partial),
             "approval": approval,
         }
-        receipt_partial.write_text(
-            json.dumps(receipt, indent=2, sort_keys=True, default=str) + "\n"
-        )
-        os.replace(partial, output_path)
-        os.replace(receipt_partial, receipt_path)
+        pending.write_text(json.dumps(receipt, indent=2, sort_keys=True, default=str) + "\n")
+        _fsync(pending)
+        _durable_replace(partial, output_path)
+        published = True
+        _durable_replace(pending, receipt_path)
     finally:
         partial.unlink(missing_ok=True)
-        receipt_partial.unlink(missing_ok=True)
+        if not published:
+            pending.unlink(missing_ok=True)
     if not in_place and sha256(source) != source_sha256:
         raise ContractError("write-back changed the immutable source input")
     return output_path

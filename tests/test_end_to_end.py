@@ -988,4 +988,46 @@ def test_a_full_run_and_write_back_open_no_socket(
     assert config.knowledge.network == "offline"
     output = tmp_path / "offline.h5ad"
     write_back(config, root, output_path=output, confirm=_confirm)
-    assert set(ad.read_h5ad(output).obs["cell_curator_type"].astype(str)) == {"Type A", "Type B"}
+    assert set(ad.read_h5ad(output).obs["cell_curator_type"].astype(str)) == {
+        "Type A",
+        "Type B",
+    }
+
+
+def test_a_write_back_interrupted_before_its_receipt_completes_on_retry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A crash after the output lands but before the receipt does must not wedge the run."""
+
+    import os
+
+    from cell_curator import writeback
+
+    _, config, root = _completed_synthetic_run(tmp_path)
+    output = tmp_path / "interrupted.h5ad"
+    real_replace = os.replace
+
+    def crash_on_receipt(source: object, target: object) -> None:
+        if str(target).endswith("receipt.json"):
+            raise OSError("power lost")
+        real_replace(source, target)
+
+    monkeypatch.setattr(writeback.os, "replace", crash_on_receipt)
+    with pytest.raises(OSError, match="power lost"):
+        write_back(config, root, output_path=output, confirm=_confirm)
+    assert output.is_file() and not (root / "writeback/receipt.json").exists()
+
+    monkeypatch.setattr(writeback.os, "replace", real_replace)
+    assert write_back(config, root, output_path=output, confirm=None) == output
+    receipt = json.loads((root / "writeback/receipt.json").read_text())
+    assert receipt["output_sha256"] == sha256(output)
+    assert not (root / "writeback/receipt.json.pending").exists()
+
+
+def test_repeating_a_completed_write_back_returns_the_same_output(tmp_path: Path) -> None:
+    _, config, root = _completed_synthetic_run(tmp_path)
+    output = tmp_path / "once.h5ad"
+    write_back(config, root, output_path=output, confirm=_confirm)
+    first = sha256(output)
+    assert write_back(config, root, output_path=output, confirm=None) == output
+    assert sha256(output) == first
