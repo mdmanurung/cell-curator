@@ -553,3 +553,32 @@ def test_a_near_tie_backs_off_to_the_shared_ancestor_only_with_an_ontology(
     assert with_cl["T"].confidence == pytest.approx(0.95)
     assert not with_cl["T"].abstained
     assert with_cl["mixed"].cell_type == "Unknown"
+
+
+def test_cells_without_marker_signal_do_not_vote(config: dict) -> None:
+    """Half the cluster expresses nothing; those cells must not be handed to a program."""
+
+    model = _model(config)
+    capabilities = build_capability_registry(model)
+    features = pd.Index(["CD3E", "MS4A1", "LYZ"])
+    t, b, m = (np.eye(3)[i] * 5.0 for i in range(3))
+    matrix = np.vstack([t] * 50 + [np.zeros(3)] * 50 + [b] * 100 + [m] * 100)
+    evidence = score_marker_programs(
+        matrix,
+        pd.Series(["0"] * 100 + ["1"] * 100 + ["2"] * 100),
+        features,
+        [
+            MarkerProgram(label="B", positive=("MS4A1",)),
+            MarkerProgram(label="Mono", positive=("LYZ",)),
+            MarkerProgram(label="T", positive=("CD3E",)),
+        ],
+        detection=matrix,
+        run_id=model.run.run_id,
+        assay="transcriptome",
+        representation="logcounts",
+        capability=capabilities[0],
+    )
+    cluster = evidence[evidence["cluster_id"].eq("0")].set_index("label")
+    assert cluster.loc["T", "vote_fraction"] == pytest.approx(0.5)
+    assert cluster.loc["B", "n_voters"] == 0
+    assert cluster.loc["Mono", "n_voters"] == 0

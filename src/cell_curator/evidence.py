@@ -502,6 +502,10 @@ def score_marker_programs(
                 ]
             )
             winner = np.asarray(members)[np.argmax(cell_scores, axis=1)]
+            # A cell no program fits better than the dataset average does not vote,
+            # but stays in the cluster size, so a low-signal cluster loses support
+            # instead of handing its cells to whichever sibling sorts first.
+            winner[cell_scores.max(axis=1) <= 0] = -1
             for m in members:
                 voted = winner == m
                 np.add.at(votes[:, m], clusters[voted], 1)
