@@ -29,7 +29,12 @@ if len(LEVELS) != 1:
         "the standard DAG supports exactly one hierarchy level; use "
         "`cell-curator run execute --score-manifest` for recursive multi-level execution"
     )
-RUN = Path(config["run"]["output_root"]) / config["run"]["run_id"]
+# Relative paths resolve against the config file's directory, as in the CLI, not
+# against wherever snakemake was started.
+from cell_curator.config import load_config
+
+ANCHORED = load_config(CONFIG)
+RUN = Path(ANCHORED.run.output_root) / ANCHORED.run.run_id
 LANE_ITEMS = {
     str(item.get("lane_key") or f"{item['assay']}__{item['representation']}"): item
     for item in config.get("evidence", {}).get("lanes", [])
@@ -40,7 +45,7 @@ WRITEBACK_SUFFIX = "h5ad" if config["input"]["kind"] == "h5ad" else "h5mu"
 FIRST_LEVEL = str(LEVELS[0])
 ROOT_GATE = RUN / "gates" / FIRST_LEVEL / "ROOT.approved.json"
 ASSEMBLED_MARKERS = RUN / "markers" / "assembled_programs.json"
-PROVIDERS = config.get("knowledge", {}).get("providers", [])
+PROVIDERS = [provider.model_dump() for provider in ANCHORED.knowledge.providers]
 LOCAL_KNOWLEDGE = sorted(
     {
         Path(provider["path"])
@@ -169,7 +174,7 @@ rule writeback:
 rule canonicalize_and_qc:
     input:
         config=CONFIG,
-        source=lambda wildcards: config["input"]["path"],
+        source=lambda wildcards: ANCHORED.input.path,
         mappings=MAPPING_INPUTS,
     output:
         contract=RUN / "input_contract.manifest.json",

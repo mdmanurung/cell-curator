@@ -124,3 +124,47 @@ def test_a_blank_scope_or_parent_key_is_refused_at_load(tmp_path: Path) -> None:
         config_path.write_text(yaml.safe_dump(value, sort_keys=False))
         with pytest.raises(ValueError, match="name obs columns"):
             load_config(config_path)
+
+
+def test_snakemake_resolves_relative_paths_against_the_config_file(tmp_path: Path) -> None:
+    """Started from another directory, the DAG must plan the run where the CLI writes it."""
+
+    import os
+    import subprocess
+    import sys
+
+    from conftest import REPO_ROOT
+    from test_end_to_end import _synthetic_input
+
+    project = tmp_path / "project"
+    project.mkdir()
+    _synthetic_input(project / "input.h5ad")
+    (project / "markers.json").write_text(json.dumps({"Type A": {"pos": ["A1"]}}))
+    config_path = _config(project, project / "input.h5ad", project / "markers.json")
+    value = yaml.safe_load(config_path.read_text())
+    value["run"]["output_root"] = "results"
+    value["input"]["path"] = "input.h5ad"
+    value["knowledge"]["providers"][0]["path"] = "markers.json"
+    config_path.write_text(yaml.safe_dump(value, sort_keys=False))
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    planned = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "snakemake",
+            "-n",
+            "-c1",
+            "-s",
+            str(REPO_ROOT / "workflow" / "Snakefile"),
+            "--configfile",
+            str(config_path),
+        ],
+        cwd=elsewhere,
+        capture_output=True,
+        text=True,
+        check=True,
+        env={**os.environ, "PATH": f"{Path(sys.executable).parent}:{os.environ['PATH']}"},
+    ).stdout
+    assert str(project / "results" / "synthetic-v1" / "plan.json") in planned
+    assert str(elsewhere / "results") not in planned
