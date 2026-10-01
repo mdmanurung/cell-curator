@@ -68,6 +68,18 @@ class MarkerProgram(StrictModel):
             raise ValueError("marker program label must not be blank")
         return value.strip()
 
+    @model_validator(mode="after")
+    def disjoint_signs(self) -> MarkerProgram:
+        # A gene that is both expected and forbidden makes the program penalise
+        # its own evidence; which sign was meant is the curator's call.
+        overlap = sorted(set(self.positive) & set(self.negative))
+        if overlap:
+            raise ValueError(
+                f"marker program {self.label!r} lists {', '.join(overlap)} as both "
+                "positive and negative"
+            )
+        return self
+
 
 class Capability(StrictModel):
     schema_version: Literal[3] = SCHEMA_VERSION

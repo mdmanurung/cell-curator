@@ -429,3 +429,27 @@ def test_an_exact_tie_reports_bounded_entropy() -> None:
 
     # Five-way tie: unclipped, rounding gives 1.0000000000000002, which the model refuses.
     assert _normalized_entropy(np.full(5, 1 / 5)) <= 1.0
+
+
+def test_a_gene_cannot_be_both_expected_and_forbidden() -> None:
+    from pydantic import ValidationError
+
+    from cell_curator.knowledge import collect_programs
+
+    with pytest.raises(ValidationError, match="NKG7"):
+        MarkerProgram(label="CD8 T", positive=("CD8A", "NKG7"), negative=("NKG7",))
+
+    class Source:
+        def __init__(self, program: MarkerProgram) -> None:
+            self.program = program
+
+        def programs(self) -> list[MarkerProgram]:
+            return [self.program]
+
+    with pytest.raises(ValidationError, match="NKG7"):
+        collect_programs(
+            [
+                Source(MarkerProgram(label="CD8 T", positive=("NKG7",))),
+                Source(MarkerProgram(label="CD8 T", negative=("NKG7",))),
+            ]
+        )

@@ -294,8 +294,10 @@ def collect_programs(providers: Iterable[MarkerProvider]) -> list[MarkerProgram]
             current = merged[key]
             if current.cl_id and program.cl_id and current.cl_id != program.cl_id:
                 raise ContractError(f"conflicting CL IDs for marker program {program.label!r}")
-            merged[key] = current.model_copy(
-                update={
+            # Validated, not model_copy: two sources can disagree on a gene's sign.
+            merged[key] = MarkerProgram.model_validate(
+                {
+                    **current.model_dump(),
                     "positive": tuple(dict.fromkeys((*current.positive, *program.positive))),
                     "negative": tuple(dict.fromkeys((*current.negative, *program.negative))),
                     "cl_id": current.cl_id or program.cl_id,
