@@ -375,7 +375,7 @@ Coverage is 0.590, `descendant_accuracy` 0.338 (the taxonomy stop rule still
 fires), and Brier / ECE 0.517 / 0.571. Of the backoffs, lymphocyte (230 cells)
 is an ancestor of every truth label in its cluster. Mature αβ T cell (111 cells)
 is not an ancestor of the cluster's truth, double-negative regulatory T cell,
-which CL places outside it. So that call is wrong at every tier.
+which CL places outside it. So 96% of that call is wrong at every tier.
 
 ## Why the pre-declared evidence bar is not met, measured rather than guessed
 
