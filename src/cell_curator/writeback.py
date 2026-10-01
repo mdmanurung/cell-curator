@@ -144,7 +144,9 @@ def _approval(
                 "write-back confirmation does not match this preview's approval_token; "
                 "the reviewed state changed or the wrong token was typed"
             )
-        mode = "interactive_confirmed"
+        # Only the CLI's terminal prompt is known to have had a person typing; any
+        # other callable is recorded as what it is.
+        mode = str(getattr(confirm, "approval_mode", "api_callback"))
     elif (
         config.guidance.preauthorized
         and not config.guidance.interactive

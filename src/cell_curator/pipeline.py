@@ -101,8 +101,8 @@ def _programs(config: CellCuratorConfig):
         planned = json.loads(plan_path.read_text()).get("program_digest")
         if planned and planned != programs_digest(programs):
             raise ContractError(
-                "marker programs changed after the plan was approved; re-run "
-                "`cell-curator run plan` and approve the new assumptions, or use a new run_id"
+                "marker programs changed after the plan was approved; plan.json is "
+                "write-once, so start a new run.run_id to plan and approve the new programs"
             )
     ontology = ontology_from_config(config)
     if ontology is not None:
@@ -1176,9 +1176,9 @@ def _label_parent_outcomes(root: Path, *, level: str) -> None:
     mixed = labels["cluster_id"].astype(str).map(outcome).eq(ParentOutcome.DOUBLET_MIXED.value)
     if mixed.any():
         labels.loc[mixed, ["label", "cell_state", "cl_id"]] = ["Unknown", "mixed_or_doublet", ""]
-        labels.loc[mixed, "rationale"] = (
-            "DOUBLET/MIXED parent outcome; identity abstained. " + labels.loc[mixed, "rationale"]
-        )
+        note = "DOUBLET/MIXED parent outcome; identity abstained. "
+        unnoted = mixed & ~labels["rationale"].astype(str).str.startswith(note)
+        labels.loc[unnoted, "rationale"] = note + labels.loc[unnoted, "rationale"]
         scaffold_labels_table(level_path, labels)
     parent_label = dict(
         zip(labels["cluster_id"].astype(str), labels["label"].astype(str), strict=True)

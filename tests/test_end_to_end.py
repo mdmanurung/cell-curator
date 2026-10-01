@@ -287,7 +287,8 @@ def test_independent_end_to_end_and_guarded_writeback(tmp_path: Path) -> None:
     assert not (tmp_path / "must-not-exist.h5ad").exists()
     write_back(config, root, output_path=output, confirm=_confirm)
     receipt = json.loads((root / "writeback/receipt.json").read_text())
-    assert receipt["approval"]["approval_mode"] == "interactive_confirmed"
+    # A Python callback is not the terminal prompt, so it is not recorded as one.
+    assert receipt["approval"]["approval_mode"] == "api_callback"
     assert output.is_file()
     assert sha256(source) == source_before
     annotated = ad.read_h5ad(output)
@@ -489,7 +490,8 @@ def test_interactive_equivalent_end_to_end_requires_named_gate_approval(
     with pytest.raises(ContractError, match="Gate A blocks"):
         run_annotation(config_path)
     approval = approve_assumptions(config_path, reviewer="interactive-reviewer")
-    assert approval["approval_mode"] == "interactive"
+    # The suite has no terminal attached, so the approval is recorded as agent-made.
+    assert approval["approval_mode"] == "agent_recorded"
     packet = run_annotation(config_path)
     root = tmp_path / "results" / "interactive-v1"
     assert packet.is_dir()

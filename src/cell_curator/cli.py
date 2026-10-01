@@ -955,6 +955,9 @@ def _terminal_confirmation(preview: dict[str, Any]) -> str:
     return sys.stdin.readline()
 
 
+setattr(_terminal_confirmation, "approval_mode", "interactive_confirmed")  # noqa: B010
+
+
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()

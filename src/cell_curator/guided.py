@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -777,15 +778,20 @@ def approve_assumptions(
     rows = load_assumptions(root)
     matched = 0
     now = datetime.now(UTC).isoformat()
+    # Honest about who approved: with no terminal attached the caller is a script or
+    # an agent, which is recorded as such rather than as an interactive human.
+    mode = (
+        "preauthorized_non_interactive"
+        if preauthorized
+        else "interactive" if sys.stdin.isatty() else "agent_recorded"
+    )
     for row in rows:
         if scope == "*" or row["scope"] in {"global", scope}:
             row.update(
                 {
                     "status": "APPROVED",
                     "reviewer": reviewer.strip(),
-                    "approval_mode": (
-                        "preauthorized_non_interactive" if preauthorized else "interactive"
-                    ),
+                    "approval_mode": mode,
                     "approved_utc": now,
                 }
             )
@@ -824,7 +830,7 @@ def approve_assumptions(
         "status": "complete" if all_material else "partial",
         "scope": scope,
         "reviewer": reviewer.strip(),
-        "approval_mode": "preauthorized_non_interactive" if preauthorized else "interactive",
+        "approval_mode": mode,
         "approved_count": matched,
         "all_material_approved": all_material,
         "assumptions_sha256": digest,

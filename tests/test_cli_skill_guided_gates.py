@@ -279,8 +279,9 @@ def test_interactive_scene_plan_approval_and_material_assumption_revocation(
     gate_state = require_label_gate(config_path, level="L1", parent="ROOT")
     assert gate_state.labels_permitted is True
     assert gate_state.approved_assumptions_sha256
+    # No terminal is attached under pytest, so the approval is honestly agent-made.
     assert all(
-        row["approval_mode"] == "interactive"
+        row["approval_mode"] == "agent_recorded"
         for row in load_assumptions(root)
         if row["material"]
     )
