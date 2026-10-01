@@ -779,3 +779,33 @@ def test_a_doublet_mixed_parent_abstains_on_identity_in_the_durable_labels(
     labels = pd.read_csv(tmp_path / "labels/L1.tsv", sep="\t", keep_default_na=False)
     by_cluster = labels.set_index(labels["cluster_id"].astype(str))["label"].to_dict()
     assert by_cluster == {"0": "Type A", "1": "Unknown"}
+
+
+def test_ontology_backoff_is_a_plan_assumption_only_when_an_ontology_is_configured(
+    tmp_path: Path,
+) -> None:
+    from cell_curator.guided import load_assumptions
+    from cell_curator.ontology import BACKOFF_ASSUMPTION
+
+    source = tmp_path / "input.h5ad"
+    _synthetic_input(source)
+    markers = tmp_path / "markers.json"
+    markers.write_text(json.dumps({"Type A": {"pos": ["A1"]}, "Type B": {"pos": ["B1"]}}))
+    obo = tmp_path / "cl.obo"
+    obo.write_text("format-version: 1.2\n\n[Term]\nid: CL:0000000\nname: cell\n")
+    for run_id, with_ontology in (("cl-free", False), ("with-cl", True)):
+        config_path = _config(tmp_path, source, markers)
+        value = yaml.safe_load(config_path.read_text())
+        value["run"]["run_id"] = run_id
+        if with_ontology:
+            value["knowledge"]["providers"].append(
+                {"kind": "ontology", "path": str(obo), "version": "fixture"}
+            )
+        config_path.write_text(yaml.safe_dump(value, sort_keys=False))
+        construct_plan(config_path)
+        statements = {
+            row["statement"]
+            for row in load_assumptions(tmp_path / "results" / run_id)
+            if row["scope"] == "global"
+        }
+        assert (BACKOFF_ASSUMPTION in statements) is with_ontology

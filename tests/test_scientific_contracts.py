@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import anndata as ad
 import numpy as np
 import pandas as pd
@@ -297,9 +299,11 @@ def test_raw_representation_uses_raw_feature_axis() -> None:
             index=["raw-a", "raw-b", "raw-c"],
         ),
     )
-    assert list(
-        feature_ids_for(query, "gene_symbol", declaration={"source": "raw"})
-    ) == ["raw-a", "raw-b", "raw-c"]
+    assert list(feature_ids_for(query, "gene_symbol", declaration={"source": "raw"})) == [
+        "raw-a",
+        "raw-b",
+        "raw-c",
+    ]
     assert list(feature_ids_for(query, "gene_symbol", declaration={"source": "X"})) == [
         "current-a",
         "current-b",
@@ -348,8 +352,10 @@ def test_stored_resolution_excludes_transient_children(config: dict) -> None:
         index=[f"cell-{index}" for index in range(12)],
     )
     embedding = np.vstack(
-        [np.column_stack((np.arange(6), np.zeros(6))),
-         np.column_stack((np.arange(6), np.ones(6) * 10))]
+        [
+            np.column_stack((np.arange(6), np.zeros(6))),
+            np.column_stack((np.arange(6), np.ones(6) * 10)),
+        ]
     )
     evaluation = _stored_evaluation(parent_obs, embedding, model)
     assert evaluation is not None
@@ -485,3 +491,65 @@ def test_a_two_group_comparison_ranks_programs_by_effect_not_by_name(config: dic
     assert target.iloc[0]["label"] == "Zeta subtype"
     assert target.iloc[0]["score"] > target.iloc[1]["score"]
     assert target.iloc[0]["vote_fraction"] > 0.5
+
+
+CL_SNAPSHOT = Path(__file__).parents[1] / "benchmarks/data/aida-phase1-v2-pbmc-hvg2000/cl.obo"
+
+
+def test_a_near_tie_backs_off_to_the_shared_ancestor_only_with_an_ontology(
+    config: dict,
+) -> None:
+    """A T-cell cluster split 50/45 between CD4 and CD8 is a mature alpha-beta T
+    cell, not Unknown, once an ontology says so; without one it stays Unknown, and
+    a tie whose only shared ancestors are generic terms (leukocyte) stays Unknown."""
+
+    from cell_curator.ontology import CellOntology
+
+    model = _model(config)
+    capabilities = build_capability_registry(model)
+    features = pd.Index(["CD4", "CD8A", "MS4A1", "LYZ"])
+    cd4, cd8, b, mono = (np.eye(4)[i] * 5.0 for i in range(4))
+    matrix = np.vstack([cd4] * 50 + [cd8] * 45 + [b] * 5 + [mono] * 50 + [cd4] * 45 + [b] * 5)
+    groups = pd.Series(["T"] * 100 + ["mixed"] * 100)
+    programs = [
+        MarkerProgram(
+            label="CD4-positive, alpha-beta T cell", positive=("CD4",), cl_id="CL:0000624"
+        ),
+        MarkerProgram(
+            label="CD8-positive, alpha-beta T cell", positive=("CD8A",), cl_id="CL:0000625"
+        ),
+        MarkerProgram(label="B cell", positive=("MS4A1",), cl_id="CL:0000236"),
+        MarkerProgram(label="monocyte", positive=("LYZ",), cl_id="CL:0000576"),
+    ]
+    evidence = score_marker_programs(
+        matrix,
+        groups,
+        features,
+        programs,
+        detection=matrix,
+        run_id=model.run.run_id,
+        assay="transcriptome",
+        representation="logcounts",
+        capability=capabilities[0],
+    )
+
+    def decide(ontology):
+        _, decisions = aggregate_multimodal_evidence(
+            evidence,
+            capabilities,
+            model,
+            scope="global",
+            cluster_ids=["T", "mixed"],
+            ontology=ontology,
+        )
+        return {item.cluster_id: item for item in decisions}
+
+    without = decide(None)
+    assert without["T"].cell_type == "Unknown" and without["T"].abstained
+
+    with_cl = decide(CellOntology.load(CL_SNAPSHOT))
+    assert with_cl["T"].cell_type == "mature alpha-beta T cell"
+    assert with_cl["T"].cl_id == "CL:0000791"
+    assert with_cl["T"].confidence == pytest.approx(0.95)
+    assert not with_cl["T"].abstained
+    assert with_cl["mixed"].cell_type == "Unknown"

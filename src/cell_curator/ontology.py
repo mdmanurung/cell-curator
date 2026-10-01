@@ -763,3 +763,72 @@ def corroborate_terms_live(
     }
     replace_json(status_path, value)
     return value
+
+
+# Ancestors too broad to be a call: every PBMC label shares them, so backing off
+# to one says nothing a reader did not know.
+BACKOFF_FLOOR = frozenset(
+    {
+        "CL:0000000",  # cell
+        "CL:0000548",  # animal cell
+        "CL:0000255",  # eukaryotic cell
+        "CL:0002371",  # somatic cell
+        "CL:0000226",  # single nucleate cell
+        "CL:0000081",  # blood cell
+        "CL:0000988",  # hematopoietic cell
+        "CL:0000738",  # leukocyte
+        "CL:0000842",  # mononuclear cell
+    }
+)
+BACKOFF_ASSUMPTION = (
+    "When near-tied cell type candidates share one deepest Cell Ontology ancestor "
+    "that is not a generic term (cell, leukocyte, mononuclear cell, and similar), "
+    "and their combined vote share reaches the confidence threshold, the cluster "
+    "is labelled with that ancestor instead of Unknown."
+)
+
+
+def backoff_term(
+    ontology: CellOntology,
+    candidates: list[tuple[str, float]],
+    *,
+    min_margin: float,
+    min_confidence: float,
+) -> tuple[OntologyTerm, float, list[str]] | None:
+    """Deepest ancestor shared by the near-tied candidates, or None.
+
+    ``candidates`` are (CL id, vote share) pairs, best first. The near-tie set is
+    every candidate within ``min_margin`` of the best. The ancestor must be the
+    unique deepest common one, outside :data:`BACKOFF_FLOOR`, and the candidates
+    under it must together hold ``min_confidence`` of the votes.
+    """
+
+    if not candidates:
+        return None
+    top = candidates[0][1]
+    tied = [(cl_id, share) for cl_id, share in candidates if share >= top - min_margin]
+    if len(tied) < 2 or any(not cl_id for cl_id, _ in tied):
+        return None
+    try:
+        closure = {
+            cl_id: ontology.ancestors(cl_id) | {ontology.resolve(cl_id).accession}
+            for cl_id, _ in candidates
+            if cl_id
+        }
+    except ContractError:
+        return None
+    common = {
+        item
+        for item in set.intersection(*(closure[cl_id] for cl_id, _ in tied))
+        if item in ontology.terms and item not in BACKOFF_FLOOR
+    }
+    if not common:
+        return None
+    deepest = max(ontology.depth(item) for item in common)
+    lowest = [item for item in common if ontology.depth(item) == deepest]
+    if len(lowest) != 1:
+        return None
+    mass = sum(share for cl_id, share in candidates if cl_id and lowest[0] in closure[cl_id])
+    if mass < min_confidence:
+        return None
+    return ontology.terms[lowest[0]], min(mass, 1.0), [cl_id for cl_id, _ in tied]

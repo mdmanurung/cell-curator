@@ -22,6 +22,7 @@ from .contracts import (
 from .data import canonicalize, inspect
 from .knowledge import collect_programs, programs_digest, providers_from_config
 from .models import RunMode, RunState
+from .ontology import BACKOFF_ASSUMPTION
 from .provenance import atomic_publish, atomic_replace, publish_json, replace_json
 
 
@@ -687,6 +688,8 @@ def construct_plan(config_path: str | Path) -> dict[str, Any]:
                 True,
             )
         )
+    if any(item.kind in {"ontology", "remote_ontology"} for item in config.knowledge.providers):
+        assumption_values.append(("global", BACKOFF_ASSUMPTION, True))
     _, digest = add_assumptions(root, assumption_values)
     plan = {
         "schema_version": 3,

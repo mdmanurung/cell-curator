@@ -29,6 +29,7 @@ from .data import (
     resolve_obsm,
 )
 from .models import AnnotationDecision, Capability, CapabilityLevel, MarkerProgram
+from .ontology import BACKOFF_ASSUMPTION, CellOntology, backoff_term, ontology_from_config
 from .provenance import make_receipt, publish_json
 
 
@@ -703,8 +704,14 @@ def aggregate_multimodal_evidence(
     *,
     scope: str,
     cluster_ids: list[str],
+    ontology: CellOntology | None = None,
 ) -> tuple[pd.DataFrame, list[AnnotationDecision]]:
-    """Aggregate independent lanes while preserving disagreement and missing gates."""
+    """Aggregate independent lanes while preserving disagreement and missing gates.
+
+    With an ``ontology`` (passed only once its backoff assumption is approved), a
+    cluster that fails on uncertainty alone is labelled with the near-tied
+    candidates' deepest shared ancestor; see :func:`backoff_term`.
+    """
 
     capability_by_key = {(item.assay, item.representation): item for item in capabilities}
     required_lanes = {
@@ -928,7 +935,7 @@ def aggregate_multimodal_evidence(
         observed_required = set(block["lane_key"].astype(str))
         required_complete = required_lanes.issubset(observed_required)
         thresholds = config.evidence
-        passes = bool(
+        evidence_gates = bool(
             winner
             and config.run.mode.value == "annotation"
             and winner["annotation_lanes"] >= 1
@@ -936,11 +943,48 @@ def aggregate_multimodal_evidence(
             and winner["program_coverage"] >= thresholds.min_positive_coverage
             and winner["positive_coverage"] >= thresholds.min_positive_coverage
             and winner["negative_violation"] <= thresholds.max_negative_violation
+            and required_complete
+        )
+        passes = bool(
+            evidence_gates
             and confidence >= thresholds.min_confidence
             and margin >= thresholds.min_margin
             and entropy <= thresholds.max_normalized_entropy
-            and required_complete
         )
+        backoff = (
+            backoff_term(
+                ontology,
+                [(str(item["cl_id"]), float(item["probability"])) for item in finite],
+                min_margin=thresholds.min_margin,
+                min_confidence=thresholds.min_confidence,
+            )
+            if ontology is not None and voted and evidence_gates and not passes
+            else None
+        )
+        if backoff is not None:
+            term, mass, tied = backoff
+            decisions.append(
+                AnnotationDecision(
+                    run_id=config.run.run_id,
+                    scope=scope,
+                    cluster_id=str(cluster_id),
+                    cell_type=term.name,
+                    cell_state=state_label,
+                    cl_id=term.accession,
+                    confidence=mass,
+                    margin=margin,
+                    normalized_entropy=entropy,
+                    abstained=False,
+                    rationale=(
+                        f"Backed off to {term.name} ({term.accession}), the deepest Cell "
+                        f"Ontology ancestor shared by near-tied candidates {', '.join(tied)}, "
+                        f"which together hold {mass:.2f} of the votes."
+                    ),
+                    rejected_alternatives=tuple(item["label"] for item in finite[:4]),
+                    required_capabilities_complete=required_complete,
+                )
+            )
+            continue
         reasons = []
         if winner is None:
             reasons.append("no finite annotation-capable score")
@@ -1639,12 +1683,21 @@ def consolidate_lanes(
         scope = str(scopes[0]) if len(scopes) == 1 else "multi_scope"
     finally:
         close_input(loaded)
+    from .guided import load_assumptions
+
+    backoff_approved = any(
+        row["scope"] == "global"
+        and row["statement"] == BACKOFF_ASSUMPTION
+        and row["status"] == "APPROVED"
+        for row in load_assumptions(run_root)
+    )
     aggregate, decisions = aggregate_multimodal_evidence(
         evidence,
         build_capability_registry(config),
         config,
         scope=scope,
         cluster_ids=cluster_ids,
+        ontology=ontology_from_config(config) if backoff_approved else None,
     )
     decision_frame = pd.DataFrame([decision.model_dump(mode="json") for decision in decisions])
     from .provenance import atomic_publish
