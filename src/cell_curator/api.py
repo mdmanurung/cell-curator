@@ -1058,3 +1058,64 @@ def export_benchmark_predictions(
     from .export import export_benchmark_predictions as export
 
     return export(config, truth_path=truth_path, output_path=output_path)
+
+
+def build_llm_packet(config_path: str | Path, *, output_path: str | Path) -> dict[str, Any]:
+    """Write the packet a host agent answers with a proposals file.
+
+    A host agent sends what it reads to its own model, which the network guard
+    cannot see, so this refuses unless ``knowledge.network`` is ``online`` or the
+    operator set ``evidence.llm.host_agent_local``.
+    """
+
+    from .config import load_config
+    from .llm import packet_from_run
+    from .pipeline import run_root
+    from .provenance import replace_json
+
+    config = load_config(config_path)
+    if config.knowledge.network != "online" and not config.evidence.llm.host_agent_local:
+        raise ContractError(
+            "a host agent sends the packet to its own model, which leaves the "
+            f"institution; knowledge.network is {config.knowledge.network!r}. Use "
+            "`cell-curator llm propose` against a local endpoint, or set "
+            "evidence.llm.host_agent_local: true if the agent's model is local"
+        )
+    packet = packet_from_run(config, run_root(config))
+    replace_json(Path(output_path), packet)
+    return {"packet": str(output_path), "clusters": len(packet["clusters"])}
+
+
+def propose_llm_tie_breaks(
+    config_path: str | Path,
+    *,
+    base_url: str,
+    models: Sequence[str],
+    output_path: str | Path,
+    api_key_env: str = "",
+) -> dict[str, Any]:
+    """Ask an OpenAI-compatible endpoint, once per model, through the network guard."""
+
+    from .config import load_config
+    from .llm import merge, packet_from_run, propose
+    from .pipeline import run_root
+    from .provenance import replace_json
+
+    config = load_config(config_path)
+    root = run_root(config)
+    packet = packet_from_run(config, root)
+    merged = merge(
+        [
+            propose(
+                config,
+                packet,
+                base_url=base_url,
+                model=model,
+                out_dir=root / "llm" / "exchanges" / model.replace("/", "_"),
+                api_key_env=api_key_env,
+            )
+            for model in models
+        ]
+    )
+    replace_json(Path(output_path), merged.model_dump(mode="json"))
+    return {"proposals": str(output_path), "count": len(merged.proposals)}

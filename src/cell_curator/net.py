@@ -63,20 +63,33 @@ ONLINE = NetworkPolicy("online")
 
 
 class _CheckedRedirect(urllib.request.HTTPRedirectHandler):
-    def __init__(self, policy: NetworkPolicy) -> None:
+    def __init__(self, policy: NetworkPolicy, follow: bool) -> None:
         self.policy = policy
+        self.follow = follow
 
     def redirect_request(
         self, req: Any, fp: Any, code: int, msg: str, headers: Any, newurl: str
     ) -> Any:
+        # urllib copies headers, Authorization included, to the redirect target.
+        if not self.follow:
+            raise ContractError(f"refusing a {code} redirect to {newurl!r}")
         self.policy.check(newurl)
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-def _open(request: urllib.request.Request, timeout: float, policy: NetworkPolicy) -> Any:
-    return urllib.request.build_opener(_CheckedRedirect(policy)).open(request, timeout=timeout)
+def _open(
+    request: urllib.request.Request, timeout: float, policy: NetworkPolicy, follow: bool = True
+) -> Any:
+    opener = urllib.request.build_opener(_CheckedRedirect(policy, follow))
+    return opener.open(request, timeout=timeout)
 
 
-def urlopen(request: urllib.request.Request, *, timeout: float, policy: NetworkPolicy) -> Any:
+def urlopen(
+    request: urllib.request.Request,
+    *,
+    timeout: float,
+    policy: NetworkPolicy,
+    redirects: bool = True,
+) -> Any:
     policy.check(request.full_url)
-    return _open(request, timeout, policy)
+    return _open(request, timeout, policy, redirects)

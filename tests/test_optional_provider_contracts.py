@@ -693,7 +693,7 @@ class _FakeResponse:
 def _serve(monkeypatch: pytest.MonkeyPatch, payload: bytes) -> list[str]:
     requested: list[str] = []
 
-    def fake_urlopen(request: Any, timeout: float = 0.0, policy: Any = None) -> _FakeResponse:
+    def fake_urlopen(request: Any, *_: Any) -> _FakeResponse:
         requested.append(request.full_url)
         return _FakeResponse(payload)
 
@@ -858,7 +858,7 @@ def test_an_unreachable_bundle_url_is_a_receipt_not_an_exception(
 ) -> None:
     """Offline is an expected state for an optional provider, not a crash."""
 
-    def refuse(request: Any, timeout: float = 0.0, policy: Any = None) -> _FakeResponse:
+    def refuse(request: Any, *_: Any) -> _FakeResponse:
         raise OSError("network is unreachable")
 
     monkeypatch.setattr("cell_curator.net._open", refuse)

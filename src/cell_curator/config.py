@@ -328,7 +328,19 @@ class EvidenceLaneConfig(StrictModel):
     required_for_acceptance: bool = True
 
 
+class LlmConfig(StrictModel):
+    # A proposals.json from `cell-curator llm propose` or a host agent. Plan binds
+    # its hash; aggregation lets an agreeing, gate-passing proposal break a near-tie.
+    proposals: str = ""
+    # The host agent (Claude Code, Codex, OpenCode) reads the packet and sends it to
+    # its own model. That leaves the institution unless the operator says otherwise.
+    host_agent_local: bool = False
+    # Clusters smaller than this send no pseudobulk means.
+    min_cells: int = Field(default=20, ge=1)
+
+
 class EvidenceConfig(StrictModel):
+    llm: LlmConfig = Field(default_factory=LlmConfig)
     lanes: list[EvidenceLaneConfig] = Field(default_factory=list)
     adjusted_pvalue_max: float = Field(default=0.05, gt=0, le=1)
     require_both_marker_methods: bool = True
@@ -577,6 +589,16 @@ def anchor_relative_paths(
     if not input_path.is_absolute():
         updates["input"] = config.input.model_copy(
             update={"path": str((config_dir / input_path).resolve())}
+        )
+
+    proposals = config.evidence.llm.proposals
+    if proposals and not Path(proposals).is_absolute():
+        updates["evidence"] = config.evidence.model_copy(
+            update={
+                "llm": config.evidence.llm.model_copy(
+                    update={"proposals": str((config_dir / proposals).resolve())}
+                )
+            }
         )
 
     anchored_providers = []

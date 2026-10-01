@@ -132,8 +132,15 @@ Every HTTP request goes through one guard, set by `knowledge.network`:
 An `allowed_hosts` entry that starts with `.` allows that domain's subdomains.
 Redirects are checked too, so an allowed host cannot send a request outside. Census
 and CellTypist use their own network clients, so their routes run only in
-`online` mode. The `acquire-*` commands are downloads a person runs by name: each
-sends one GET for a public, checksum-pinned file.
+`online` mode. `reference acquire-azimuth` and `acquire-scimilarity` are downloads
+a person runs by name, each one GET for a public, checksum-pinned file.
+`reference acquire-census` queries Census through tiledb, outside the guard.
+
+LLM tie-breaks follow the same rule: `cell-curator llm propose` reaches only what
+`network` allows, so `institution` with a local Ollama or vLLM server keeps every
+payload inside the institution. A host agent that reads `llm packet` output sends
+it to its own model, so that command refuses unless `network` is `online` or
+`evidence.llm.host_agent_local` is set.
 
 ## Execute the workflow
 
@@ -151,7 +158,7 @@ uv run cell-curator run execute --config config.yaml
 uv run cell-curator run validate --config config.yaml
 ```
 
-For additional commands, `cell-curator --help` lists all 21 command groups.
+For additional commands, `cell-curator --help` lists all 22 command groups.
 
 For resumable execution, Snakemake manages dependencies and stale artifacts. The
 targets below preserve the evidence, review, and finalization boundaries. Write-back

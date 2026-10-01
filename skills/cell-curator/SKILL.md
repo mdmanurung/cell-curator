@@ -182,6 +182,35 @@ pinned by a required `--expected-sha256`, and writes a receipt recording the
 cache hit and checksum result. A bundle is stored as published; extract it
 yourself before passing it to `--reference` or `--model-path`.
 
+### Optional: LLM tie-breaks
+
+An LLM may only break a near-tie that the measured evidence left open. It never
+overrules a call. A proposal counts only when:
+- every model agrees;
+- the label is one of the cluster's near-tied candidates;
+- that candidate passes its own coverage and negative-marker gates;
+- every gene it cites is a positive marker of the cluster.
+
+The model sees cluster-level statistics only: candidates, top markers, and
+pseudobulk means for clusters of at least `evidence.llm.min_cells` cells.
+
+```bash
+cell-curator llm propose --config config.yaml --base-url http://localhost:11434/v1 \
+  --model MODEL --output proposals.json
+cell-curator llm packet --config config.yaml --output llm-packet.json
+```
+
+`llm propose` goes through the network guard, so `knowledge.network: institution`
+keeps it on localhost and `knowledge.allowed_hosts`. `llm packet` is for answering
+as the host agent. **Do not read the packet yourself unless the user confirms your
+model may see it:** your harness sends what you read to its model, outside the
+guard. The command refuses unless `knowledge.network` is `online` or the user set
+`evidence.llm.host_agent_local: true`. If you answer, write `proposals.json` as
+`{"schema_version": 3, "payload_sha256": "<packet sha256>", "proposals": [{"cluster_id",
+"label", "cited_genes", "rationale", "model"}]}`. Then set
+`evidence.llm.proposals` in a config with a new `run.run_id` and run it from
+plan; plan binds the file and adds an assumption for Gate A.
+
 ## 4. Review and validate
 
 Create evidence cards, import independent critic findings, reconcile each finding,

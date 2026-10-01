@@ -371,7 +371,7 @@ def _serve_ols(monkeypatch: pytest.MonkeyPatch, payload: object) -> list[str]:
         def __exit__(self, *exc: object) -> bool:
             return False
 
-    def fake_urlopen(request: Any, timeout: float = 0.0, policy: Any = None) -> Any:
+    def fake_urlopen(request: Any, *_: Any) -> Any:
         requested.append(request.full_url)
         return _Response(json.dumps(payload).encode())
 
@@ -522,7 +522,7 @@ def test_live_corroboration_reports_obsolescence_and_name_disagreement(
 def test_an_unreachable_ontology_service_is_a_receipt_not_an_exception(
     monkeypatch: pytest.MonkeyPatch, config: dict, tmp_path: Path
 ) -> None:
-    def refuse(request: Any, timeout: float = 0.0, policy: Any = None) -> Any:
+    def refuse(request: Any, *_: Any) -> Any:
         raise OSError("network is unreachable")
 
     monkeypatch.setattr("cell_curator.net._open", refuse)
@@ -545,7 +545,7 @@ def test_a_live_provider_never_becomes_required_for_a_label(
     ontology must still resolve terms and still validate durable labels.
     """
 
-    def refuse(request: Any, timeout: float = 0.0, policy: Any = None) -> Any:
+    def refuse(request: Any, *_: Any) -> Any:
         raise OSError("network is unreachable")
 
     monkeypatch.setattr("cell_curator.net._open", refuse)

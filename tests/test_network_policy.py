@@ -32,7 +32,7 @@ def test_each_mode_reaches_exactly_the_hosts_it_names() -> None:
 
 
 def test_an_allowed_host_cannot_redirect_a_request_outside() -> None:
-    handler = _CheckedRedirect(NetworkPolicy("institution"))
+    handler = _CheckedRedirect(NetworkPolicy("institution"), True)
     request = urllib.request.Request("http://localhost/x")
     with pytest.raises(ContractError, match="outside the institution"):
         handler.redirect_request(request, None, 302, "Found", {}, "https://example.com/y")
@@ -56,3 +56,10 @@ def test_offline_is_the_default_and_the_old_switch_still_loads() -> None:
         KnowledgeConfig.model_validate({"allow_optional_remote_enhancement": False}).network
         == "offline"
     )
+
+
+def test_a_request_that_carries_a_key_follows_no_redirect() -> None:
+    handler = _CheckedRedirect(NetworkPolicy("online"), False)
+    request = urllib.request.Request("https://api.example.com/v1/chat/completions")
+    with pytest.raises(ContractError, match="refusing a 307 redirect"):
+        handler.redirect_request(request, None, 307, "Temporary", {}, "https://other.example/")

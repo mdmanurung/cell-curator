@@ -409,6 +409,26 @@ def build_parser() -> argparse.ArgumentParser:
     apply.add_argument("--ontology", type=Path)
     apply.add_argument("--in-place", action="store_true")
 
+    llm_command = commands.add_parser(
+        "llm", help="gated LLM tie-breaks: build the packet or ask a model"
+    )
+    llm_sub = llm_command.add_subparsers(dest="action", required=True)
+    llm_packet = llm_sub.add_parser(
+        "packet", help="write the packet a host agent answers with proposals.json"
+    )
+    _config_argument(llm_packet)
+    llm_packet.add_argument("--output", required=True, type=Path)
+    llm_propose = llm_sub.add_parser(
+        "propose", help="ask an OpenAI-compatible endpoint, through the network guard"
+    )
+    _config_argument(llm_propose)
+    llm_propose.add_argument("--base-url", required=True, help="e.g. http://localhost:11434/v1")
+    llm_propose.add_argument("--model", required=True, action="append")
+    llm_propose.add_argument(
+        "--api-key-env", default="", help="environment variable holding the key"
+    )
+    llm_propose.add_argument("--output", required=True, type=Path)
+
     benchmark_command = commands.add_parser(
         "benchmark", help="evaluate neutral exported predictions"
     )
@@ -921,6 +941,18 @@ def dispatch(args: argparse.Namespace) -> Any:
                 )
             )
         }
+    if args.command == "llm":
+        from .api import build_llm_packet, propose_llm_tie_breaks
+
+        if args.action == "packet":
+            return build_llm_packet(args.config, output_path=args.output)
+        return propose_llm_tie_breaks(
+            args.config,
+            base_url=args.base_url,
+            models=args.model,
+            output_path=args.output,
+            api_key_env=args.api_key_env,
+        )
     if args.command == "benchmark":
         from .benchmark import evaluate_file, validate_dataset_manifest
 
@@ -934,7 +966,6 @@ def dispatch(args: argparse.Namespace) -> Any:
             ).model_dump(mode="json")
         return validate_dataset_manifest(args.manifest)
     raise ContractError(f"unsupported command: {args.command}")
-
 
 
 def _terminal_confirmation(preview: dict[str, Any]) -> str:

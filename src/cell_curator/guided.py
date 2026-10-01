@@ -719,12 +719,30 @@ def construct_plan(config_path: str | Path) -> dict[str, Any]:
                             True,
                         )
                     )
+    llm_proposals = config.evidence.llm.proposals
+    if llm_proposals:
+        from .llm import ProposalSet
+
+        proposal_set = ProposalSet.model_validate_json(Path(llm_proposals).read_text())
+        models = sorted({item.model for item in proposal_set.proposals})
+        assumption_values.append(
+            (
+                "global",
+                f"LLM proposals from {', '.join(models) or 'no model'} (file sha256 "
+                f"{sha256(Path(llm_proposals))[:12]}, packet {proposal_set.payload_sha256[:12]}) "
+                "may break a near-tie among measured candidates when every model agrees, the "
+                "candidate passes its own marker gates, and every cited gene is a positive "
+                "marker of the cluster. The model saw cluster-level statistics only.",
+                True,
+            )
+        )
     _, digest = add_assumptions(root, assumption_values)
     plan = {
         "schema_version": 3,
         "artifact_kind": "cell_curator_annotation_plan",
         "run_id": config.run.run_id,
         "program_digest": programs_digest(programs),
+        "llm_proposals_sha256": sha256(Path(llm_proposals)) if llm_proposals else "",
         "vocabulary_path": str(vocab_path),
         "levels": levels,
         "routes": routes,

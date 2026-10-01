@@ -414,6 +414,9 @@
           "title": "Lanes",
           "type": "array"
         },
+        "llm": {
+          "$ref": "#/$defs/LlmConfig"
+        },
         "max_negative_violation": {
           "default": 0.25,
           "maximum": 1,
@@ -779,6 +782,29 @@
         }
       },
       "title": "KnowledgeConfig",
+      "type": "object"
+    },
+    "LlmConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "host_agent_local": {
+          "default": false,
+          "title": "Host Agent Local",
+          "type": "boolean"
+        },
+        "min_cells": {
+          "default": 20,
+          "minimum": 1,
+          "title": "Min Cells",
+          "type": "integer"
+        },
+        "proposals": {
+          "default": "",
+          "title": "Proposals",
+          "type": "string"
+        }
+      },
+      "title": "LlmConfig",
       "type": "object"
     },
     "MarkerConfig": {
