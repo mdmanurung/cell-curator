@@ -843,3 +843,76 @@ def test_ontology_backoff_is_a_plan_assumption_only_when_an_ontology_is_configur
             )
             is with_ontology
         )
+
+
+def test_an_ontology_backoff_label_reaches_the_written_h5ad(tmp_path: Path) -> None:
+    """Cluster 0 is half Type A and half Type B cells, both kinds of Shared parent.
+    With the ontology configured, the cluster is written as Shared parent with its
+    CL id, not Unknown."""
+
+    rng = np.random.default_rng(3)
+    counts = np.zeros((60, 6), dtype=np.float32)
+    counts[:15, :2] = rng.poisson(8, size=(15, 2)) + 1
+    counts[15:30, 2:4] = rng.poisson(8, size=(15, 2)) + 1
+    counts[30:, 4:] = rng.poisson(8, size=(30, 2)) + 1
+    genes = ["A1", "A2", "B1", "B2", "N1", "N2"]
+    adata = ad.AnnData(
+        X=np.log1p(counts),
+        obs=pd.DataFrame(
+            {"canonical_cluster": ["0"] * 30 + ["1"] * 30, "lineage": ["immune"] * 60},
+            index=[f"cell-{index:03d}" for index in range(60)],
+        ),
+        var=pd.DataFrame({"gene_symbol": genes}, index=genes),
+    )
+    adata.layers["counts"] = counts
+    adata.layers["logcounts"] = np.log1p(counts)
+    adata.obsm["X_pca_harmony"] = np.vstack(
+        [rng.normal(-3, 0.2, size=(30, 3)), rng.normal(3, 0.2, size=(30, 3))]
+    ).astype(np.float32)
+    source = tmp_path / "source.h5ad"
+    adata.write_h5ad(source)
+    markers = tmp_path / "markers.json"
+    markers.write_text(
+        json.dumps(
+            {
+                "Type A": {"pos": ["A1", "A2"], "neg": ["N1", "N2"], "cl_id": "CL:9000001"},
+                "Type B": {"pos": ["B1", "B2"], "neg": ["N1", "N2"], "cl_id": "CL:9000002"},
+                "Type N": {"pos": ["N1", "N2"], "neg": ["A1", "B1"], "cl_id": "CL:9000003"},
+            }
+        )
+    )
+    obo = tmp_path / "cl.obo"
+    obo.write_text(
+        "format-version: 1.2\n\n"
+        "[Term]\nid: CL:0000000\nname: cell\n\n"
+        "[Term]\nid: CL:9000000\nname: Shared parent\nis_a: CL:0000000\n\n"
+        "[Term]\nid: CL:9000001\nname: Type A\nis_a: CL:9000000\n\n"
+        "[Term]\nid: CL:9000002\nname: Type B\nis_a: CL:9000000\n\n"
+        "[Term]\nid: CL:9000003\nname: Type N\nis_a: CL:0000000\n"
+    )
+    config_path = _config(tmp_path, source, markers)
+    value = yaml.safe_load(config_path.read_text())
+    value["knowledge"]["providers"].append(
+        {"kind": "ontology", "path": str(obo), "version": "fixture"}
+    )
+    config_path.write_text(yaml.safe_dump(value, sort_keys=False))
+
+    run_annotation(config_path)
+    config = load_config(config_path)
+    root = run_root(config)
+    proposals = pd.read_csv(
+        root / "evidence/summary/annotation_proposals.tsv", sep="\t", keep_default_na=False
+    ).set_index("cluster_id")
+    assert proposals.loc[0, "cell_type"] == "Shared parent"
+    assert proposals.loc[0, "cl_id"] == "CL:9000000"
+    assert proposals.loc[0, "rationale"].startswith("Backed off to Shared parent")
+    assert proposals.loc[1, "cell_type"] == "Type N"
+
+    _record_critics(config, root, tmp_path)
+    output = tmp_path / "annotated.h5ad"
+    write_back(
+        config, root, output_path=output, confirm=_confirm, ontology=CellOntology.load(obo)
+    )
+    written = ad.read_h5ad(output).obs
+    assert set(written["cell_curator_type"].astype(str).iloc[:30]) == {"Shared parent"}
+    assert set(written["cell_curator_type"].astype(str).iloc[30:]) == {"Type N"}
