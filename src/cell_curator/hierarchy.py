@@ -238,13 +238,19 @@ def assign_parent_scoped_level(
         )
     )
     for cluster_id, cluster_scores in block.groupby("cluster_id", observed=True, sort=True):
-        ordered = cluster_scores.sort_values(["score", "label"], ascending=[False, True])
+        # A table from score_marker_programs carries per-cell votes, so it is
+        # ranked and gated on vote share in the units config.evidence uses.
+        # Without votes, confidence is the advisory blend, reported but never a
+        # gate: it is capped at 0.5 when specificity and agreement are absent.
+        voted = "vote_fraction" in cluster_scores.columns
+        rank = "vote_fraction" if voted else "score"
+        ordered = cluster_scores.sort_values(
+            [rank, "score", "label"], ascending=[False, False, True]
+        )
         winner = ordered.iloc[0]
         runner = ordered.iloc[1] if len(ordered) > 1 else None
         margin = (
-            float(winner["score"] - runner["score"])
-            if runner is not None
-            else float(winner["score"])
+            float(winner[rank] - runner[rank]) if runner is not None else float(winner[rank])
         )
         specificity = float(winner.get("specificity", winner.get("de_overlap", 0.0)))
         agreement = float(winner.get("agreement", winner.get("crosscheck_agreement", 0.0)))
@@ -261,8 +267,10 @@ def assign_parent_scoped_level(
             for row in ordered.iloc[1:4].itertuples(index=False)
         ]
         abstain_reasons = []
-        if confidence < minimum_confidence:
-            abstain_reasons.append("advisory confidence below threshold")
+        if voted:
+            confidence = float(winner["vote_fraction"])
+        if voted and confidence < minimum_confidence:
+            abstain_reasons.append("vote share below threshold")
         if margin < minimum_margin:
             abstain_reasons.append("evidence margin below threshold")
         if bool(state.get("identity_must_abstain", False)):

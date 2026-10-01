@@ -399,3 +399,28 @@ def test_strict_nesting_allows_unknown_but_rejects_reused_child_and_duplicate_le
     duplicated = pd.DataFrame({"barcode": ["c0", "c0"], "leaf_id": ["Shared", "Unknown"]})
     with pytest.raises(ContractError, match="duplicate barcodes"):
         validate_hierarchy_nesting([immune, stromal], cell_membership=duplicated)
+
+
+def test_score_only_tables_are_not_capped_by_advisory_confidence() -> None:
+    """Advisory confidence tops out at 0.5 without specificity and agreement, which
+    sat under the 0.55 gate, so a clear winner in a cluster/label/score table abstained."""
+
+    vocabulary = pd.DataFrame(
+        [
+            {"level": "L1", "parent_scope": "ROOT", "label": "T"},
+            {"level": "L1", "parent_scope": "ROOT", "label": "B"},
+        ]
+    )
+    scores = pd.DataFrame(
+        [
+            {"cluster_id": "0", "label": "T", "score": 3.0},
+            {"cluster_id": "0", "label": "B", "score": -1.0},
+        ]
+    )
+    plain = assign_parent_scoped_level(scores, vocabulary, level="L1", parent_scope="ROOT")
+    assert plain.loc[0, "label"] == "T"
+
+    voted = scores.assign(vote_fraction=[0.5, 0.3])
+    impure = assign_parent_scoped_level(voted, vocabulary, level="L1", parent_scope="ROOT")
+    assert impure.loc[0, "label"] == "Unknown"
+    assert "vote share below threshold" in impure.loc[0, "rationale"]
