@@ -336,7 +336,13 @@ a backoff ancestor must be a `CL:` term. Every other part of v3 is unchanged: in
 vocabulary, thresholds, lanes, and scoring. The change follows from the cluster 14
 bug, not from tuning, and its only predicted effect is that cluster 14 becomes
 Unknown. Any other difference between v3 and v4 means the change did more than it
-says, and is reported as such. Run id `aida-pbmc-v12`.
+says, and is reported as such. Run id `aida-pbmc-v12`, config
+`data/aida-pbmc-protocol-v4/config.yaml`.
+
+The engine commit also carries the network guard (`2aa511f`), which makes
+`offline` the default. This config declares no remote provider and v3 made no
+request, so the guard should change only the wording of route reasons in
+`plan.json`, not a score or a label. The v3-to-v4 comparison checks this.
 
 ## Why the pre-declared evidence bar is not met, measured rather than guessed
 
