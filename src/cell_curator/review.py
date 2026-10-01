@@ -232,11 +232,15 @@ def resolve_durable_mapping_values(
             if matched.empty:
                 continue
             selected = matched.iloc[0]
-            selected_label = str(selected["label"]).strip()
-            selected_state = str(selected["cell_state"]).strip()
-            parent = selected_label
-            if selected_label == "Unknown":
+            label = str(selected["label"]).strip()
+            if label == "Unknown" and selected_label:
+                # A finer level that could not refine keeps the supported parent label.
                 break
+            selected_label = label
+            selected_state = str(selected["cell_state"]).strip()
+            # An Unknown parent still descends: accepted children of a mixed parent
+            # are scoped under "Unknown" and refine it.
+            parent = selected_label
         if not selected_label or not selected_state:
             raise ContractError(
                 f"durable labels do not resolve barcode {row.get('barcode')} within its parent path"

@@ -596,6 +596,14 @@ def test_stored_refinement_promotes_only_evidence_backed_children(
     assert set(mapping["membership_role"]) == {"accepted_child"}
     assert run_annotation(config_path) == packet
 
+    # The accepted children must reach the written object, not only the leaf column.
+    config_value = load_config(config_path)
+    _record_critics(config_value, root, tmp_path)
+    output = tmp_path / "split-annotated.h5ad"
+    write_back(config_value, root, output_path=output, confirm=_confirm)
+    written = ad.read_h5ad(output)
+    assert set(written.obs["cell_curator_type"].astype(str)) == {"Type A", "Type B"}
+
 
 def test_zero_applicable_lanes_complete_with_unknown_calls(tmp_path: Path) -> None:
     source = tmp_path / "zero-lane.h5ad"
@@ -718,3 +726,54 @@ def test_the_documented_review_loop_still_validates_after_critics(tmp_path: Path
     config_path = tmp_path / "config.yaml"
     assert validate(config_path)["status"] == "complete"
     assert run_annotation(config_path).is_dir()
+
+
+def test_a_finer_level_abstention_keeps_the_supported_parent_label() -> None:
+    mapping = pd.DataFrame(
+        {"barcode": ["b1"], "leaf_id": ["c1"], "canonical_parent": ["c1"]}
+    )
+    rows = [
+        ("L1", "ROOT", "c1", "T cell"),
+        ("L2", "T cell", "c1", "Unknown"),
+    ]
+    labels = pd.DataFrame(
+        [
+            {"level": lv, "parent_scope": ps, "cluster_id": cid, "label": lab, "cell_state": "normal"}
+            for lv, ps, cid, lab in rows
+        ]
+    )
+    resolved = resolve_durable_mapping_values(mapping, labels)
+    assert list(resolved["cell_type"]) == ["T cell"]
+
+
+def test_a_doublet_mixed_parent_abstains_on_identity_in_the_durable_labels(
+    tmp_path: Path,
+) -> None:
+    from cell_curator.hierarchy import LABEL_COLUMNS
+    from cell_curator.pipeline import _label_parent_outcomes
+
+    (tmp_path / "labels").mkdir()
+    (tmp_path / "decisions").mkdir()
+    base = dict.fromkeys(LABEL_COLUMNS, "")
+    pd.DataFrame(
+        [
+            {**base, "level": "L1", "parent_scope": "ROOT", "cluster_id": "0", "label": "Type A",
+             "cell_state": "normal", "rationale": "markers"},
+            {**base, "level": "L1", "parent_scope": "ROOT", "cluster_id": "1", "label": "Type B",
+             "cell_state": "normal", "rationale": "markers"},
+        ]
+    ).to_csv(tmp_path / "labels/L1.tsv", sep="\t", index=False)
+    pd.DataFrame(
+        {
+            "parent_id": ["0", "1"],
+            "recommended_outcome": ["RETAIN PARENT", "DOUBLET/MIXED"],
+            "accepted_child_ids_recommended": ["", ""],
+        }
+    ).to_csv(tmp_path / "decisions/parent_decision_summary.tsv", sep="\t", index=False)
+    pd.DataFrame(columns=["candidate_child_uid"]).to_csv(
+        tmp_path / "decisions/child_evidence_summary.tsv", sep="\t", index=False
+    )
+    _label_parent_outcomes(tmp_path, level="L1")
+    labels = pd.read_csv(tmp_path / "labels/L1.tsv", sep="\t", keep_default_na=False)
+    by_cluster = labels.set_index(labels["cluster_id"].astype(str))["label"].to_dict()
+    assert by_cluster == {"0": "Type A", "1": "Unknown"}

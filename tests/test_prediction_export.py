@@ -146,10 +146,15 @@ def test_a_completed_export_carries_both_sides_of_every_comparable_column(
         mapping=_mapping(
             ["c0", "c1", "c2", "c3", "c4"],
             ["T cell", "B cell", "T cell", "Unknown", "T cell"],
-            ["0", "1", "0", "0", "0"],
+            ["0", "1", "0", "2", "0"],
         ),
+        # Cluster 2 was decided against the T cell program but abstained.
         labels=_labels(
-            [("0", "T cell", "CL:0000084", 0.9), ("1", "B cell", "CL:0000236", 0.7)]
+            [
+                ("0", "T cell", "CL:0000084", 0.9),
+                ("1", "B cell", "CL:0000236", 0.7),
+                ("2", "Unknown", "CL:0000084", 0.4),
+            ]
         ),
     )
     truth = _truth(

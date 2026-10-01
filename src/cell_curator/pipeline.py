@@ -505,6 +505,32 @@ def execute_recursive_hierarchy(
             continue
 
         scores = _normalize_score_table(normalized_scores[scope], level=level, parent=parent)
+        if scope != root_scope:
+            # A child scope refines only the clusters its parent level routed into it;
+            # any other row would label a cluster under a parent it never had.
+            # A row refines the routed cluster it names: its own cluster_id when it
+            # reuses the parent's clusters, or parent_cluster_id for a subcluster.
+            routed = {str(origin["source_cluster_id"]) for origin in origins.get(scope, [])}
+            refines = (
+                scores["parent_cluster_id"] if "parent_cluster_id" in scores else scores["cluster_id"]
+            ).astype(str)
+            unrouted = sorted(set(refines) - routed)
+            if unrouted:
+                raise ContractError(
+                    f"score table for {level}::{parent} names clusters the parent level did "
+                    f"not route there: {unrouted[:10]}"
+                )
+            for origin in origins.get(scope, []):
+                if str(origin["source_cluster_id"]) not in set(refines):
+                    retained.append(
+                        {
+                            **origin,
+                            "requested_level": level,
+                            "requested_parent_scope": parent,
+                            "leaf_label": parent,
+                            "reason": "missing_from_child_score_table",
+                        }
+                    )
         safe_parent = _scope_filename(parent)
         score_path = root / "hierarchy" / "scores" / level / f"{safe_parent}.tsv"
         _replace_if_changed(
@@ -1116,8 +1142,84 @@ def map_cells(config_path: Path) -> pd.DataFrame:
         config_path, level=config.guidance.hierarchy_levels[0], parent="ROOT"
     )
     mapping = build_mapping(config=config, run_root=root)
+    _label_parent_outcomes(root, level=config.guidance.hierarchy_levels[0])
     _advance(root, "MAPPING_VALIDATED")
     return mapping
+
+
+def _label_parent_outcomes(root: Path, *, level: str) -> None:
+    """Carry parent outcomes and accepted children into the durable labels tables.
+
+    Write-back, the report, and the benchmark export all resolve cells through
+    labels/*.tsv. Without this, an accepted split changed only the leaf column and a
+    DOUBLET/MIXED parent still wrote its parent label for every cell.
+    """
+
+    from .hierarchy import LABEL_COLUMNS, scaffold_labels_table
+    from .models import ParentOutcome
+
+    level_path = root / "labels" / f"{level}.tsv"
+    labels = pd.read_csv(level_path, sep="\t", keep_default_na=False)
+    decisions = pd.read_csv(
+        root / "decisions" / "parent_decision_summary.tsv", sep="\t", keep_default_na=False
+    )
+    children = pd.read_csv(
+        root / "decisions" / "child_evidence_summary.tsv", sep="\t", keep_default_na=False
+    )
+    outcome = dict(
+        zip(
+            decisions["parent_id"].astype(str),
+            decisions["recommended_outcome"].astype(str),
+            strict=True,
+        )
+    )
+    mixed = labels["cluster_id"].astype(str).map(outcome).eq(ParentOutcome.DOUBLET_MIXED.value)
+    if mixed.any():
+        labels.loc[mixed, ["label", "cell_state", "cl_id"]] = ["Unknown", "mixed_or_doublet", ""]
+        labels.loc[mixed, "rationale"] = (
+            "DOUBLET/MIXED parent outcome; identity abstained. " + labels.loc[mixed, "rationale"]
+        )
+        scaffold_labels_table(level_path, labels)
+    parent_label = dict(
+        zip(labels["cluster_id"].astype(str), labels["label"].astype(str), strict=True)
+    )
+    child_level = f"L{int(level[1:]) + 1}" if level[1:].isdigit() else f"{level}.children"
+    by_uid = children.set_index(children["candidate_child_uid"].astype(str)) if len(children) else None
+    rows = []
+    for decision in decisions.to_dict("records"):
+        parent = str(decision["parent_id"])
+        accepted = [item for item in str(decision["accepted_child_ids_recommended"]).split(";") if item]
+        if by_uid is None:
+            continue
+        for uid in accepted:
+            child = by_uid.loc[uid]
+            rows.append(
+                {
+                    "level": child_level,
+                    # An abstained parent is often a genuine mix that refinement resolves.
+                    "parent_scope": parent_label.get(parent, "Unknown"),
+                    "cluster_id": uid,
+                    "label": str(child["cell_type"]),
+                    "cell_state": str(child.get("cell_state", "not_assessed")),
+                    "cl_id": str(child.get("cl_id", "")),
+                    "confidence": float(child.get("separation_score", 0.0)),
+                    "margin": 0.0,
+                    "specificity": 0.0,
+                    "agreement": 0.0,
+                    "coverage": 0.0,
+                    "rationale": "accepted child: passed the two-comparator, modality, "
+                    "stability, and technical gates",
+                    "rejected_alternatives": "none measured",
+                    "reviewer": "",
+                }
+            )
+    child_path = root / "labels" / f"{child_level}.tsv"
+    if rows:
+        scaffold_labels_table(
+            child_path, pd.DataFrame(rows, columns=LABEL_COLUMNS), retain_unmentioned=False
+        )
+    else:
+        child_path.unlink(missing_ok=True)
 
 
 def review(config_path: Path, *, strict: bool = True) -> Path:

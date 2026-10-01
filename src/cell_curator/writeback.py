@@ -70,9 +70,8 @@ def _validate_durable_parent_paths(labels: pd.DataFrame) -> None:
             raise ContractError(
                 f"durable hierarchy level {level} has unresolved parent scopes: {sorted(missing)}"
             )
-        available_parents.update(
-            block.loc[~block["label"].astype(str).eq("Unknown"), "label"].astype(str)
-        )
+        # "Unknown" is a valid parent scope: refinement may resolve a mixed parent.
+        available_parents.update(block["label"].astype(str))
 
 
 def _category_color_plan(

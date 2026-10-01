@@ -241,7 +241,6 @@ def derive_candidate_evidence(
         lane_rows: list[dict[str, Any]] = []
         winners: list[str] = []
         state_winners: list[str] = []
-        role_results: dict[str, list[bool]] = {role: [] for role in config.comparators.roles}
         for lane in config.evidence.lanes:
             capability = capability_index[(lane.assay, lane.representation)]
             configured_key = lane_key(lane.assay, lane.representation, lane.lane_key)
@@ -379,9 +378,9 @@ def derive_candidate_evidence(
                     if not states.empty:
                         state_winners.append(str(states.iloc[0]["label"]))
                 lane_passes.append(passed)
-                role_results[role].append(passed)
                 lane_rows.append(
                     {
+                        "required": bool(lane.required_for_acceptance),
                         "lane_id": lane_id,
                         "lane_key": configured_key,
                         "comparator_role": role,
@@ -410,16 +409,13 @@ def derive_candidate_evidence(
         technical_pass = bool(
             limit is None or float(candidate["technical_effect_size"]) < limit
         )
+        gated_rows = [item for item in lane_rows if item["required"]] or lane_rows
         gate_values = {
             "stability_pass": stability_pass,
-            "candidate_vs_parent_remainder_pass": bool(
-                role_results.get("parent_remainder")
-            )
-            and all(role_results["parent_remainder"]),
-            "candidate_vs_closest_sibling_pass": bool(
-                role_results.get("closest_sibling")
-            )
-            and all(role_results["closest_sibling"]),
+            # Optional lanes corroborate; only required lanes (or every lane, when
+            # none is marked required) can veto a child.
+            "candidate_vs_parent_remainder_pass": _role_pass(gated_rows, "parent_remainder"),
+            "candidate_vs_closest_sibling_pass": _role_pass(gated_rows, "closest_sibling"),
             "positive_program_pass": any(
                 item["detection_valid"]
                 and item["program_coverage"] >= config.evidence.min_positive_coverage
@@ -429,10 +425,10 @@ def derive_candidate_evidence(
             "expected_negative_program_pass": all(
                 item["detection_valid"]
                 and item["negative_violation"] <= config.evidence.max_negative_violation
-                for item in lane_rows
+                for item in gated_rows
             )
-            and bool(lane_rows),
-            "cell_level_separation_pass": all(item["separation"] >= 0.1 for item in lane_rows),
+            and bool(gated_rows),
+            "cell_level_separation_pass": all(item["separation"] >= 0.1 for item in gated_rows),
             "source_corroboration_pass": bool(winners),
             "technical_confounding_pass": technical_pass,
         }
@@ -551,16 +547,19 @@ def decide_parents_from_artifacts(
             if not audit.empty
             else pd.DataFrame()
         )
-        if not accepted.empty:
-            outcome = ParentOutcome.ACCEPT_SPLIT
-            reason = "one or more nested children passed two-comparator, modality, stability, and technical gates"
-        elif not audit_row.empty and bool(
+        if not audit_row.empty and bool(
             str(audit_row.iloc[0].get("doublet_enriched", "false")).lower() in {"true", "1"}
             or str(audit_row.iloc[0].get("incompatible_program_enriched", "false")).lower()
             in {"true", "1"}
         ):
+            # Checked first: children split from a doublet-enriched parent are not
+            # evidence of real subtypes, so the audit vetoes the split.
             outcome = ParentOutcome.DOUBLET_MIXED
             reason = "computed doublet or incompatible-program audit evidence"
+            accepted = accepted.iloc[0:0]
+        elif not accepted.empty:
+            outcome = ParentOutcome.ACCEPT_SPLIT
+            reason = "one or more nested children passed two-comparator, modality, stability, and technical gates"
         elif not audit_row.empty and any(
             str(audit_row.iloc[0].get(key, "false")).lower() in {"true", "1"}
             for key in ("donor_dominated", "capture_dominated", "qc_outlier")
@@ -592,6 +591,11 @@ def decide_parents_from_artifacts(
     path = run_root / "decisions" / "parent_decision_summary.tsv"
     atomic_publish(path, result.to_csv(sep="\t", index=False, lineterminator="\n").encode())
     return result
+
+
+def _role_pass(rows: list[dict[str, Any]], role: str) -> bool:
+    passes = [bool(item["pass"]) for item in rows if item["comparator_role"] == role]
+    return bool(passes) and all(passes)
 
 
 def build_mapping(

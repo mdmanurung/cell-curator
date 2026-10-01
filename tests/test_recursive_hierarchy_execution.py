@@ -136,8 +136,21 @@ def _write_fixture(
     return config_path, source, markers
 
 
+# The L1 cluster each fixture subcluster refines; a child row must name a cluster its
+# parent level actually routed into that scope.
+SUBCLUSTER_PARENT = {
+    "immune-t": "root-immune",
+    "immune-b": "root-immune",
+    "immune-cycling": "root-immune",
+    "stromal-f": "root-stromal",
+    "t-cd4": "immune-t",
+}
+
+
 def _scores(cluster: str, winner: str, runner: str) -> list[dict[str, object]]:
     shared = {"specificity": 0.95, "agreement": 0.95, "coverage": 0.95}
+    if cluster in SUBCLUSTER_PARENT:
+        shared["parent_cluster_id"] = SUBCLUSTER_PARENT[cluster]
     return [
         {"cluster_id": cluster, "label": winner, "score": 3.0, **shared},
         {"cluster_id": cluster, "label": runner, "score": 0.1, **shared},
@@ -530,3 +543,18 @@ def test_changed_thresholds_reexecute_and_a_dropped_level_loses_its_table(
     execute_recursive_hierarchy(config_path, score_tables=without_l3)
     assert not (root / "labels/L3.tsv").exists()
     assert first["executed_scopes"]
+
+
+def test_a_child_row_for_a_cluster_its_parent_never_routed_is_refused(
+    tmp_path: Path,
+) -> None:
+    config_path, _, _ = _write_fixture(tmp_path, run_id="unrouted-child-v1")
+    prepare_scene(config_path)
+    construct_plan(config_path)
+    tables = _score_tables()
+    # root-stromal went to Stromal at L1, so it cannot be refined under Immune.
+    tables[("L2", "Immune")] = pd.DataFrame(
+        [{**row, "parent_cluster_id": "root-stromal"} for row in _scores("x", "T", "B")]
+    )
+    with pytest.raises(ContractError, match="did not route there"):
+        execute_recursive_hierarchy(config_path, score_tables=tables)

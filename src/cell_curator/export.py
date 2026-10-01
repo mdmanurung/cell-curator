@@ -188,6 +188,14 @@ def export_benchmark_predictions(
         raise ContractError(f"run has no durable label tables to export: {root / 'labels'}")
     frames = [pd.read_csv(path, sep="\t", keep_default_na=False) for path in label_paths]
     clusters = _cluster_rows(frames)
+    from .review import resolve_durable_mapping_values
+
+    # Score what write-back writes: the reviewed labels resolved down each parent
+    # path, not the pre-review mapping column, which ignored reviewer edits and
+    # accepted children.
+    resolved = resolve_durable_mapping_values(mapping, pd.concat(frames, ignore_index=True))
+    mapping["cell_type"] = resolved["cell_type"]
+    mapping["cell_state"] = resolved["cell_state"]
 
     single_level = len({str(frame["level"].iloc[0]) for frame in frames if len(frame)}) == 1
     # `mapping.scope` is the input's scope column and `parent_scope` is the
@@ -265,6 +273,14 @@ def export_benchmark_predictions(
         validate="one_to_one",
     )
     joined["predicted_label"] = joined["cell_type"].astype(str)
+    # The accession, confidence, and path are the canonical cluster's. A cell whose
+    # label came from an accepted child carries none of them rather than its parent's.
+    parent_label = clusters.set_index(clusters["cluster_id"].astype(str))["label"].astype(str)
+    refined = joined["predicted_label"].ne(
+        joined["canonical_parent"].astype(str).map(parent_label).fillna("")
+    )
+    joined.loc[refined, ["_cl_id", "_path"]] = ""
+    joined.loc[refined, "_confidence"] = None
     # An abstention has no term, so it carries no accession even when its cluster
     # was decided against a named program. The cluster's own decision is kept in
     # the label table; what the cell received is `Unknown`, and reporting an

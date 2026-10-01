@@ -50,7 +50,11 @@ absolute or relative to the manifest directory. Optional top-level fields are
 `vocabulary_path`, `minimum_confidence`, and `minimum_margin`.
 
 Every score TSV contains `cluster_id`, `label`, and finite numeric `score`; optional
-`specificity`, `agreement`, and `coverage` columns feed advisory confidence. Every
+`specificity`, `agreement`, and `coverage` columns feed advisory confidence. Below
+the first level a row may refine only a cluster its parent level routed into that
+scope: either its `cluster_id` is that cluster, or an optional `parent_cluster_id`
+column names it (for subclusters). Any other row is refused, and a routed cluster
+absent from the child table is retained with reason `missing_from_child_score_table`. Every
 state JSON maps cluster IDs to structured parallel-state values. Duplicate scopes,
 unknown fields, invalid thresholds, absent files, cross-parent labels, and stale
 artifacts are hard errors.
