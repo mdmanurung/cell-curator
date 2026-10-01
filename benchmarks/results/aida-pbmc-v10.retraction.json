@@ -1,0 +1,15 @@
+{
+  "schema_version": 3,
+  "artifact_kind": "cell_curator_benchmark_retraction",
+  "retracts": [
+    "benchmarks/results/aida-pbmc-v10.cell-curator.json",
+    "benchmarks/results/predictions.aida-pbmc-v10.tsv",
+    "benchmarks/results/predictions.aida-pbmc-v10.tsv.receipt.json"
+  ],
+  "input_path": "benchmarks/data/aida-phase1-v2-pbmc-hvg2000/aida_pbmc_wide_clustered.h5ad",
+  "input_sha256": "a8c5e3324801d6e321b809f7f9ddd10303f733c31f0be27e75efdc8b195c8380",
+  "reason": "acquire_slice_8000.py assigned source.obs_names positionally to Census rows returned in soma_joinid order, while source.obs is not in joinid order, so every cell's expression was misaligned with its labels and clusters. Runs v9 and v10 used this input.",
+  "unaffected": "Runs on aida_pbmc_clustered.h5ad (the 2,000-gene slice) do not use the 8,000-gene acquisition path.",
+  "superseded_by": null,
+  "recorded_utc": "2026-10-01"
+}

@@ -87,6 +87,15 @@ def main() -> None:
                     var_value_filter=subset,
                     var_column_names=["feature_name", "feature_id"],
                 )
+            # get_anndata returns rows in soma_joinid order, not in the order of
+            # `source`, so assigning source.obs_names positionally scrambled every
+            # cell's expression against its labels. Reorder by joinid first.
+            position = pd.Index(block.obs["soma_joinid"].to_numpy()).get_indexer(
+                source.obs["soma_joinid"].to_numpy()
+            )
+            if (position < 0).any():
+                raise SystemExit("census block is missing cells of the source slice")
+            block = block[position].copy()
             block.obs_names = source.obs_names
             block.write_h5ad(path, compression="gzip")
             print(f"[wide] block {index}: {block.shape} peak={peak_gb():.2f}")

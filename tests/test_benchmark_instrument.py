@@ -222,3 +222,14 @@ def _frame(labels: list[str]) -> pd.DataFrame:
             "predicted_label": labels,
         }
     )
+
+
+def test_the_scrambled_8000_gene_result_stays_retracted() -> None:
+    """The v10 result ran on a row-scrambled input; its retraction cannot vanish."""
+
+    retraction = json.loads(
+        (COMMITTED.parent / "aida-pbmc-v10.retraction.json").read_text()
+    )
+    assert retraction["input_sha256"].startswith("a8c5e332")
+    for path in retraction["retracts"]:
+        assert (COMMITTED.parents[2] / path).is_file(), path

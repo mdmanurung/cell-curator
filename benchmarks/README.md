@@ -100,6 +100,26 @@ for the dataset in `manifests/rna.json` (unobtainable *and* Azimuth-derived, per
 multimodal PBMC set, which *is* the Azimuth reference at 161,764 cells; Tabula
 Sapiens, since Pan-human Azimuth was trained on it.
 
+## Retraction: the 8,000-gene input was row-scrambled (recorded 2026-10-01)
+
+`acquire_slice_8000.py` assigned `source.obs_names` positionally to the rows Census
+returns, which come back in `soma_joinid` order; `source.obs` is not in that order,
+so every cell's expression was paired with another cell's labels and cluster. Runs
+v9 and v10 used that file (input sha256 `a8c5e332…5c8380`), and the committed
+`aida-pbmc-v10` result, its predictions, and its receipt are retracted by
+`results/aida-pbmc-v10.retraction.json`. They stay in the repository, unedited,
+because a published result is a commitment and a retraction is a record, not an
+erasure.
+
+What this withdraws in the text below: every 8,000-gene number, including "the
+8,000-gene slice clusters *worse* ... ceiling 0.44 against 0.64" and the
+conclusion that "clustering on the 2,000 most variable of the measured genes is
+therefore not a compromise, it is the better input". Both are what a scrambled
+matrix produces and say nothing about panel width. The v2 row of the v1/v2 table
+came from the v10 run and is withdrawn with it. Runs on the 2,000-gene file did not
+use the 8,000-gene acquisition path and are not affected. The script now reorders
+each block by `soma_joinid` and refuses a block missing any source cell.
+
 ## Protocol v2: the negative-marker bar, changed after v1 and derived rather than fitted
 
 **v1 is not withdrawn and not hidden.** It labelled 1 cluster of 28 at a
