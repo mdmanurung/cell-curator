@@ -230,7 +230,9 @@ def detect_gene_id_convention(values: Sequence[object] | pd.Index | pd.Series) -
     symbol_fraction = float(symbol_like.mean())
     if ensembl_fraction > 0.05 and symbol_fraction >= 0.9:
         return "mixed"
-    if symbol_fraction >= 0.9 and ensembl_fraction == 0:
+    # 10x names a gene with no symbol by its Ensembl id, about 2% of features.
+    # Those can never match a marker symbol, so they do not make the set mixed.
+    if symbol_fraction >= 0.9 and ensembl_fraction <= 0.05:
         return "gene_symbol"
     return "unknown"
 
@@ -449,7 +451,14 @@ def dense(matrix: Any) -> np.ndarray:
     return matrix.toarray() if sparse.issparse(matrix) else np.asarray(matrix)
 
 
+def _in_memory(matrix: Any) -> Any:
+    # A backed X or raw is an h5py sparse dataset, not a scipy matrix, and
+    # np.asarray turns it into a 0-d object array. Layers load into memory anyway.
+    return matrix.to_memory() if hasattr(matrix, "to_memory") else matrix
+
+
 def matrix_minimum(matrix: Any) -> float:
+    matrix = _in_memory(matrix)
     if sparse.issparse(matrix):
         stored = float(matrix.data.min()) if matrix.nnz else 0.0
         return min(stored, 0.0)
@@ -458,6 +467,7 @@ def matrix_minimum(matrix: Any) -> float:
 
 
 def matrix_summary(matrix: Any) -> dict[str, Any]:
+    matrix = _in_memory(matrix)
     values = matrix.data if sparse.issparse(matrix) else np.asarray(matrix).ravel()
     observed = np.asarray(values)
     finite = observed[np.isfinite(observed)]

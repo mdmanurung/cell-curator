@@ -598,3 +598,18 @@ def test_backoff_never_leaves_the_cell_ontology() -> None:
         ("CL:0001065", 0.20),
     ]
     assert backoff_term(ontology, tied, min_margin=0.2, min_confidence=0.6) is None
+
+
+def test_a_blank_cell_in_a_marker_table_is_absent_not_the_string_nan(tmp_path: Path) -> None:
+    from cell_curator.knowledge import CachedTableProvider
+
+    table = tmp_path / "markers.tsv"
+    table.write_text(
+        "label\tpositive\tnegative\tparent\tcl_id\n"
+        "T cell\tCD3E;CD3D\t\t\t\n"
+        "B cell\tMS4A1\tCD3E\t\tCL:0000236\n"
+    )
+    programs = {item.label: item for item in CachedTableProvider(table, version="x").programs()}
+    assert programs["T cell"].parent is None and programs["T cell"].cl_id is None
+    assert programs["T cell"].negative == ()
+    assert programs["B cell"].cl_id == "CL:0000236"

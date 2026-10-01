@@ -85,6 +85,15 @@ class InputKeysConfig(StrictModel):
     sex: str = ""
     batch: str = ""
 
+    @field_validator("canonical_parent", "scope")
+    @classmethod
+    def named_obs_column(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError(
+                "input.keys.canonical_parent and input.keys.scope name obs columns"
+            )
+        return value
+
 
 class InputConfig(StrictModel):
     kind: Literal["h5ad", "h5mu"]
@@ -546,9 +555,7 @@ class CellCuratorConfig(StrictModel):
         return self
 
 
-def anchor_relative_paths(
-    config: CellCuratorConfig, *, config_dir: Path
-) -> CellCuratorConfig:
+def anchor_relative_paths(config: CellCuratorConfig, *, config_dir: Path) -> CellCuratorConfig:
     """Resolve relative run, input, and provider paths against ``config_dir``.
 
     Relative paths would otherwise be resolved against the process working
@@ -608,9 +615,7 @@ def anchor_relative_paths(
         if provider.path and not Path(provider.path).is_absolute():
             provider_updates["path"] = str((config_dir / provider.path).resolve())
         if provider.cache_path and not Path(provider.cache_path).is_absolute():
-            provider_updates["cache_path"] = str(
-                (config_dir / provider.cache_path).resolve()
-            )
+            provider_updates["cache_path"] = str((config_dir / provider.cache_path).resolve())
         if provider_updates:
             provider_changed = True
             anchored_providers.append(provider.model_copy(update=provider_updates))

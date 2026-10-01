@@ -59,7 +59,9 @@ class LocalMarkerProvider:
             return self._json_programs()
         if suffix in {".tsv", ".csv"}:
             separator = "\t" if suffix == ".tsv" else ","
-            return self._table_programs(pd.read_csv(self.path, sep=separator))
+            return self._table_programs(
+                pd.read_csv(self.path, sep=separator, keep_default_na=False)
+            )
         raise ContractError("local marker source must be JSON, TSV, or CSV")
 
     def _json_programs(self) -> list[MarkerProgram]:

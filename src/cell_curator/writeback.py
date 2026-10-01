@@ -112,7 +112,10 @@ def _category_color_plan(
 
 
 def _align_mapping(mapping: pd.DataFrame, obs_names: pd.Index) -> pd.DataFrame:
-    indexed = mapping.set_index("barcode", verify_integrity=True)
+    # A TSV round trip reads barcodes such as "0", "1" back as integers.
+    indexed = mapping.assign(barcode=mapping["barcode"].astype(str)).set_index(
+        "barcode", verify_integrity=True
+    )
     aligned = indexed.loc[list(map(str, obs_names))].copy()
     aligned.insert(0, "barcode", aligned.index.astype(str))
     return aligned.reset_index(drop=True)
