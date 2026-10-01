@@ -109,10 +109,16 @@ cell-curator cluster subcluster --config config.yaml
 cell-curator cluster profile --config config.yaml
 cell-curator cluster confidence --margin 0.3 --specificity 0.8 \
   --agreement 0.7 --coverage 0.9
-cell-curator hierarchy assign --config config.yaml --scores scores.tsv \
-  --level L1 --parent ROOT
 cell-curator hierarchy validate --labels results/RUN/labels/L1.tsv
 cell-curator run status --config config.yaml
+```
+
+To assign one level from a score table you computed yourself, use this instead of
+`run execute`, never after it:
+
+```bash
+cell-curator hierarchy assign --config config.yaml --scores scores.tsv \
+  --level L1 --parent ROOT
 ```
 
 For multiple levels, pass `run execute` a schema-v3 score manifest. Each entry must

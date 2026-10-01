@@ -211,9 +211,10 @@ def validate_writeback(
     state_path = run_root / "run_state.json"
     if not state_path.is_file():
         raise ContractError("write-back requires the guided run state")
-    from .guided import load_state
+    from .guided import load_state, require_fresh_checkpoints
 
     state = load_state(run_root)
+    require_fresh_checkpoints(run_root)
     if state.input_sha256 != source_sha256:
         raise ContractError("source input changed after the guided run was frozen")
     assumptions_path = run_root / "assumptions.json"

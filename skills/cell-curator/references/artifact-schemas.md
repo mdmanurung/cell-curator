@@ -63,10 +63,13 @@ evidence.
 
 ## Review packet
 
-Include evidence cards, parent decision cards, parent/full embeddings,
-assay-appropriate plots, sample/capture/QC/doublet summaries,
-persistence/alluvial tables, critic findings,
-reconciliation, blank review template, mapping, leaf totals, and provenance.
+`review_packet/` is the immutable snapshot critics review, frozen when execution
+completes and checked only against its own manifest. It includes evidence cards,
+parent decision cards, parent/full embeddings, assay-appropriate plots,
+sample/capture/QC/doublet summaries, persistence/alluvial tables, the critic packet,
+blank review template, mapping, leaf totals, and provenance. The critic findings and
+reconciliation are added afterwards under `review/`; the write-back approval token
+binds them, together with the rebuilt report.
 
 An evidence card states hypothesis, direct evidence, negative evidence,
 alternatives, technical/doublet assessment, stability, guide divergence,

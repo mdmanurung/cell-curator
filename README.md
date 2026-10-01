@@ -82,7 +82,9 @@ cur = CellCurator(
 
 cur.inspect()
 cur.prepare()
-evidence, bottom_up = cur.evidence()
+cur.plan()
+cur.approve_assumptions(reviewer="your-name")  # Gate A: you approve the plan's assumptions
+scores, proposals = cur.evidence()
 packet = cur.annotate()
 cur.validate_run()
 ```

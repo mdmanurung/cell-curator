@@ -862,7 +862,10 @@ def require_assumption_gate(
     ]
     if pending:
         raise ContractError(
-            f"Gate A blocks biological labels until assumptions are approved; pending={pending}"
+            f"Gate A blocks biological labels until {len(pending)} assumption(s) are "
+            "approved; review them with `cell-curator assumptions list` and approve with "
+            "`cell-curator assumptions approve --config CONFIG --reviewer NAME` "
+            f"(Python: approve_assumptions(config_path, reviewer=...)); pending={pending}"
         )
     if not config.guidance.interactive and not (
         config.guidance.preauthorized and state.preauthorized
@@ -920,6 +923,33 @@ def assumption_scope_sha256(
         separators=(",", ":"),
     ).encode()
     return hashlib.sha256(payload).hexdigest()
+
+
+
+def require_fresh_checkpoints(root: str | Path) -> int:
+    """Refuse any checkpointed scope produced under assumptions that later changed.
+
+    Labels are bound to the scoped assumptions current when they were assigned. A
+    material assumption added and approved afterwards changes the scope digest, so
+    the labels it should have governed are refused rather than written. Artifact
+    hashes are not compared: reviewers edit the durable labels tables and reports are
+    rebuilt after reconciliation by design, and the write-back token binds both.
+    """
+
+    paths = sorted((Path(root) / "checkpoints").glob("*/*.json"))
+    if not paths:
+        raise ContractError("no hierarchy checkpoint exists for this run")
+    for path in paths:
+        checkpoint = json.loads(path.read_text())
+        level, parent = str(checkpoint.get("level", "")), str(checkpoint.get("parent", ""))
+        if checkpoint.get("status") != "complete" or checkpoint.get(
+            "assumptions_sha256"
+        ) != assumption_scope_sha256(root, level=level, parent=parent):
+            raise ContractError(
+                f"hierarchy checkpoint {level}::{parent} is incomplete or uses stale "
+                "assumptions; re-execute the run so its labels reflect them"
+            )
+    return len(paths)
 
 
 def checkpoint_level(

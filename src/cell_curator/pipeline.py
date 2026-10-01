@@ -14,6 +14,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from . import __version__
 from .audit_parents import build_audit
 from .benchmark import write_pending_status
 from .config import CellCuratorConfig, load_config
@@ -93,6 +94,16 @@ def _programs(config: CellCuratorConfig):
             allow_remote_enhancement=config.knowledge.allow_optional_remote_enhancement,
         )
     )
+    plan_path = run_root(config) / "plan.json"
+    if plan_path.is_file():
+        # The reviewer approved the vocabulary the plan was built from; a marker file
+        # edited afterwards would produce labels under programs nobody approved.
+        planned = json.loads(plan_path.read_text()).get("program_digest")
+        if planned and planned != programs_digest(programs):
+            raise ContractError(
+                "marker programs changed after the plan was approved; re-run "
+                "`cell-curator run plan` and approve the new assumptions, or use a new run_id"
+            )
     ontology = ontology_from_config(config)
     if ontology is not None:
         validate_program_ontology(programs, ontology)
@@ -212,8 +223,28 @@ def _identity_vocabulary_for_execution(
     state programs are expected, so they are excluded here under a receipt.
     """
 
+    from .guided import load_assumptions
     from .hierarchy import identity_vocabulary
 
+    # Gate A fails closed: a label is assigned only under an approved statement that
+    # names it. Without this an operator vocabulary, or a scope the plan never
+    # declared, produced labels with no ledger row at all and passed as approved.
+    approved = {
+        (str(row["scope"]), str(row["statement"]).split(" is a permitted child of ")[0])
+        for row in load_assumptions(root)
+        if row.get("status") == "APPROVED" and " is a permitted child of " in str(row["statement"])
+    }
+    unapproved = [
+        f"{row.level}::{row.parent_scope}/{row.label}"
+        for row in vocabulary[["level", "parent_scope", "label"]].astype(str).itertuples()
+        if (f"{row.level}::{row.parent_scope}", row.label) not in approved
+    ]
+    if unapproved:
+        raise ContractError(
+            "vocabulary rows have no approved assumption naming them: "
+            f"{unapproved[:10]}; add `<label> is a permitted child of <parent> ...` for each "
+            "with `cell-curator assumptions add` and approve it"
+        )
     if operator_supplied:
         return vocabulary
     identity, excluded = identity_vocabulary(vocabulary)
@@ -495,6 +526,28 @@ def execute_recursive_hierarchy(
             ).encode()
             _replace_if_changed(state_path, state_payload)
             artifacts["states"] = str(state_path)
+        effective_confidence = (
+            config.evidence.min_confidence if minimum_confidence is None else minimum_confidence
+        )
+        effective_margin = config.evidence.min_margin if minimum_margin is None else minimum_margin
+        # Thresholds come from the manifest or arguments, not the config file, so they
+        # are hashed here as an artifact: changing them invalidates the resume.
+        params_path = root / "hierarchy" / "params" / level / f"{safe_parent}.json"
+        _replace_if_changed(
+            params_path,
+            (
+                json.dumps(
+                    {
+                        "minimum_confidence": effective_confidence,
+                        "minimum_margin": effective_margin,
+                        "package_version": __version__,
+                    },
+                    sort_keys=True,
+                )
+                + "\n"
+            ).encode(),
+        )
+        artifacts["params"] = str(params_path)
         labels_path = root / "labels" / "scopes" / level / f"{safe_parent}.tsv"
         artifacts["labels"] = str(labels_path)
         checkpoint_path = root / "checkpoints" / level / f"{safe_parent}.json"
@@ -523,14 +576,8 @@ def execute_recursive_hierarchy(
                 vocabulary,
                 level=level,
                 parent_scope=parent,
-                minimum_confidence=(
-                    config.evidence.min_confidence
-                    if minimum_confidence is None
-                    else minimum_confidence
-                ),
-                minimum_margin=(
-                    config.evidence.min_margin if minimum_margin is None else minimum_margin
-                ),
+                minimum_confidence=effective_confidence,
+                minimum_margin=effective_margin,
                 state_by_cluster=state_by_cluster,
             )
             _replace_if_changed(
@@ -599,6 +646,9 @@ def execute_recursive_hierarchy(
     for level in levels:
         frames = [frame for (item_level, _), frame in outputs.items() if item_level == level]
         if not frames:
+            # A level nothing executed this time must not keep an earlier run's table:
+            # write-back and the report read every labels/*.tsv as current.
+            (root / "labels" / f"{level}.tsv").unlink(missing_ok=True)
             continue
         proposals = pd.concat(frames, ignore_index=True)
         labels_path = root / "labels" / f"{level}.tsv"
@@ -1124,19 +1174,23 @@ def validate(config_path: Path) -> dict[str, Any]:
         "decisions/candidate_evidence.manifest.json",
         "decisions/parent_decision_summary.tsv",
         "mapping/mapping.validation.json",
+    ]
+    # Review files are rebuilt after critics reconcile, so they are required but not
+    # hashed into this write-once manifest; write-back's approval token binds them.
+    review_files = [
         "review/critic_packet.json",
         "review/colors.json",
         "review/report.manifest.json",
         "review/report.html",
     ]
-    missing = [item for item in required if not (root / item).is_file()]
+    missing = [item for item in required + review_files if not (root / item).is_file()]
     if missing:
         raise ContractError(f"run validation misses artifacts: {missing}")
     mapping_validation = json.loads((root / "mapping" / "mapping.validation.json").read_text())
     if mapping_validation.get("status") != "complete":
         raise ContractError("mapping validation is incomplete")
     from .data import compute_qc
-    from .guided import assumption_scope_sha256, load_assumptions, load_state
+    from .guided import load_assumptions, load_state, require_fresh_checkpoints
     from .hierarchy import validate_hierarchy_nesting
     from .review import check_report_completeness
 
@@ -1169,27 +1223,7 @@ def validate(config_path: Path) -> dict[str, Any]:
         cell_membership=mapping[["barcode", "leaf_id"]],
     )
     check_report_completeness(config, root, require_report=True)
-    first_level = config.guidance.hierarchy_levels[0]
-    first_checkpoint = root / "checkpoints" / first_level / "ROOT.json"
-    if not first_checkpoint.is_file():
-        raise ContractError(
-            f"run validation requires a hierarchy checkpoint: {first_checkpoint}"
-        )
-    checkpoint = json.loads(first_checkpoint.read_text())
-    expected_checkpoint_assumptions = assumption_scope_sha256(
-        root, level=first_level, parent="ROOT"
-    )
-    if (
-        checkpoint.get("status") != "complete"
-        or checkpoint.get("assumptions_sha256") != expected_checkpoint_assumptions
-    ):
-        raise ContractError("hierarchy checkpoint is incomplete or uses stale assumptions")
-    for name, artifact_path in checkpoint.get("artifacts", {}).items():
-        artifact = Path(str(artifact_path))
-        if not artifact.is_file() or sha256(artifact) != checkpoint.get(
-            "artifact_sha256", {}
-        ).get(name):
-            raise ContractError(f"hierarchy checkpoint artifact is absent or stale: {name}")
+    require_fresh_checkpoints(root)
     plan = json.loads((root / "plan.json").read_text())
     for route in plan.get("routes", []):
         if not route.get("assessments") or any(
@@ -1267,18 +1301,16 @@ def build_review_packet(config_path: Path) -> Path:
             }
             if observed != set(files):
                 raise ContractError("existing review packet file inventory drifted")
+            # The packet is the snapshot critics review, taken before they run. It is
+            # checked against its own manifest only: the live review ledgers, run state,
+            # and reports are meant to change afterwards, and write-back binds those.
             for relative, record in files.items():
                 frozen = packet / relative
-                source = root / relative
                 if (
-                    not source.is_file()
-                    or sha256(frozen) != record.get("sha256")
+                    sha256(frozen) != record.get("sha256")
                     or frozen.stat().st_size != record.get("bytes")
-                    or sha256(source) != record.get("sha256")
                 ):
-                    raise ContractError(
-                        f"existing review packet or source artifact drifted: {relative}"
-                    )
+                    raise ContractError(f"frozen review packet was modified: {relative}")
             return packet
         try:
             # Snakemake creates the parent of a declared file output before the

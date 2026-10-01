@@ -276,7 +276,7 @@ def test_independent_end_to_end_and_guarded_writeback(tmp_path: Path) -> None:
     with pytest.raises(ContractError, match="no critic pass"):
         validate_writeback(config, root, output_path=output)
     _record_critics(config, root, tmp_path)
-    preview = validate_writeback(config, root, output_path=output)
+    validate_writeback(config, root, output_path=output)
     with pytest.raises(ContractError, match="does not match"):
         write_back(
             config,
@@ -294,7 +294,7 @@ def test_independent_end_to_end_and_guarded_writeback(tmp_path: Path) -> None:
     assert set(annotated.obs["cell_curator_type"].astype(str)) == {"Type A", "Type B"}
 
     second_output = tmp_path / "second-annotated.h5ad"
-    second_preview = validate_writeback(config, root, output_path=second_output)
+    validate_writeback(config, root, output_path=second_output)
     first_hash = sha256(output)
     with pytest.raises(ContractError, match="immutable write-back receipt"):
         write_back(config, root, output_path=second_output, confirm=_confirm)
@@ -660,3 +660,61 @@ def test_standard_pipeline_rejects_multi_level_config_before_materialization(
     with pytest.raises(ContractError, match="score-manifest"):
         run_annotation(config_path)
     assert not (tmp_path / "results" / "multi-level-v1").exists()
+
+
+def test_writeback_refuses_labels_older_than_a_later_approved_assumption(
+    tmp_path: Path,
+) -> None:
+    from cell_curator.api import record_annotation_assumption
+
+    _, config, root = _completed_synthetic_run(tmp_path)
+    config_path = tmp_path / "config.yaml"
+    output = tmp_path / "after-new-assumption.h5ad"
+    validate_writeback(config, root, output_path=output)
+    record_annotation_assumption(
+        config_path,
+        scope="L1::ROOT",
+        statement="Cluster 1 is a known contaminant and must stay Unknown.",
+    )
+    approve_assumptions(config_path, reviewer="fixture-reviewer", preauthorized=True)
+    with pytest.raises(ContractError, match="stale assumptions"):
+        validate_writeback(config, root, output_path=output)
+
+
+def test_marker_edit_after_plan_approval_refuses_execution(tmp_path: Path) -> None:
+    source = tmp_path / "source.h5ad"
+    _synthetic_input(source)
+    markers = tmp_path / "markers.json"
+    markers.write_text(
+        json.dumps(
+            {
+                "Type A": {"pos": ["A1", "A2"], "neg": ["B1", "B2"]},
+                "Type B": {"pos": ["B1", "B2"], "neg": ["A1", "A2"]},
+            }
+        )
+    )
+    config_path = _config(tmp_path, source, markers)
+    construct_plan(config_path)
+    # Swap the two programs after the plan, and its assumptions, were approved.
+    markers.write_text(
+        json.dumps(
+            {
+                "Type A": {"pos": ["B1", "B2"], "neg": ["A1", "A2"]},
+                "Type B": {"pos": ["A1", "A2"], "neg": ["B1", "B2"]},
+            }
+        )
+    )
+    with pytest.raises(ContractError, match="changed after the plan was approved"):
+        run_annotation(config_path)
+
+
+def test_the_documented_review_loop_still_validates_after_critics(tmp_path: Path) -> None:
+    """Critics import, reconcile, and rebuild the report after execution; none of that
+    may make the run fail validation or its frozen packet report drift."""
+
+    from cell_curator.pipeline import validate
+
+    _completed_synthetic_run(tmp_path)  # executes, then records critics and rebuilds
+    config_path = tmp_path / "config.yaml"
+    assert validate(config_path)["status"] == "complete"
+    assert run_annotation(config_path).is_dir()

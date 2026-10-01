@@ -488,3 +488,45 @@ def test_a_state_program_is_never_assignable_as_an_identity(tmp_path: Path) -> N
         ignore_index=True,
     )
     assert "Cycling" not in set(assigned["label"].astype(str))
+
+
+def test_an_operator_vocabulary_label_with_no_approved_assumption_is_refused(
+    tmp_path: Path,
+) -> None:
+    """Gate A fails closed: a label nobody approved cannot be assigned."""
+
+    config_path, _, _ = _write_fixture(tmp_path, run_id="unapproved-vocabulary-v1")
+    prepare_scene(config_path)
+    construct_plan(config_path)
+    root = run_directory(load_config(config_path))
+    vocabulary = pd.read_csv(root / "plan/vocabulary.tsv", sep="\t", keep_default_na=False)
+    extra = vocabulary[vocabulary["level"].eq("L1")].iloc[[0]].copy()
+    extra["label"] = "Neuron"
+    operator = tmp_path / "operator-vocabulary.tsv"
+    pd.concat([vocabulary, extra]).to_csv(operator, sep="\t", index=False)
+    with pytest.raises(ContractError, match="no approved assumption naming them"):
+        execute_recursive_hierarchy(
+            config_path, score_tables=_score_tables(), vocabulary_path=operator
+        )
+
+
+def test_changed_thresholds_reexecute_and_a_dropped_level_loses_its_table(
+    tmp_path: Path,
+) -> None:
+    config_path, _, _ = _write_fixture(tmp_path, run_id="threshold-resume-v1")
+    prepare_scene(config_path)
+    construct_plan(config_path)
+    root = run_directory(load_config(config_path))
+    tables = _score_tables()
+    first = execute_recursive_hierarchy(config_path, score_tables=tables)
+    assert (root / "labels/L3.tsv").is_file()
+
+    stricter = execute_recursive_hierarchy(
+        config_path, score_tables=tables, minimum_confidence=0.99
+    )
+    assert stricter["executed_scopes"], "a new threshold must not resume old labels"
+
+    without_l3 = {scope: frame for scope, frame in tables.items() if scope[0] != "L3"}
+    execute_recursive_hierarchy(config_path, score_tables=without_l3)
+    assert not (root / "labels/L3.tsv").exists()
+    assert first["executed_scopes"]

@@ -92,7 +92,6 @@ def _row(label: str, *, coverage: object, violation: object, score: float = 1.0)
         "program_coverage": coverage,
         "score": score,
         "detection_valid": "true",
-        "axis": "cell_type",
     }
 
 
