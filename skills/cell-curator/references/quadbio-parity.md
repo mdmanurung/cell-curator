@@ -15,7 +15,7 @@ Checklist sources, both documentation only and never used at runtime:
 - QuadBio [`cell-type-annotation`](https://github.com/quadbio/cell-type-annotation/blob/main/skills/cell-type-annotation/SKILL.md) — an agent skill plus a `cta` CLI, last commit `b438119` (2026-08-06).
 - QuadBio [`cell-annotator`](https://github.com/quadbio/cell-annotator) — a PyPI package, `cell-annotator` 0.3.0, head `0b17fc3` (2026-07-07).
 
-### The two QuadBio projects are unrelated to each other
+## The two QuadBio projects are unrelated to each other
 
 They share a lab and a problem, and nothing else. Neither repository contains a
 cross-reference to the other, they share no package or namespace, and
@@ -123,7 +123,7 @@ that only lists another project's gaps is not a neutral document.
 | Gap | Status | What closing it requires |
 | --- | --- | --- |
 | Cross-sample label-vocabulary consolidation | Absent. One clustering over one vocabulary is assumed, so two independently clustered samples can carry `Monocyte` at different granularity with nothing reconciling them. `cell-annotator` maps per-sample labels onto one global vocabulary. | A consolidation pass over the per-parent vocabularies, writing a mapping table and refusing an unresolvable label rather than picking a winner. Note the same machinery already exists for gene identifiers in `harmonize_reference_genes()`; this is the label-axis analogue. |
-| A neutral evaluation harness that has never been pointed at real data | The harness exists and is independent of the annotation engine, but five of six dataset manifests are `pending-external-resource` and the only result scores an eight-row fixture. | One real dataset with independent ground truth, run through the shipped CLI, with the label-harmonization and threshold grid frozen before the first result is published. The frozen decisions are recorded in [`benchmarks/README.md`](../../../benchmarks/README.md), because the first published result is immutable and a protocol fixed afterwards is not a protocol. |
+| A neutral evaluation harness run against no comparator | The harness is independent of the annotation engine and has scored one real dataset (AIDA PBMC, protocol v3 and v4), but no external comparator has been run on it and four of six dataset manifests are `pending-external-resource`. | One real dataset with independent ground truth, run through the shipped CLI, with the label-harmonization and threshold grid frozen before the first result is published. The frozen decisions are recorded in [`benchmarks/README.md`](../../../benchmarks/README.md), because the first published result is immutable and a protocol fixed afterwards is not a protocol. |
 | No stated empirical basis for the negative-marker violation threshold | The threshold that decides whether an expected-absent marker counts as violated is asserted. The skill documents a chosen value and the reasoning behind it, and reports the rates behind that choice in a pull request body rather than in the repository, so the asymmetry is one of documented reasoning rather than of published evidence. | Record the rate at which real positive markers exceed the threshold across several reference datasets, and either justify the value or calibrate it. Until then it is a tuned constant with no recorded provenance. |
 | The matrix above can only be checked for existence, not for truth | The skill generates its method-selection document from the router and fails CI on drift. `tests/test_parity_matrix_claims.py` closes the mechanical half of the difference by resolving every implementation file, entry point, and symbol this document names. | A reader still has to judge whether the named implementation actually provides the capability, and nothing here measures that. Existence is checkable; equivalence is not. |
 
@@ -190,5 +190,6 @@ the output as "an initial, coarse set of annotations that must be further
 refined".
 
 `cell-curator` is in the same position and says so: comparative claims require
-measured benchmark results, and no such result has been published. No accuracy or
+measured comparator results on the same data, and none has been run yet. The only
+published results score `cell-curator` alone on one PBMC cohort. No accuracy or
 performance claim is made or implied by any row above.

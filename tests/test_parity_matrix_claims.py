@@ -183,4 +183,4 @@ def test_the_matrix_states_that_no_comparison_is_published() -> None:
     # whitespace rather than on the source line breaks.
     text = " ".join(MATRIX.read_text().split())
     assert "No accuracy or performance claim is made or implied by any row above" in text
-    assert "no such result has been published" in text
+    assert "measured comparator results on the same data, and none has been run yet" in text
