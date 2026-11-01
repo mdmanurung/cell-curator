@@ -33,6 +33,7 @@ PAGES: dict[str, str] = {
         f"skills/cell-curator/references/{name}.md": f"reference/{name}.md"
         for name in (
             "input-contract",
+            "markers",
             "assay-routing",
             "adaptive-subclustering",
             "multimodal-evidence",

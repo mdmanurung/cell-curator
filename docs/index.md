@@ -19,6 +19,7 @@ _generated/api
 :caption: Methods and validation
 
 _generated/reference/input-contract
+_generated/reference/markers
 _generated/reference/assay-routing
 _generated/reference/adaptive-subclustering
 _generated/reference/multimodal-evidence

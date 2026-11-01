@@ -11,6 +11,23 @@ knowledge:
   # A live_ontology provider declares only an https url, version, and timeout_seconds: it
   # corroborates the authoritative local ontology and may never ground a label.
   providers: []
+  # Ready-made providers. Uncomment to use them; paths resolve against this file.
+  # human-pbmc.json ships with the package under <prefix>/share/cell-curator/assets/markers/;
+  # its format is in references/markers.md. It is a 13-type human PBMC vocabulary and is
+  # not validated against an independent panel.
+  # providers:
+  #   - kind: local_markers
+  #     path: markers/human-pbmc.json
+  #     version: human-pbmc-v1
+  #   - kind: remote_ontology
+  #     url: http://purl.obolibrary.org/obo/cl/releases/2026-06-08/cl.obo
+  #     cache_path: cache/cl-2026-06-08.obo
+  #     sha256: 7e19b4aef8e7fe7720b0c4474c6a5b8713c904ea9ab7b7d5d96f2cb28b8fc51f
+  #     version: "2026-06-08"
+  #     timeout_seconds: 120
+  # The remote ontology needs network: online (or institution with the host allowed) for
+  # the first fetch; later runs read the cache offline. Without any ontology the run is
+  # CL-free: labels carry no Cell Ontology ID and near-ties cannot back off to an ancestor.
   require_local_grounding_for_labels: true
   # offline: no request leaves the process. institution: localhost and the hosts in
   # allowed_hosts only (an entry starting with "." allows that domain's subdomains), so

@@ -27,6 +27,7 @@ Read only the contract needed for the current decision.
 | Topic | Contract |
 | --- | --- |
 | Inputs, matrices, and QC | [input-contract.md](references/input-contract.md) |
+| Marker file format | [markers.md](references/markers.md) |
 | Assays and providers | [assay-routing.md](references/assay-routing.md) |
 | Parent-local refinement | [adaptive-subclustering.md](references/adaptive-subclustering.md) |
 | Multimodal evidence | [multimodal-evidence.md](references/multimodal-evidence.md) |

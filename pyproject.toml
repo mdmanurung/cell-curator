@@ -70,6 +70,7 @@ cell_curator = ["py.typed"]
   "skills/cell-curator/assets/*.md",
   "skills/cell-curator/assets/*.tsv",
 ]
+"share/cell-curator/assets/markers" = ["skills/cell-curator/assets/markers/*.json"]
 "share/cell-curator/references" = ["skills/cell-curator/references/*.md"]
 "share/cell-curator/workflow" = ["workflow/Snakefile"]
 "share/cell-curator/workflow/config" = ["workflow/config/*.yaml"]
