@@ -18,6 +18,6 @@
   ],
   "reproduce": [
     "cell-curator benchmark validate-manifest --manifest benchmarks/manifests/synthetic.json",
-    "cell-curator benchmark evaluate --predictions benchmarks/fixtures/synthetic_predictions.tsv --system cell-curator-fixture --dataset cell-curator-synthetic-edge-cases-v1 --output benchmarks/results/synthetic.json"
+    "cell-curator benchmark evaluate --predictions benchmarks/fixtures/synthetic_predictions.tsv --system cell-curator-fixture --dataset cell-curator-synthetic-edge-cases-v1 --output benchmarks/results/synthetic.v2.json"
   ]
 }

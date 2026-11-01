@@ -1,0 +1,62 @@
+{
+  "accuracy": 0.875,
+  "artifact_completeness": 1.0,
+  "artifact_path": null,
+  "brier_score": 0.010119999999999999,
+  "coverage": 0.625,
+  "coverage_risk": 0.0,
+  "dataset": "cell-curator-synthetic-edge-cases-v1",
+  "descendant_accuracy": null,
+  "expected_calibration_error": 0.096,
+  "hierarchical_accuracy": 0.9375,
+  "hierarchy_error": 0.0625,
+  "input_invariance": 1.0,
+  "macro_f1": 0.8666666666666667,
+  "micro_f1": 0.875,
+  "mixed_detection_f1": 1.0,
+  "n": 8,
+  "neutral_format": true,
+  "ontology_distance_error": null,
+  "ontology_sha256": null,
+  "ontology_source": null,
+  "peak_memory_mb": 82.0,
+  "per_type": {
+    "B cell": {
+      "f1": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "support": 2
+    },
+    "Monocyte": {
+      "f1": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "support": 2
+    },
+    "T cell": {
+      "f1": 0.6666666666666666,
+      "precision": 1.0,
+      "recall": 0.5,
+      "support": 2
+    },
+    "Unknown": {
+      "f1": 0.8,
+      "precision": 0.6666666666666666,
+      "recall": 1.0,
+      "support": 2
+    }
+  },
+  "prediction_path": "synthetic_predictions.tsv",
+  "prediction_sha256": "529c980c239c84f830b367bce5a7be9bf8ed71d32581725fd521352979971807",
+  "relaxed_accuracy": null,
+  "repeat_reproducibility": 1.0,
+  "runtime_seconds": 1.25,
+  "schema_version": 3,
+  "selective_accuracy": 1.0,
+  "split_decision_accuracy": 1.0,
+  "system": "cell-curator-fixture",
+  "unknown_f1": 0.8,
+  "unknown_precision": 0.6666666666666666,
+  "unknown_recall": 1.0,
+  "unsplit_parent_invariance": 1.0
+}

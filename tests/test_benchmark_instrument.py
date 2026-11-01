@@ -16,50 +16,26 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pandas as pd
 import pytest
 
 from cell_curator.benchmark import (
     evaluate_file,
-    evaluate_predictions,
-    write_pending_status,
 )
 from cell_curator.contracts import ContractError, sha256
 
 REPO = Path(__file__).resolve().parents[1]
 FIXTURE = REPO / "benchmarks" / "fixtures" / "synthetic_predictions.tsv"
-COMMITTED = REPO / "benchmarks" / "results" / "synthetic.json"
+COMMITTED = REPO / "benchmarks" / "results" / "synthetic.v2.json"
+SUPERSEDED = REPO / "benchmarks" / "results" / "synthetic.json"
+SUPERSESSION = REPO / "benchmarks" / "results" / "synthetic.supersession.json"
 MANIFEST = REPO / "benchmarks" / "manifests" / "synthetic.json"
-# Metrics whose definition changed after the immutable synthetic result was published.
-PENDING = {
-    "ontology_distance_error",
-    "descendant_accuracy",
-    "relaxed_accuracy",
-    "brier_score",
-    "expected_calibration_error",
-}
 
 
 def test_the_committed_result_is_reproducible_from_its_fixture(tmp_path: Path) -> None:
-    """Recomputing the shipped result must reproduce every metric in it.
+    """Recomputing the shipped result must reproduce every metric in it, exactly.
 
-    Only `prediction_path` is excluded. `evaluate_file` bakes an absolute
-    resolved machine path into the payload, so that field is by construction
-    different on every machine and cannot participate in a cross-machine pin.
-    Everything that is a measurement is asserted.
-
-    `ontology_distance_error`, `descendant_accuracy`, and `relaxed_accuracy` are
-    pinned to their pending values rather than to what the code returns. `ontology_distance_error`
-    recorded 0.0625, which was `hierarchy_error` under a second name; the alias
-    is gone and a table with no Cell Ontology ids makes no ontology claim, so
-    the honest answer is `None`. `relaxed_accuracy` did not exist when the
-    artifact was published, so the artifact predates it. `brier_score` and
-    `expected_calibration_error` were computed over abstentions too, scoring the
-    two `Unknown == Unknown` rows at 0.88 and 0.83 as confident correct calls;
-    calibration now covers calls only. Superseding the
-    immutable artifact is deferred until the first real benchmark result lands,
-    and `test_the_committed_artifact_still_awaiting_supersession` is the strict
-    marker that fails the moment that deferral is resolved either way.
+    The artifact stores file names rather than resolved paths, so it is the same
+    on every machine and the comparison covers every key the scorer returns.
     """
 
     committed = json.loads(COMMITTED.read_text())
@@ -71,54 +47,19 @@ def test_the_committed_result_is_reproducible_from_its_fixture(tmp_path: Path) -
     ).model_dump(mode="json")
 
     for key, value in recomputed.items():
-        if key in PENDING:
-            continue
         assert committed[key] == value, f"{key} drifted from the committed result"
-    assert committed["prediction_path"] == str(FIXTURE.resolve())
+    assert committed["prediction_path"] == FIXTURE.name
     assert committed["neutral_format"] is True
-    assert committed["ontology_distance_error"] == 0.0625
-    assert recomputed["ontology_distance_error"] is None
-    for key in ("descendant_accuracy", "relaxed_accuracy"):
-        assert key not in committed
-        assert recomputed[key] is None
-    assert committed["brier_score"] == pytest.approx(0.0337875)
-    assert recomputed["brier_score"] == pytest.approx(
-        (0.05**2 + 0.08**2 + 0.1**2 + 0.14**2 + 0.11**2) / 5
-    )
-    assert committed["expected_calibration_error"] == pytest.approx(0.14875)
-    assert recomputed["expected_calibration_error"] != committed["expected_calibration_error"]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "the committed synthetic result records ontology_distance_error from the "
-        "alias that was removed once the metric became a real is_a-graph "
-        "measurement, and calibration that scored abstentions; superseding the immutable artifact is deferred until the "
-        "first real benchmark result lands"
-    ),
-)
-def test_the_committed_artifact_still_awaiting_supersession(tmp_path: Path) -> None:
-    """Fail the day the deferral is resolved, so it cannot be forgotten.
+def test_the_superseded_result_is_kept_and_the_supersession_names_both() -> None:
+    """Superseding is a recorded act: the old bytes stay, and a record says why."""
 
-    This asserts what the artifact will have to look like once it is superseded:
-    every metric re-derives from the fixture, `ontology_distance_error`
-    included. It is `strict`, so when the artifact is replaced with a result
-    carrying a measured ontology distance this turns into a failure and has to
-    be removed deliberately, at which point the pin above is tightened back to
-    comparing every key.
-    """
-
-    committed = json.loads(COMMITTED.read_text())
-    recomputed = evaluate_file(
-        FIXTURE,
-        system=committed["system"],
-        dataset=committed["dataset"],
-        output_path=tmp_path / "recomputed.json",
-    ).model_dump(mode="json")
-
-    for key, value in recomputed.items():
-        assert committed[key] == value, f"{key} drifted from the committed result"
+    record = json.loads(SUPERSESSION.read_text())
+    assert record["supersedes"] == "benchmarks/results/synthetic.json"
+    assert record["superseded_by"] == "benchmarks/results/synthetic.v2.json"
+    assert SUPERSEDED.is_file()
+    assert json.loads(SUPERSEDED.read_text())["prediction_sha256"] == record["prediction_sha256"]
 
 
 def test_the_result_manifest_and_fixture_all_name_the_same_bytes() -> None:
@@ -148,8 +89,17 @@ def test_the_committed_metrics_are_the_edge_cases_the_fixture_documents() -> Non
     assert committed["unknown_recall"] == 1.0
     assert committed["unknown_precision"] == pytest.approx(2 / 3)
     assert committed["hierarchy_error"] == 0.0625
-    assert committed["brier_score"] == pytest.approx(0.0337875)
-    assert committed["expected_calibration_error"] == pytest.approx(0.14875)
+    # Calibration over calls only: five called rows, abstentions excluded.
+    assert committed["brier_score"] == pytest.approx(
+        (0.05**2 + 0.08**2 + 0.1**2 + 0.14**2 + 0.11**2) / 5
+    )
+    assert committed["ontology_distance_error"] is None
+    assert committed["per_type"]["T cell"] == {
+        "precision": 1.0,
+        "recall": 0.5,
+        "f1": pytest.approx(2 / 3),
+        "support": 2,
+    }
 
 
 def test_evaluate_file_chooses_its_separator_from_the_suffix(tmp_path: Path) -> None:
@@ -182,59 +132,6 @@ def test_evaluate_file_refuses_to_rewrite_a_result_with_new_numbers(tmp_path: Pa
     other.write_text("barcode\ttrue_label\tpredicted_label\nz\tB cell\tT cell\n")
     with pytest.raises(ContractError, match="immutable"):
         evaluate_file(other, system="s", dataset="d", output_path=output)
-
-
-def test_a_pending_status_is_not_a_measurement_and_never_claims_superiority(
-    tmp_path: Path,
-) -> None:
-    """Every real run writes pending markers for all five public modalities.
-
-    `pipeline.py` emits one per run, so a reader scanning `benchmarks/` for a
-    score can land on one of these. It must be structurally impossible to
-    mistake for a `BenchmarkResult`, and it must never assert a comparison.
-    """
-
-    output = tmp_path / "public_rna.pending.json"
-    reason = "Public dataset and external comparator exports were not supplied."
-    reproduce = ["curl -fL --output matrix.h5 https://example.invalid/matrix.h5"]
-    write_pending_status(
-        output, dataset="10x-pbmc", modality="rna", reason=reason, reproduce=reproduce
-    )
-
-    payload = json.loads(output.read_text())
-    assert payload["status"] == "pending-external-resource"
-    assert payload["superiority_claimed"] is False
-    assert payload["reason"] == reason
-    assert payload["reproduce"] == reproduce
-
-    measured = evaluate_predictions(_frame(["T cell"]), system="s", dataset="d")
-    envelope = {"schema_version", "system", "dataset", "n", "artifact_path"}
-    reported = {
-        key
-        for key, value in measured.model_dump(mode="json").items()
-        if key not in envelope and isinstance(value, (int, float))
-    }
-    assert reported, "the measurement surface must not be empty"
-    assert not reported & payload.keys(), "a pending marker must report no measurement"
-
-    with pytest.raises(ContractError, match="immutable"):
-        write_pending_status(
-            output,
-            dataset="10x-pbmc",
-            modality="rna",
-            reason="a different reason",
-            reproduce=reproduce,
-        )
-
-
-def _frame(labels: list[str]) -> pd.DataFrame:
-    return pd.DataFrame(
-        {
-            "barcode": [f"b{i}" for i in range(len(labels))],
-            "true_label": labels,
-            "predicted_label": labels,
-        }
-    )
 
 
 def test_the_scrambled_8000_gene_result_stays_retracted() -> None:

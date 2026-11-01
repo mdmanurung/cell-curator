@@ -16,7 +16,6 @@ import pandas as pd
 
 from . import __version__
 from .audit_parents import build_audit
-from .benchmark import write_pending_status
 from .config import CellCuratorConfig, load_config
 from .contracts import (
     ContractError,
@@ -1530,15 +1529,4 @@ def run_annotation(config_path: str | Path) -> Path:
     review(path, strict=True)
     LOG.info("run_annotation: validating the run")
     validate(path)
-    benchmarks = run_root(config) / "benchmarks"
-    for modality in ("rna", "spatial", "cite-seq", "atac", "multiome"):
-        write_pending_status(
-            benchmarks / f"public_{modality}.pending.json",
-            dataset=f"public-{modality}-benchmark",
-            modality=modality,
-            reason="Public dataset and external comparator exports were not supplied to this local run.",
-            reproduce=[
-                "cell-curator benchmark evaluate --predictions <neutral.tsv> --system <name> --dataset <dataset> --output <result.json>"
-            ],
-        )
     return build_review_packet(path)

@@ -1,0 +1,10 @@
+{
+  "schema_version": 3,
+  "artifact_kind": "cell_curator_benchmark_supersession",
+  "supersedes": "benchmarks/results/synthetic.json",
+  "superseded_by": "benchmarks/results/synthetic.v2.json",
+  "prediction_sha256": "529c980c239c84f830b367bce5a7be9bf8ed71d32581725fd521352979971807",
+  "reason": "synthetic.json recorded ontology_distance_error from the alias of hierarchy_error that was removed once the metric became a real is_a-graph measurement, scored calibration over abstentions, and stored an absolute machine path. synthetic.v2.json is the same fixture scored by the current instrument, with per-type metrics and portable file names.",
+  "unchanged": "n, accuracy, macro_f1, micro_f1, coverage, selective_accuracy, coverage_risk, hierarchy_error, and the Unknown metrics.",
+  "recorded_utc": "2026-11-01"
+}

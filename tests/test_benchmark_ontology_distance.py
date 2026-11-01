@@ -341,7 +341,7 @@ def test_a_published_result_records_the_snapshot_it_measured_against(
     )
     assert result.ontology_distance_error == pytest.approx((0.5 + 1.0) / 2)
     payload = json.loads(output.read_text())
-    assert payload["ontology_source"] == str(ontology_path.resolve())
+    assert payload["ontology_source"] == ontology_path.name
     assert payload["ontology_sha256"] == sha256(ontology_path)
     assert payload["prediction_sha256"] == sha256(predictions)
     assert payload["neutral_format"] is True
@@ -427,9 +427,7 @@ def test_the_cli_flag_reaches_the_evaluator(tmp_path: Path) -> None:
     reported = dispatch(arguments)
     assert reported["ontology_distance_error"] == pytest.approx((0.5 + 1.0) / 2)
     published = json.loads((tmp_path / "cli-result.json").read_text())
-    assert published["ontology_source"] == str(
-        _write_ontology_table(tmp_path).resolve()
-    )
+    assert published["ontology_source"] == _write_ontology_table(tmp_path).name
     assert published["ontology_sha256"] == sha256(_write_ontology_table(tmp_path))
 
 

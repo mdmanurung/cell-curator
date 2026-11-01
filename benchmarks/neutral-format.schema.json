@@ -101,7 +101,7 @@
         "predicted_cell_type_ontology_term_id": {"const": ["ontology_distance_error", "descendant_accuracy", "relaxed_accuracy"]}
       },
       "additionalProperties": false,
-      "description": "Each column and the `BenchmarkResult` fields it can move. `accuracy`, `macro_f1`, `micro_f1`, `coverage`, `selective_accuracy`, `coverage_risk`, and the `Unknown` precision, recall, and F1 come from the three required columns alone: `relaxed_accuracy` is reported beside `accuracy` rather than in place of it, so the exact-label number is still there to disagree with."
+      "description": "Each column and the `BenchmarkResult` fields it can move. `accuracy`, `macro_f1`, `micro_f1`, `per_type` (precision, recall, F1, and support for every label), `coverage`, `selective_accuracy`, `coverage_risk`, and the `Unknown` precision, recall, and F1 come from the three required columns alone: `relaxed_accuracy` is reported beside `accuracy` rather than in place of it, so the exact-label number is still there to disagree with."
     },
     "carried_unscored_columns": {
       "type": "array",

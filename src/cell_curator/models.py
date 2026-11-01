@@ -235,6 +235,8 @@ class BenchmarkResult(StrictModel):
     peak_memory_mb: float | None = None
     artifact_completeness: float | None = None
     artifact_path: Path | None = None
+    # label -> precision, recall, f1, and support (true cells). Read F1 with its support.
+    per_type: dict[str, dict[str, float | int]] | None = None
 
 
 class RiskCoveragePoint(StrictModel):

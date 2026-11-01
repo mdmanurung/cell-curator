@@ -154,7 +154,7 @@ def test_the_ontology_pair_is_required_to_be_supplied_as_a_pair() -> None:
 
 
 def test_every_public_manifest_points_an_exporter_at_the_enumerated_contract() -> None:
-    """The five public manifests are how a third party learns the format.
+    """The public RNA manifest is how a third party learns the format.
 
     Each names this schema in its instructions, so the enumerated columns reach
     an external system only while those instructions survive. The synthetic
@@ -169,6 +169,6 @@ def test_every_public_manifest_points_an_exporter_at_the_enumerated_contract() -
         for path in manifests.glob("*.json")
         if "benchmarks/neutral-format.schema.json" in path.read_text()
     }
-    assert pointing == {"atac", "cite-seq", "multiome", "rna", "spatial"}
+    assert pointing == {"rna"}
     fixture_manifest = json.loads((manifests / "synthetic.json").read_text())
     assert fixture_manifest["status"] == "available"

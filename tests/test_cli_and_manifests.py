@@ -74,16 +74,9 @@ def test_stable_public_api_is_exposed() -> None:
 def test_all_benchmark_manifests_are_machine_readable() -> None:
     root = Path(__file__).resolve().parents[1]
     manifests = sorted((root / "benchmarks" / "manifests").glob("*.json"))
-    assert {path.stem for path in manifests} == {
-        "atac",
-        "cite-seq",
-        "multiome",
-        "rna",
-        "spatial",
-        "synthetic",
-    }
+    assert {path.stem for path in manifests} == {"rna", "synthetic"}
     statuses = {validate_dataset_manifest(path)["status"] for path in manifests}
-    assert statuses == {"available", "pending-external-resource"}
+    assert statuses == {"available"}
 
 
 def test_benchmark_manifest_validation_is_strict(tmp_path: Path) -> None:

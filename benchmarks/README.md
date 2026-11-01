@@ -6,11 +6,12 @@ first result written for a dataset is a permanent commitment. Anything decided
 here after a number has been seen is a result that was tuned, and the only honest
 record of that is a second dataset and a second protocol version.
 
-`results/synthetic.json` is the sole exception already on record. It predates
+`results/synthetic.json` is the sole exception on record. It predates
 `ontology_distance_error` becoming a real measurement, and the value it carries
-for that field came from the alias the metric replaced. It is superseded, not
-corrected, and `test_the_committed_artifact_still_awaiting_supersession` is a
-strict xfail that fires the moment that happens.
+for that field came from the alias the metric replaced. It was superseded, not
+corrected, on 2026-11-01: `results/synthetic.v2.json` scores the same fixture with
+the current instrument, and `results/synthetic.supersession.json` records why. The
+original file stays in place.
 
 ## What is and is not being claimed
 
@@ -478,6 +479,7 @@ another:
 | Field | Rule | Established precedent |
 | --- | --- | --- |
 | `accuracy`, `macro_f1`, `micro_f1` | exact string equality | — |
+| `per_type` | exact string equality, per label, with `support` = true cells | — |
 | `descendant_accuracy` | credit when the prediction is the truth or a **more specific** `is_a` descendant | scTab (Fischer et al. 2024) |
 | `relaxed_accuracy` | also credit a **coarser** ancestor | — |
 | `ontology_distance_error` | `(a+b)/(a+b+d(S))` over the `is_a` graph | — |
@@ -584,6 +586,10 @@ is published until it is captured on a real node and committed somewhere
 durable.
 
 No multi-dataset claim. One dataset, one cohort, one protocol version.
+
+No non-RNA benchmark. The ATAC, CITE-seq, multiome, and spatial manifests pointed at
+10x demonstration datasets that carry no truth labels, so they were removed on
+2026-11-01 rather than left as permanently pending.
 
 No superiority claim over any tool. The comparators are measured on the same
 data by the same harness, and the claim is about matching at matched coverage.

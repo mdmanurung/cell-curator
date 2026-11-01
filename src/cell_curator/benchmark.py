@@ -33,9 +33,12 @@ DEFAULT_RISK_COVERAGE_THRESHOLDS: tuple[float, ...] = tuple(
 )
 
 
-def _class_metrics(truth: pd.Series, prediction: pd.Series) -> tuple[float, float, float]:
+def _class_metrics(
+    truth: pd.Series, prediction: pd.Series
+) -> tuple[float, float, float, dict[str, dict[str, float | int]]]:
     labels = sorted(set(truth.astype(str)) | set(prediction.astype(str)))
     f1s = []
+    per_type: dict[str, dict[str, float | int]] = {}
     total_tp = total_fp = total_fn = 0
     for label in labels:
         true = truth.astype(str).eq(label)
@@ -45,7 +48,9 @@ def _class_metrics(truth: pd.Series, prediction: pd.Series) -> tuple[float, floa
         fn = int((true & ~predicted).sum())
         precision = tp / (tp + fp) if tp + fp else 0.0
         recall = tp / (tp + fn) if tp + fn else 0.0
-        f1s.append(2 * precision * recall / (precision + recall) if precision + recall else 0.0)
+        f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
+        f1s.append(f1)
+        per_type[label] = {"precision": precision, "recall": recall, "f1": f1, "support": tp + fn}
         total_tp += tp
         total_fp += fp
         total_fn += fn
@@ -57,7 +62,7 @@ def _class_metrics(truth: pd.Series, prediction: pd.Series) -> tuple[float, floa
         else 0.0
     )
     accuracy = float(truth.astype(str).eq(prediction.astype(str)).mean())
-    return accuracy, float(np.mean(f1s)) if f1s else 0.0, micro_f1
+    return accuracy, float(np.mean(f1s)) if f1s else 0.0, micro_f1, per_type
 
 
 def _unknown_metrics(
@@ -657,7 +662,9 @@ def evaluate_predictions(
         raise ContractError(f"neutral prediction table misses columns: {sorted(missing)}")
     if frame["barcode"].astype(str).duplicated().any():
         raise ContractError("neutral prediction table must contain one row per barcode")
-    accuracy, macro_f1, micro_f1 = _class_metrics(frame["true_label"], frame["predicted_label"])
+    accuracy, macro_f1, micro_f1, per_type = _class_metrics(
+        frame["true_label"], frame["predicted_label"]
+    )
     called = ~frame["predicted_label"].astype(str).eq("Unknown")
     coverage = float(called.mean())
     selective_accuracy = (
@@ -714,6 +721,7 @@ def evaluate_predictions(
         runtime_seconds=_optional_numeric(frame, "runtime_seconds"),
         peak_memory_mb=_optional_numeric(frame, "peak_memory_mb"),
         artifact_completeness=_optional_boolean_fraction(frame, "artifact_complete"),
+        per_type=per_type,
     )
 
 
@@ -757,10 +765,12 @@ def evaluate_file(
     source = None if resolved is None else Path(resolved.source)
     payload = {
         **result.model_dump(mode="json"),
-        "prediction_path": str(prediction_path.resolve()),
+        # File names, not resolved paths: an absolute path is true on one machine only,
+        # and the sha256 beside each name is what binds the result to its bytes.
+        "prediction_path": prediction_path.name,
         "prediction_sha256": sha256(prediction_path),
         "neutral_format": True,
-        "ontology_source": None if source is None else str(source.resolve()),
+        "ontology_source": None if source is None else source.name,
         "ontology_sha256": None if source is None or not source.is_file() else sha256(source),
     }
     publish_json(output_path, payload)
@@ -785,26 +795,3 @@ def validate_dataset_manifest(path: Path) -> dict[str, Any]:
         if not local.is_file() or sha256(local) != manifest.sha256:
             raise ContractError("available benchmark data are absent or fail checksum")
     return value
-
-
-def write_pending_status(
-    output_path: Path,
-    *,
-    dataset: str,
-    modality: str,
-    reason: str,
-    reproduce: list[str],
-) -> None:
-    publish_json(
-        output_path,
-        {
-            "schema_version": 3,
-            "artifact_kind": "cell_curator_benchmark_status",
-            "dataset": dataset,
-            "modality": modality,
-            "status": "pending-external-resource",
-            "reason": reason,
-            "reproduce": reproduce,
-            "superiority_claimed": False,
-        },
-    )
