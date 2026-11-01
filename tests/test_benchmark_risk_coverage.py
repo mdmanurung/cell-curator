@@ -297,3 +297,36 @@ def _frame(
             "confidence": confidence,
         }
     )
+
+
+def test_abstain_unknown_never_counts_an_abstention_as_a_call() -> None:
+    """The fixture has three Unknown predictions; with abstention on, none is called."""
+
+    plain, abstaining = (
+        sweep_benchmark_risk_coverage(FIXTURE, thresholds=[0.0], abstain_unknown=flag)[0]
+        for flag in (False, True)
+    )
+    assert plain.n_called == 8
+    assert abstaining.n_called == 5
+    assert abstaining.coverage == 0.625  # matches BenchmarkResult.coverage for the table
+    assert abstaining.selective_accuracy == 1.0
+
+
+def test_the_sweep_command_publishes_one_immutable_curve(tmp_path) -> None:
+    import json
+
+    from cell_curator.cli import build_parser, dispatch
+
+    output = tmp_path / "curve.json"
+    arguments = [
+        "benchmark", "sweep", "--predictions", str(FIXTURE), "--output", str(output),
+        "--thresholds", "0", "0.9", "--abstain-unknown",
+    ]  # fmt: skip
+    dispatch(build_parser().parse_args(arguments))
+    curve = json.loads(output.read_text())
+    assert curve["artifact_kind"] == "cell_curator_benchmark_risk_coverage"
+    assert curve["prediction_path"] == FIXTURE.name
+    assert curve["abstain_unknown"] is True
+    assert [point["n_called"] for point in curve["points"]] == [5, 3]
+    with pytest.raises(ContractError, match="immutable"):
+        dispatch(build_parser().parse_args([*arguments[:-1]]))

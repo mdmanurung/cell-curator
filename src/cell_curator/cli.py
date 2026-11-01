@@ -443,6 +443,30 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="local Cell Ontology snapshot; required when the table carries CL ids",
     )
+    sweep = benchmark_sub.add_parser(
+        "sweep", help="write the risk-coverage curve of a neutral prediction table"
+    )
+    sweep.add_argument("--predictions", required=True, type=Path)
+    sweep.add_argument("--output", required=True, type=Path)
+    sweep.add_argument(
+        "--thresholds",
+        type=float,
+        nargs="+",
+        help="confidence grid; default 0.00 to 1.00 in steps of 0.05",
+    )
+    sweep.add_argument(
+        "--agreement", choices=("strict", "descendant", "relaxed"), default="strict"
+    )
+    sweep.add_argument(
+        "--ontology",
+        type=Path,
+        help="local Cell Ontology snapshot; required for descendant or relaxed agreement",
+    )
+    sweep.add_argument(
+        "--abstain-unknown",
+        action="store_true",
+        help="never count a cell predicted Unknown as called",
+    )
     manifest = benchmark_sub.add_parser("validate-manifest")
     manifest.add_argument("--manifest", required=True, type=Path)
     return parser
@@ -964,6 +988,29 @@ def dispatch(args: argparse.Namespace) -> Any:
                 output_path=args.output,
                 ontology=args.ontology,
             ).model_dump(mode="json")
+        if args.action == "sweep":
+            from .api import sweep_benchmark_risk_coverage
+            from .contracts import sha256
+            from .provenance import publish_json
+
+            points = sweep_benchmark_risk_coverage(
+                args.predictions,
+                thresholds=args.thresholds,
+                agreement=args.agreement,
+                ontology=args.ontology,
+                abstain_unknown=args.abstain_unknown,
+            )
+            curve = {
+                "schema_version": 3,
+                "artifact_kind": "cell_curator_benchmark_risk_coverage",
+                "prediction_path": args.predictions.name,
+                "prediction_sha256": sha256(args.predictions),
+                "agreement": args.agreement,
+                "abstain_unknown": args.abstain_unknown,
+                "points": [point.model_dump(mode="json") for point in points],
+            }
+            publish_json(args.output, curve)
+            return curve
         return validate_dataset_manifest(args.manifest)
     raise ContractError(f"unsupported command: {args.command}")
 

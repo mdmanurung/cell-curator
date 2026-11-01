@@ -29,6 +29,7 @@ CLI_TO_PUBLIC_NAME: dict[tuple[str, ...], str] = {
     ("llm", "packet"): "build_llm_packet",
     ("llm", "propose"): "propose_llm_tie_breaks",
     ("benchmark", "validate-manifest"): "validate_dataset_manifest",
+    ("benchmark", "sweep"): "sweep_benchmark_risk_coverage",
     ("capabilities",): "list_capabilities",
     ("cluster", "confidence"): "advisory_confidence",
     ("cluster", "profile"): "profile_refined_clusters",

@@ -492,8 +492,14 @@ def risk_coverage_sweep(
     thresholds: Sequence[float] | None = None,
     agreement: Agreement = "strict",
     ontology: CellOntology | None = None,
+    abstain_unknown: bool = False,
 ) -> tuple[RiskCoveragePoint, ...]:
     """Report coverage, selective accuracy, and risk across a confidence grid.
+
+    ``abstain_unknown=True`` never calls a cell predicted ``Unknown``, whatever its
+    confidence, so coverage counts only labelled cells. Use it to compare systems
+    that abstain by label with systems that never abstain: without it, an
+    abstention counts as a wrong call.
 
     The published claim for this package is a selective-prediction claim:
     comparable accuracy at matched coverage, with abstention doing real work.
@@ -582,9 +588,14 @@ def risk_coverage_sweep(
             .eq(frame["predicted_label"].astype(str))
             .to_numpy()
         )
+    labelled = (
+        ~frame["predicted_label"].astype(str).eq("Unknown").to_numpy()
+        if abstain_unknown
+        else np.ones(len(frame), dtype=bool)
+    )
     points: list[RiskCoveragePoint] = []
     for threshold in grid:
-        called = confidence >= threshold
+        called = (confidence >= threshold) & labelled
         n_called = int(called.sum())
         n_correct = int(correct[called].sum())
         accuracy = float(correct[called].mean()) if n_called else None

@@ -997,6 +997,7 @@ def sweep_benchmark_risk_coverage(
     thresholds: Sequence[float] | None = None,
     agreement: Agreement = "strict",
     ontology: str | Path | CellOntology | None = None,
+    abstain_unknown: bool = False,
 ) -> list[RiskCoveragePoint]:
     """Report coverage, selective accuracy, and risk across a confidence grid.
 
@@ -1029,6 +1030,7 @@ def sweep_benchmark_risk_coverage(
             thresholds=thresholds,
             agreement=agreement,
             ontology=resolved,
+            abstain_unknown=abstain_unknown,
         )
     )
 
