@@ -2,16 +2,20 @@
 :hidden:
 :caption: Getting started
 
-Install and examples <_generated/readme>
+Overview <_generated/readme>
+install
+tutorial
+troubleshooting
 Agent workflow <_generated/skill>
 ```
 
 ```{toctree}
 :hidden:
 :maxdepth: 1
-:caption: Python API
+:caption: Reference
 
 _generated/api
+_generated/cli
 ```
 
 ```{toctree}

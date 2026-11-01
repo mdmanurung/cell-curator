@@ -93,7 +93,7 @@ def test_every_landing_card_links_to_a_published_document() -> None:
     index = (REPO_ROOT / "docs" / "index.md").read_text()
     links = CARD_LINK.findall(index)
     published = {f"_generated/{page[:-3]}" for page in _sync.PAGES.values()}
-    published.add("_generated/api")
+    published.update({"_generated/api", "_generated/cli"})
 
     assert links, "the landing page has no task routes"
     assert len(links) == len(set(links)), f"landing cards repeat a destination: {links}"

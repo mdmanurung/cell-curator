@@ -144,8 +144,39 @@ The guided object and the functions used by the CLI and Snakemake workflow.
 """
 
 
+def render_cli() -> str:
+    """Build the CLI page from the argparse parser the command itself uses."""
+
+    import argparse
+
+    from cell_curator.cli import build_parser
+
+    def children(parser: argparse.ArgumentParser) -> dict[str, argparse.ArgumentParser]:
+        for action in parser._actions:
+            if isinstance(action, argparse._SubParsersAction):
+                return dict(action.choices)
+        return {}
+
+    def block(parser: argparse.ArgumentParser) -> str:
+        return f"```text\n{parser.format_help().rstrip()}\n```"
+
+    sections = []
+    for group, group_parser in children(build_parser()).items():
+        leaves = children(group_parser)
+        body = [f"## `{group}`", "", block(group_parser)]
+        for leaf, leaf_parser in leaves.items():
+            body += ["", f"### `{group} {leaf}`", "", block(leaf_parser)]
+        sections.append("\n".join(body))
+    return (
+        "# Command-line reference\n\n"
+        "Generated from `cell-curator --help`, so it matches the installed version.\n\n"
+        + "\n\n".join(sections)
+        + "\n"
+    )
+
+
 def sync() -> list[Path]:
-    """Write every page in :data:`PAGES`, plus the API page, into ``docs/_generated``."""
+    """Write every page in :data:`PAGES`, plus the API and CLI pages, into ``docs/_generated``."""
 
     written = []
     for source, page in PAGES.items():
@@ -157,6 +188,9 @@ def sync() -> list[Path]:
     api = GENERATED / "api.md"
     api.write_text(render_api())
     written.append(api)
+    cli = GENERATED / "cli.md"
+    cli.write_text(render_cli())
+    written.append(cli)
     return written
 
 

@@ -61,11 +61,14 @@ that stand in for a human decision.
 Provide the input path, cluster key, assay representations, biological context,
 and available marker programs. For example:
 
-> Annotate `data/pancreas_clustered.h5ad`. The samples are healthy adult human
-> pancreas measured with 10x 3'. Clusters are in `obs["leiden_1"]`, log-normalized
-> values in `layers["logcounts"]`, and counts in `layers["counts"]`. Use
-> `markers/pancreas.json`. Begin in evidence-only mode and report marker coherence,
-> uncertainty, and unresolved clusters before proposing labels.
+> Annotate `data/pbmc_clustered.h5ad`. The samples are healthy adult human
+> peripheral blood measured with 10x 3'. Clusters are in `obs["leiden"]`,
+> log-normalized values in `layers["logcounts"]`, and counts in `layers["counts"]`.
+> Use the shipped `assets/markers/human-pbmc.json`. Begin in evidence-only mode and
+> report marker coherence, uncertainty, and unresolved clusters before proposing labels.
+
+For a complete run on public data, see the
+[PBMC 3k tutorial](https://mdmanurung.github.io/cell-curator/tutorial.html).
 
 The agent then follows [SKILL.md](skills/cell-curator/SKILL.md) and the linked analytical
 contracts. Interactive and pre-authorized runs produce the same decision ledger.
@@ -241,6 +244,10 @@ receipt.
 
 | Topic | Document |
 | --- | --- |
+| Installation and extras | [install](https://mdmanurung.github.io/cell-curator/install.html) |
+| Tutorial on PBMC 3k | [tutorial](https://mdmanurung.github.io/cell-curator/tutorial.html) |
+| Error messages and fixes | [troubleshooting](https://mdmanurung.github.io/cell-curator/troubleshooting.html) |
+| Command-line reference | [cli](https://mdmanurung.github.io/cell-curator/_generated/cli.html) |
 | Agent workflow | [SKILL.md](skills/cell-curator/SKILL.md) |
 | Inputs and matrices | [input-contract.md](skills/cell-curator/references/input-contract.md) |
 | Marker file format | [markers.md](skills/cell-curator/references/markers.md) |
