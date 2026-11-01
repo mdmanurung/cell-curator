@@ -35,6 +35,34 @@ def require_safe_path_component(value: object, *, field: str) -> str:
     return rendered
 
 
+def feature_positions(features) -> dict[str, int]:
+    """Map feature names to column positions, exact first, then case-insensitive.
+
+    A case-folded match is used only when no exact name exists and exactly one
+    feature folds to it, so `CD3E` finds `Cd3e` but never picks between `Foo` and `FOO`.
+    """
+
+    return _CaseFoldPositions({str(feature): index for index, feature in enumerate(features)})
+
+
+class _CaseFoldPositions(dict[str, int]):
+    def __init__(self, exact: dict[str, int]) -> None:
+        super().__init__(exact)
+        folded: dict[str, list[int]] = {}
+        for name, index in exact.items():
+            folded.setdefault(name.casefold(), []).append(index)
+        self.aliases = {key: hits[0] for key, hits in folded.items() if len(hits) == 1}
+
+    def __missing__(self, key: str) -> int:
+        return self.aliases[str(key).casefold()]
+
+    def __contains__(self, key: object) -> bool:
+        return dict.__contains__(self, key) or str(key).casefold() in self.aliases
+
+    def get(self, key: str, default: int | None = None) -> int | None:  # type: ignore[override]
+        return self[key] if key in self else default
+
+
 def sha256(path: Path, chunk_size: int = 1024 * 1024) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:

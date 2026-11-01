@@ -21,7 +21,7 @@ import pandas as pd
 from scipy import sparse
 
 from .config import CellCuratorConfig, load_config
-from .contracts import ContractError, safe_path_component, sha256
+from .contracts import ContractError, feature_positions, safe_path_component, sha256
 from .data import close_input, feature_ids_for, load_input, matrix_for
 from .evidence import compute_bottom_up_markers
 from .knowledge import (
@@ -563,7 +563,7 @@ def profile_marker_panel(
     _validate_inputs(matrix, groups, features, detection)
     cluster_ids = sorted(groups.astype(str).unique())
     group_values = groups.astype(str).to_numpy()
-    positions = {str(feature): index for index, feature in enumerate(features)}
+    positions = feature_positions(features)
     program_features = tuple(
         dict.fromkeys(
             feature
@@ -787,7 +787,7 @@ def score_aucell(
         raise ContractError("min_measured_positive must be positive")
     if len(features) == 0:
         raise ContractError("AUCell scoring requires at least one feature")
-    positions = {str(feature): index for index, feature in enumerate(features)}
+    positions = feature_positions(features)
     identifiers = _cell_ids(matrix.shape[0], cell_ids)
     top_k = max(1, min(len(features), math.ceil(len(features) * max_rank_fraction)))
     rows: list[dict[str, Any]] = []
@@ -850,7 +850,7 @@ def score_ucell(
     if len(features) == 0:
         raise ContractError("UCell scoring requires at least one feature")
     effective_max_rank = min(max_rank, len(features))
-    positions = {str(feature): index for index, feature in enumerate(features)}
+    positions = feature_positions(features)
     identifiers = _cell_ids(matrix.shape[0], cell_ids)
     rows: list[dict[str, Any]] = []
     for cell_id, ranks in zip(identifiers, _row_ranks(matrix, features), strict=True):

@@ -19,7 +19,13 @@ from scipy.spatial import cKDTree
 
 from .capabilities import build_capability_registry
 from .config import CellCuratorConfig
-from .contracts import ContractError, as_bool, measured_float, sha256
+from .contracts import (
+    ContractError,
+    as_bool,
+    feature_positions,
+    measured_float,
+    sha256,
+)
 from .data import (
     LoadedInput,
     close_input,
@@ -294,7 +300,7 @@ def compute_gpu_bottom_up_markers(
             "native RAPIDS logistic regression did not converge: "
             + "; ".join(convergence_warnings)
         )
-    positions = {str(feature): index for index, feature in enumerate(features)}
+    positions = feature_positions(features)
     group_values = groups.astype(str).to_numpy()
     rows: list[dict[str, Any]] = []
     coverage: dict[str, list[str]] = {}
@@ -424,7 +430,7 @@ def score_marker_programs(
     cell_cluster = np.asarray([cluster_index[value] for value in group_values])
     n_clusters = len(cluster_ids)
     cluster_sizes = np.bincount(cell_cluster, minlength=n_clusters)
-    positions = {str(feature): index for index, feature in enumerate(features)}
+    positions = feature_positions(features)
     compatible_spaces = {capability.feature_space}
     if capability.assay_kind.value == "gene_activity":
         compatible_spaces.add("gene")
