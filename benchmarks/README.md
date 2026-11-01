@@ -378,6 +378,86 @@ is an ancestor of every truth label in its cluster. Mature αβ T cell (111 cell
 is not an ancestor of the cluster's truth, double-negative regulatory T cell,
 which CL places outside it. So 96% of that call is wrong at every tier.
 
+## Protocol v5: an independent vocabulary, a human gate, and comparators
+
+**Declared 2026-11-02, before any v5 run.** The single change to cell-curator's arm
+is the vocabulary. The self-authored v3 panel, the largest declared limitation of v3
+and v4, is replaced by the published Azimuth PBMC level-2 panel: 30 types, ten
+published positives each, and Azimuth's own Cell Ontology terms. Negatives come from
+one mechanical rule. `data/aida-pbmc-protocol-v5/VOCABULARY_PROVENANCE.md` records the
+source page, its sha256, the rule, and what the rule does on this panel. The
+vocabulary file is `pbmc_markers.json`, sha256 `a549c09e8991…`. Run id `aida-pbmc-v13`,
+config `data/aida-pbmc-protocol-v5/config.yaml`.
+
+Unchanged from v4: the input (`aida_pbmc_clustered.h5ad`, sha256 `440ba41a…`), the
+ontology (`cl.obo` release 2026-06-08), every evidence threshold, the engine
+settings, the scoring rules, and the stop rules.
+
+**Input reproducibility.** `cluster_benchmark_input.py` now implements the clustering
+recipe in code. It gives 28 clusters, as the pinned input has, with an adjusted Rand
+index of 0.8775 against the pinned `bench_cluster`. The pinned file stays the input;
+the recipe is close to, not identical with, what produced it.
+
+**Predicted effect, stated before measuring.** The vocabulary is finer than v4's, so
+descendant accuracy should rise. Its ceiling from the vocabulary alone is 0.825, and
+the clustering ceiling of 0.636 still applies to per-cell numbers. Five programs are
+expected to abstain on panel coverage. The v12 NK cluster called platelet is not
+targeted by any v5 negative, so it may recur; whatever happens there is reported.
+
+**Gate A is a person.** v3 and v4 configs pre-authorized themselves, so their run
+state records no human approval. v5 is interactive: the run stops at Gate A until a
+named person approves the assumptions.
+
+### Comparators, frozen for v5
+
+This replaces the comparator list above for v5. All systems are scored by
+`benchmark evaluate` and `benchmark sweep --abstain-unknown` on the same cells.
+`--abstain-unknown` is declared now: without it, a cell a system labelled `Unknown`
+counts as a wrong call on the risk-coverage curve.
+
+**Donor split.** `data/aida-pbmc-protocol-v5/split_donors.py` assigns half of the 394
+donors to split A and half to split B, seed 0. The split is `donor_split.tsv`
+(sha256 `8b83624a…`): 197 donors and 8,847 cells in A, 197 donors and 8,547 cells
+in B. Systems that train on labelled cells (SingleR, scANVI, popV) train on A and
+are scored on B only. Systems that do not train on the slice (cell-curator,
+CellTypist, and the LLM annotators) are scored on the full slice and on B.
+Coverage-matched comparison uses B for every system.
+
+| System | Route | Confidence |
+| --- | --- | --- |
+| CellTypist | `Immune_All_Low.pkl`, per cell and with majority voting over `bench_cluster` | `1 - uncertainty` from the package lane |
+| SingleR | Bioconductor, trained on A with `de.method = "wilcox"` | `delta.next` divided by its maximum on B; pruned calls are `Unknown` |
+| scANVI | `reference train-scanvi` on A, `reference map-scarches` on B | maximum soft probability |
+| popV | trained on A, OnClass, CellTypist, and scANVI excluded from its ensemble | agreeing methods divided by methods run |
+
+### LLM annotators, frozen for v5
+
+GPTCelltype, mLLMCelltype, CASSIA, and CellTypeAI (Daw et al., *Bioinformatics* 2026).
+AIDA is public, and each receives only per-cluster marker genes, species, and tissue.
+The marker table is one scanpy Wilcoxon ranking of `lognorm` by `bench_cluster`, top
+10 per cluster, in `cluster_markers.tsv` (sha256 `fd78fe35…`, from `cluster_markers.py`); CellTypeAI computes its own from the
+h5ad, and its gene list is recorded beside ours. The three cloud tools use one cloud
+model; CellTypeAI runs its paper's default model on a local Ollama server, as it is
+local-only. Model ids, dates, and temperature are recorded. Each cloud tool runs three
+times on the same input and the spread is reported. Cluster labels are given to every
+cell of the cluster.
+
+| System | Confidence |
+| --- | --- |
+| GPTCelltype | none; one point on the risk-coverage plot |
+| mLLMCelltype | consensus proportion |
+| CASSIA | validation score divided by its maximum |
+| CellTypeAI | frequency of the modal answer over its repeats |
+
+cell-curator also runs a second arm with its LLM tie-break lane on the same cloud
+model, reported as its own row.
+
+**Label rule for every comparator.** `scripts/comparator_to_neutral.py` maps a label
+to a Cell Ontology term by exact name or EXACT synonym, case-insensitively, after
+trying the singular of a label ending in " cells". A label that does not resolve keeps
+its text and no CL id, and the unmapped fraction is reported per system. No mapping
+is written after outputs are seen.
+
 ## Why the pre-declared evidence bar is not met, measured rather than guessed
 
 Two runs, differing only in measured panel width. Both label one cluster of 28.
@@ -411,8 +491,8 @@ from 17 to 53 clusters moves the ceiling from 0.423 to 0.448. It is not a
 granularity problem: the cells of different AIDA subtypes overlap in expression
 space on this representation, so splitting further splits an impure cluster into
 smaller impure clusters. The missing ingredient is donor integration across 394
-donors, and this machine has no `scanpy`, `leidenalg`, `harmony`, or `scvi-tools`
-available. Batch correction is explicitly outside this package's scope, so it
+donors, and when this was written this machine had no `scanpy`, `leidenalg`,
+`harmony`, or `scvi-tools`; `scanpy` has since been installed, the others have not. Batch correction is explicitly outside this package's scope, so it
 cannot be done by the tool under test and would have to be declared as input
 preparation rather than performed silently.
 
@@ -441,7 +521,7 @@ accuracy contributed by the clustering alone** — no annotator, however good, c
 exceed it on this input.
 
 The cause is a narrow gene panel plus 394 donors with no batch correction, on a
-machine where `scanpy`, `leidenalg`, and `harmony` are unavailable. Resolution was
+machine where `scanpy`, `leidenalg`, and `harmony` were unavailable. Resolution was
 deliberately not tuned against purity, because tuning a clustering by its
 agreement with the ground truth fits the input to the answer.
 
@@ -537,7 +617,8 @@ while leaving CD4 TEM nearly vacant.
 
 ## Comparators
 
-Frozen as CellTypist, SingleR, and scANVI, each at a recorded version, each run
+Protocol v5 replaces this list; see "Comparators, frozen for v5". Through v4:
+frozen as CellTypist, SingleR, and scANVI, each at a recorded version, each run
 on the same slice through its own documented route, with `scANVI`'s reference
 trained on the *same* data and seed and that fact stated. **Azimuth is excluded
 from the primary comparison** for a reason that is about reproducibility rather

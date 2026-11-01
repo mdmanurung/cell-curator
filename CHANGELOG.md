@@ -9,6 +9,12 @@ Correctness and reproducibility release; 57 commits since 0.2.0.
   `results/synthetic.json` is superseded by `results/synthetic.v2.json`; the original stays.
 - **Removed** the ATAC, CITE-seq, multiome, and spatial benchmark manifests and the five
   `benchmarks/public_*.pending.json` files every run wrote. None pointed at data with truth labels.
+- **Docs:** Installation, Troubleshooting, a generated command-line reference, and a
+  PBMC 3k tutorial (`examples/pbmc3k_tutorial.py`) that runs from raw counts to labels.
+- **`cell-curator benchmark sweep`** writes a risk-coverage curve; `--abstain-unknown`
+  stops an `Unknown` label from counting as a wrong call.
+- **Benchmark protocol v5** is declared: the Azimuth PBMC level-2 vocabulary, a human
+  Gate A, and CellTypist, SingleR, scANVI, popV, and four LLM annotators as comparators.
 - **Gene matching** is case-insensitive when unambiguous. The wheel ships a human PBMC marker
   panel, and `references/markers.md` documents the marker file format.
 - **Evidence.** Score cells, not cluster means; confidence is a vote share. Cells with no
