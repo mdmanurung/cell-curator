@@ -7,7 +7,7 @@
   },
   "metadata": {
     "description": "Independent, local-first, evidence-driven annotation of clustered AnnData and MuData.",
-    "version": "0.2.0"
+    "version": "0.3.0"
   },
   "plugins": [
     {

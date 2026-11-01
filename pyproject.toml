@@ -4,12 +4,21 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cell-curator"
-version = "0.2.0"
+version = "0.3.0"
 description = "Independent evidence-driven multimodal cell-type annotation"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
-authors = [{ name = "cell-curator contributors" }]
+authors = [{ name = "Mikhael D. Manurung", email = "mikhael.manurung@gmail.com" }]
+keywords = ["single-cell", "scRNA-seq", "cell-type annotation", "Cell Ontology", "anndata"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Science/Research",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
 dependencies = [
   "anndata>=0.10",
   "mudata>=0.3",
@@ -20,6 +29,13 @@ dependencies = [
   "PyYAML>=6.0",
   "scipy>=1.11",
 ]
+
+[project.urls]
+Homepage = "https://github.com/mdmanurung/cell-curator"
+Documentation = "https://mdmanurung.github.io/cell-curator/"
+Source = "https://github.com/mdmanurung/cell-curator"
+Issues = "https://github.com/mdmanurung/cell-curator/issues"
+Changelog = "https://github.com/mdmanurung/cell-curator/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 celltypist = ["celltypist>=1.6"]

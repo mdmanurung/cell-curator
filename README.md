@@ -9,6 +9,8 @@ Runs are local and review-gated, and the source object remains unchanged. Writin
 annotated output requires a person to confirm the exact reviewed state. Running cell-curator
 requires Python 3.11 or newer and an existing clustering.
 
+Documentation: <https://mdmanurung.github.io/cell-curator/>
+
 ## Install
 
 Clone the repository, then install the workflow dependencies:
@@ -24,7 +26,7 @@ Alternatively, install the current wheel from
 [GitHub Releases](https://github.com/mdmanurung/cell-curator/releases/latest):
 
 ```bash
-uv pip install https://github.com/mdmanurung/cell-curator/releases/download/v0.2.0/cell_curator-0.2.0-py3-none-any.whl
+uv pip install https://github.com/mdmanurung/cell-curator/releases/download/v0.3.0/cell_curator-0.3.0-py3-none-any.whl
 ```
 
 The wheel installs the workflow, schemas, templates, and agent skill under
@@ -221,12 +223,27 @@ receipt.
   remain ontology-free when no ontology is available.
 - Comparative claims require measured benchmark results.
 
+## Known limits
+
+- **No comparative result yet.** The only published benchmark scores cell-curator alone
+  on one AIDA PBMC slice, and it fires its own "not comparable" stop rule. See
+  [benchmarks/README.md](benchmarks/README.md).
+- **Confidence is a vote share, not a calibrated probability.**
+- **Human-first.** Marker genes match case-insensitively, but there is no ortholog
+  mapping, and only a human PBMC marker set ships.
+- **CPU scale.** The CPU bottom-up marker lane densifies each cluster against the rest,
+  and stability refinement runs networkx Louvain. Neither has been measured at atlas
+  scale. For hundreds of thousands of cells, use the RAPIDS route.
+- **scANVI and scArches need a CUDA GPU.** The Azimuth-compatible lane is a kNN on
+  harmonized genes, not Azimuth itself.
+
 ## Documentation
 
 | Topic | Document |
 | --- | --- |
 | Agent workflow | [SKILL.md](skills/cell-curator/SKILL.md) |
 | Inputs and matrices | [input-contract.md](skills/cell-curator/references/input-contract.md) |
+| Marker file format | [markers.md](skills/cell-curator/references/markers.md) |
 | Assays and providers | [assay-routing.md](skills/cell-curator/references/assay-routing.md) |
 | Parent-local refinement | [adaptive-subclustering.md](skills/cell-curator/references/adaptive-subclustering.md) |
 | Multimodal evidence | [multimodal-evidence.md](skills/cell-curator/references/multimodal-evidence.md) |

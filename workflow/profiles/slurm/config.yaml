@@ -1,3 +1,5 @@
+# Add your cluster's partition and account under default-resources
+# (slurm_partition, slurm_account) before submitting.
 executor: slurm
 jobs: 100
 latency-wait: 60

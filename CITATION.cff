@@ -1,0 +1,16 @@
+cff-version: 1.2.0
+message: "If you use cell-curator, please cite it as below."
+title: "cell-curator: evidence-gated, ontology-checked cell-type annotation"
+type: software
+authors:
+  - family-names: Manurung
+    given-names: Mikhael D.
+version: 0.3.0
+license: MIT
+repository-code: "https://github.com/mdmanurung/cell-curator"
+url: "https://mdmanurung.github.io/cell-curator/"
+keywords:
+  - single-cell
+  - cell-type annotation
+  - Cell Ontology
+  - scRNA-seq
