@@ -541,7 +541,7 @@ also run once on the v5 input, as v5 declared.
 CellTypeAI wait on an API key and a local model server. When they run, they use the
 v6 marker table `data/aida-pbmc-protocol-v6/cluster_markers.tsv` (sha256 `a8677e56…`).
 
-### What v6 measured: comparators (cell-curator v14 pending Gate A)
+### What v6 measured: comparators
 
 Recorded 2026-11-02 on split B (8,547 cells), with v5's numbers beside them.
 
@@ -567,6 +567,39 @@ CellTypist lane read confidence from a table where CellTypist never writes it, s
 every run reported none (`e126aa5`). The first CellTypist scoring, made before the
 fix and never committed, was deleted and rerun on the fixed lane. Labels did not
 change; only confidence was added.
+
+### What v6 measured: cell-curator v14
+
+Recorded 2026-11-02. Gate A was approved by the user (43 assumptions); the run was
+`run execute` then `run validate` from a clean worktree at `8b0d11e`.
+
+| Slice | exact | coverage | selective | descendant | relaxed | macro F1 |
+| --- | --- | --- | --- | --- | --- | --- |
+| full (17,394 cells) | 0.131 | 0.310 | 0.423 | 0.462 | 0.916 | 0.078 |
+| split B (8,547 cells) | 0.132 | 0.298 | 0.444 | 0.481 | 0.915 | 0.078 |
+
+**The whole transcriptome turned abstention into calls, as predicted.** 11 of 28
+clusters are called: 3 backed off to a shared Cell Ontology ancestor (`lymphocyte`
+twice, `mature alpha-beta T cell` once) and 8 to a type. One type call is a parent
+of its truth (cluster 24, truth hematopoietic stem cell, called `hematopoietic
+precursor cell`), so descendant scoring gives it no credit. Four type calls match the cluster's majority truth exactly (clusters 10, 13,
+25, and the CD1c dendritic cells in cluster 5).
+
+**Two calls are confident and wrong.** Cluster 12 (126 cells, truth natural killer
+cell) is called `platelet` at 0.976, the same error v12 made at 0.94; whole-genome
+negatives did not veto it. Cluster 26 (111 cells, truth double negative T regulatory
+cell) is called `CD4-negative, CD8-negative, alpha-beta intraepithelial T cell` at
+0.784, the nearest Azimuth type for a population Azimuth does not name.
+
+**Stop rules.** *Not comparable* fires: descendant accuracy is 0.481 on split B,
+under 0.60. *Dominated* fires: at its only operating point (coverage 0.298, risk
+0.556), cell-curator has higher risk than SingleR, scANVI, and popV at their
+**full** coverage (risk 0.262, 0.138, 0.158). The selective-prediction claim stays
+withdrawn for v6. Nothing is retuned here.
+
+Artifacts: `results/aida-pbmc-v14.cell-curator[.split-B].json`, the strict and
+descendant sweeps beside them, and `results/predictions.aida-pbmc-v14[.split-B].tsv`
+with its receipt.
 
 ## Why the pre-declared evidence bar is not met, measured rather than guessed
 

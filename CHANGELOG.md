@@ -15,6 +15,11 @@ Correctness and reproducibility release; 57 commits since 0.2.0.
   stops an `Unknown` label from counting as a wrong call.
 - **Benchmark protocol v5** is declared: the Azimuth PBMC level-2 vocabulary, a human
   Gate A, and CellTypist, SingleR, scANVI, popV, and four LLM annotators as comparators.
+- **Benchmark protocols v5 and v6 measured.** On AIDA PBMC, v5 (2,000 genes) called
+  nothing; v6 (whole transcriptome) calls 11 of 28 clusters at 0.48 descendant accuracy.
+  Both "Not comparable" and "Dominated" stop rules fire; SingleR, scANVI, and popV lead.
+- **Negative markers** are judged over the measured ones when enough are in the panel;
+  one unmeasured negative no longer voids the check.
 - **Gene matching** is case-insensitive when unambiguous. The wheel ships a human PBMC marker
   panel, and `references/markers.md` documents the marker file format.
 - **Evidence.** Score cells, not cluster means; confidence is a vote share. Cells with no
