@@ -71,14 +71,16 @@ def _install_fake_celltypist(
         calls["annotate_models"].append(model)
         assert majority_voting is False
         assert over_clustering is None
-        frame = pd.DataFrame(
-            {
-                "predicted_labels": ["T cell", "B cell"],
-                "conf_score": [0.9, 0.75],
-            },
-            index=adata.obs_names,
-        )
-        return SimpleNamespace(predicted_labels=frame)
+        # Real CellTypist keeps confidence out of predicted_labels; to_adata adds it.
+        frame = pd.DataFrame({"predicted_labels": ["T cell", "B cell"]}, index=adata.obs_names)
+
+        def to_adata(*, insert_labels: bool, insert_conf: bool, insert_conf_by: str) -> Any:
+            assert insert_conf and insert_conf_by == "predicted_labels"
+            return SimpleNamespace(
+                obs=pd.DataFrame({"conf_score": [0.9, 0.75]}, index=adata.obs_names)
+            )
+
+        return SimpleNamespace(predicted_labels=frame, to_adata=to_adata)
 
     fake = SimpleNamespace(models=models, annotate=annotate, __version__="1.7.fake")
     monkeypatch.setattr(crosschecks_module.importlib.util, "find_spec", lambda _name: object())

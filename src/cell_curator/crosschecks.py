@@ -717,11 +717,15 @@ def celltypist_hypothesis(
             {
                 "barcode": adata.obs_names.astype(str),
                 "predicted_label": frame[label_column].astype(str).to_numpy(),
-                "uncertainty": (
-                    1.0 - frame["conf_score"].astype(float).to_numpy()
-                    if "conf_score" in frame
-                    else np.nan
-                ),
+                # CellTypist keeps confidence out of predicted_labels; to_adata adds it,
+                # scored for the label actually reported.
+                "uncertainty": 1.0
+                - result.to_adata(
+                    insert_labels=False, insert_conf=True, insert_conf_by=label_column
+                )
+                .obs["conf_score"]
+                .astype(float)
+                .to_numpy(),
                 "provider": "celltypist",
                 "role": "hypothesis_not_verdict",
             }
