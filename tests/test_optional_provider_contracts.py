@@ -875,3 +875,44 @@ def test_an_unreachable_bundle_url_is_a_receipt_not_an_exception(
     assert "network is unreachable" in status["reason"]
     assert status["remediation"].startswith("Check network access")
     assert not destination.exists()
+
+
+def test_scarches_mapping_hands_scvi_the_model_directory_as_a_string(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """scvi-tools 1.4 fails on a Path with "no attribute '_get_user_attributes'"."""
+
+    import sys
+    import types
+
+    received: list[object] = []
+
+    class Model:
+        def train(self, **_kwargs: object) -> None:
+            return None
+
+        def predict(self, soft: bool) -> pd.DataFrame:
+            return pd.DataFrame({"T cell": [0.9], "B cell": [0.1]}, index=["c1"])
+
+    class SCANVI:
+        @staticmethod
+        def load_query_data(_query: object, reference: object) -> Model:
+            received.append(reference)
+            return Model()
+
+    fake = types.ModuleType("scvi")
+    fake.model = types.SimpleNamespace(SCANVI=SCANVI)  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "scvi", fake)
+    monkeypatch.setattr(environment_module, "require_real_gpu", lambda: None)
+    monkeypatch.setattr(crosschecks_module.importlib.util, "find_spec", lambda _name: object())
+    (tmp_path / "model").mkdir()
+    query = types.SimpleNamespace(obs_names=pd.Index(["c1"]))
+
+    cells, status = map_scarches_query(
+        query, model_dir=tmp_path / "model", output_dir=tmp_path / "mapping"
+    )
+
+    assert received == [str(tmp_path / "model")]
+    assert status["status"] == "complete", status
+    assert cells["predicted_label"].tolist() == ["T cell"]

@@ -885,7 +885,8 @@ def map_scarches_query(
     try:
         import scvi
 
-        model = scvi.model.SCANVI.load_query_data(query, model_dir)
+        # scvi-tools 1.4 accepts a str or a model here, not a Path.
+        model = scvi.model.SCANVI.load_query_data(query, str(model_dir))
         model.train(max_epochs=max_epochs, accelerator="gpu", devices=1)
         probabilities = model.predict(soft=True)
         if not isinstance(probabilities, pd.DataFrame):
