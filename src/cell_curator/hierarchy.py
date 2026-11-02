@@ -444,7 +444,12 @@ def validate_hierarchy_nesting(
     if required.difference(combined.columns):
         raise ContractError("hierarchy labels lack level/parent/label/cluster columns")
     non_unknown = combined[~combined["label"].astype(str).eq("Unknown")]
-    parents = non_unknown.groupby("label", observed=True)["parent_scope"].nunique()
+    # Two parent scopes are not identities: an abstained parent ("Unknown"), whose
+    # accepted children resolve what it could not name, and the label itself, when a
+    # split keeps its parent's identity. Neither gives a label a second parent.
+    scope = non_unknown["parent_scope"].astype(str)
+    lineage = non_unknown[~scope.eq("Unknown") & ~scope.eq(non_unknown["label"].astype(str))]
+    parents = lineage.groupby("label", observed=True)["parent_scope"].nunique()
     invalid = sorted(parents[parents > 1].index.astype(str))
     if invalid:
         raise ContractError(f"strict hierarchy nesting failed for labels: {invalid}")

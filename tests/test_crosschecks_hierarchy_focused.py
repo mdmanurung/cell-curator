@@ -424,3 +424,26 @@ def test_score_only_tables_are_not_capped_by_advisory_confidence() -> None:
     impure = assign_parent_scoped_level(voted, vocabulary, level="L1", parent_scope="ROOT")
     assert impure.loc[0, "label"] == "Unknown"
     assert "vote share below threshold" in impure.loc[0, "rationale"]
+
+
+def test_strict_nesting_accepts_children_of_unknown_and_same_identity_splits() -> None:
+    """Found on PBMC 3k: a CD8 T split kept its parent's label and crashed validation."""
+
+    level_one = pd.DataFrame(
+        [
+            {"level": "L1", "parent_scope": "ROOT", "cluster_id": "3", "label": "CD8 T"},
+            {"level": "L1", "parent_scope": "ROOT", "cluster_id": "5", "label": "Mono"},
+            {"level": "L1", "parent_scope": "ROOT", "cluster_id": "1", "label": "Unknown"},
+        ]
+    )
+    level_two = pd.DataFrame(
+        [
+            {"level": "L2", "parent_scope": "CD8 T", "cluster_id": "3::a", "label": "CD8 T"},
+            {"level": "L2", "parent_scope": "Unknown", "cluster_id": "1::a", "label": "Mono"},
+        ]
+    )
+    assert validate_hierarchy_nesting([level_one, level_two])["status"] == "complete"
+
+    level_two.loc[1, "parent_scope"] = "CD8 T"
+    with pytest.raises(ContractError, match=r"strict hierarchy nesting failed.*Mono"):
+        validate_hierarchy_nesting([level_one, level_two])

@@ -35,6 +35,7 @@ SKILL_PATH = SKILL_ROOT / "SKILL.md"
 INTERNAL_ACTIONS: frozenset[tuple[str, ...]] = frozenset(
     {
         ("benchmark", "evaluate"),
+        ("benchmark", "sweep"),
         ("benchmark", "validate-manifest"),
         ("capabilities",),
         ("config", "schema"),
