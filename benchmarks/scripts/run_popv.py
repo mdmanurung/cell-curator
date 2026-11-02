@@ -32,6 +32,10 @@ METHODS = [
 ]
 BATCH_KEY = "donor_id"  # popV corrects batch by this key in both splits
 
+# UMAP embeddings are for popV's plots, not its predictions. Off, because scanpy 1.11
+# cannot read the sparse graph bbknn 1.6 builds for that UMAP.
+popv.settings.compute_umap_embedding = False
+
 OUT.mkdir(parents=True)
 reference = ad.read_h5ad(SPLITS / "A.h5ad")
 query = ad.read_h5ad(SPLITS / "B.h5ad")
