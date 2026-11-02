@@ -411,8 +411,14 @@ def score_marker_programs(
     representation: str,
     capability: Capability,
     positive_detection_threshold: float = 0.1,
+    min_negative_coverage: float = 0.35,
 ) -> pd.DataFrame:
     """Score signed programs without treating unmeasured features as negatives.
+
+    Expected negatives are judged over the ones the panel measures, when at least
+    ``min_negative_coverage`` of them are measured; below that the violation is
+    unavailable and the gate abstains. Pipelines pass ``min_positive_coverage``, so
+    both signs need the same share of their genes measured.
 
     Genes are standardised across cells, not across cluster means: a z-score over
     the handful of cluster means ignored expression magnitude and moved with the
@@ -525,6 +531,7 @@ def score_marker_programs(
     rows: list[dict[str, Any]] = []
     for m, (program, positive, negative, missing_positive, missing_negative) in enumerate(scored):
         program_coverage = len(positive) / len(program.positive)
+        negative_coverage = len(negative) / len(program.negative) if program.negative else 1.0
         pos_local = [local[i] for i in positive]
         neg_local = [local[i] for i in negative]
         for row_index, cluster_id in enumerate(cluster_ids):
@@ -539,7 +546,7 @@ def score_marker_programs(
                 positive_coverage = float(
                     np.mean(fractions[row_index, pos_local] >= positive_detection_threshold)
                 )
-                if missing_negative:
+                if negative_coverage < min_negative_coverage:
                     negative_violation = float("nan")
                 elif negative:
                     observed = (
@@ -1308,6 +1315,7 @@ def run_lane(
             assay=assay_id,
             representation=representation_name,
             capability=capability,
+            min_negative_coverage=config.evidence.min_positive_coverage,
         )
         if assay.kind == "spatial" and config.input.keys.spatial:
             coordinates, _, _ = resolve_obsm(
@@ -1492,6 +1500,7 @@ def run_candidate_lane(
             assay=assay_id,
             representation=representation_name,
             capability=capability,
+            min_negative_coverage=config.evidence.min_positive_coverage,
         )
         if assay.kind == "spatial" and config.input.keys.spatial:
             coordinates, _, _ = resolve_obsm(

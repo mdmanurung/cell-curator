@@ -144,6 +144,37 @@ def test_unmeasured_expected_negative_forces_abstention(config: dict) -> None:
     assert all(item.abstained and item.cell_type == "Unknown" for item in decisions)
 
 
+def test_a_partly_measured_negative_list_is_judged_on_its_measured_genes(config: dict) -> None:
+    """Protocol v5 abstained everywhere: one unmeasured negative voided the whole list."""
+
+    model = _model(config)
+    capabilities = build_capability_registry(model)
+    # Columns: positive, measured negative. Cluster 0 expresses the negative.
+    matrix = np.array([[5.0, 3.0], [4.0, 2.0], [0.0, 0.0], [0.0, 0.0]])
+    groups = pd.Series(["0", "0", "1", "1"])
+    program = MarkerProgram(
+        label="Target",
+        positive=("measured",),
+        negative=("measured-negative", "unmeasured-negative"),
+    )
+    common = dict(
+        detection=matrix,
+        run_id=model.run.run_id,
+        assay="transcriptome",
+        representation="logcounts",
+        capability=capabilities[0],
+    )
+    features = pd.Index(["measured", "measured-negative"])
+    judged = score_marker_programs(
+        matrix, groups, features, [program], min_negative_coverage=0.5, **common
+    )
+    assert judged.set_index("cluster_id")["negative_violation"].to_dict() == {"0": 1.0, "1": 0.0}
+    strict = score_marker_programs(
+        matrix, groups, features, [program], min_negative_coverage=0.75, **common
+    )
+    assert strict["negative_violation"].isna().all()
+
+
 def test_axisless_evidence_is_refused_rather_than_called_cell_type(config: dict) -> None:
     """Losing the axis column must stop the run, not relabel state as identity.
 

@@ -47,8 +47,11 @@ Genes match `var_names`, or the symbol column the input contract names. Matching
 exact first, then case-insensitive, so a human `CD3E` panel finds mouse `Cd3e`. That
 is not ortholog mapping: genes whose names differ between species are not found.
 
-A program with fewer than `evidence.min_positive_coverage` of its genes measured is
-left `Unknown`. On a 2,000-gene HVG panel, check that coverage before running.
+Both signs need `evidence.min_positive_coverage` of their genes measured. A program
+with fewer measured positives is left `Unknown`. Negatives are judged over the
+measured ones; with fewer than that share measured, the negative check is
+unavailable and the program is left `Unknown` too. On a highly-variable-gene panel,
+check both lists against `adata.var_names` before running.
 
 ## Writing a panel
 
