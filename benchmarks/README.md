@@ -541,6 +541,33 @@ also run once on the v5 input, as v5 declared.
 CellTypeAI wait on an API key and a local model server. When they run, they use the
 v6 marker table `data/aida-pbmc-protocol-v6/cluster_markers.tsv` (sha256 `a8677e56…`).
 
+### What v6 measured: comparators (cell-curator v14 pending Gate A)
+
+Recorded 2026-11-02 on split B (8,547 cells), with v5's numbers beside them.
+
+| System | v5 exact | v6 exact | v6 descendant | v6 relaxed | v6 coverage |
+| --- | --- | --- | --- | --- | --- |
+| SingleR 2.12.0 | 0.703 | 0.722 | 0.897 | 0.906 | 0.978 |
+| scANVI (scvi-tools 1.4.2) | 0.865 | 0.862 | 0.916 | 0.940 | 1.000 |
+| popV 0.6.1 | 0.821 | 0.818 | 0.936 | 0.947 | 0.971 |
+| CellTypist per cell | — | — | 0.356 | 0.548 | 1.000 |
+| CellTypist majority vote | — | — | 0.335 | 0.496 | 1.000 |
+
+The reference-trained three barely move with the gene panel. CellTypist's exact
+accuracy is not reported: its labels are its own 98 names, which never equal AIDA's
+Cell Ontology names as strings, so string equality measures naming, not
+annotation. Its descendant and relaxed numbers compare Cell Ontology terms through
+the authors' encyclopedia mapping, and its curves are published with
+`--agreement descendant`. Its expected calibration error is scored against string
+equality and is likewise not meaningful. On the v5 input, CellTypist reaches 0.347
+descendant per cell and 0.287 by majority vote.
+
+**A lane bug found and fixed before any CellTypist result was committed.** The
+CellTypist lane read confidence from a table where CellTypist never writes it, so
+every run reported none (`e126aa5`). The first CellTypist scoring, made before the
+fix and never committed, was deleted and rerun on the fixed lane. Labels did not
+change; only confidence was added.
+
 ## Why the pre-declared evidence bar is not met, measured rather than guessed
 
 Two runs, differing only in measured panel width. Both label one cluster of 28.

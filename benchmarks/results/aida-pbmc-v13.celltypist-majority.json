@@ -1,0 +1,284 @@
+{
+  "accuracy": 0.0,
+  "artifact_completeness": null,
+  "artifact_path": null,
+  "brier_score": 0.6378178855245441,
+  "coverage": 1.0,
+  "coverage_risk": 1.0,
+  "dataset": "aida-phase1-v2-pbmc-hvg2000",
+  "descendant_accuracy": 0.28866275727262275,
+  "expected_calibration_error": 0.6952291401343027,
+  "hierarchical_accuracy": null,
+  "hierarchy_error": null,
+  "input_invariance": null,
+  "macro_f1": 0.0,
+  "micro_f1": 0.0,
+  "mixed_detection_f1": null,
+  "n": 17394,
+  "neutral_format": true,
+  "ontology_distance_error": 0.2586700248258039,
+  "ontology_sha256": "7e19b4aef8e7fe7720b0c4474c6a5b8713c904ea9ab7b7d5d96f2cb28b8fc51f",
+  "ontology_source": "cl.obo",
+  "peak_memory_mb": null,
+  "per_type": {
+    "B cell": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 147
+    },
+    "CD14-low, CD16-positive monocyte": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 438
+    },
+    "CD14-positive monocyte": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 1614
+    },
+    "CD141-positive myeloid dendritic cell": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 100
+    },
+    "CD16+ NK cells": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 0
+    },
+    "CD16-negative, CD56-bright natural killer cell, human": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 109
+    },
+    "CD16-positive, CD56-dim natural killer cell, human": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 2854
+    },
+    "CD1c-positive myeloid dendritic cell": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 115
+    },
+    "CD4-positive, alpha-beta T cell": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 470
+    },
+    "CD4-positive, alpha-beta cytotoxic T cell": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 151
+    },
+    "CD8-positive, alpha-beta T cell": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 1002
+    },
+    "CD8-positive, alpha-beta cytotoxic T cell": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 823
+    },
+    "CD8-positive, alpha-beta memory T cell": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 343
+    },
+    "Classical monocytes": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 0
+    },
+    "DC1": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 0
+    },
+    "DC2": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 0
+    },
+    "HSC/MPP": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 0
+    },
+    "Naive B cells": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 0
+    },
+    "Non-classical monocytes": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 0
+    },
+    "Plasma cells": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 0
+    },
+    "T cell": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 1720
+    },
+    "Tcm/Naive cytotoxic T cells": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 0
+    },
+    "Tcm/Naive helper T cells": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 0
+    },
+    "Tem/Effector helper T cells": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 0
+    },
+    "Tem/Temra cytotoxic T cells": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 0
+    },
+    "Tem/Trm cytotoxic T cells": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 0
+    },
+    "central memory CD4-positive, alpha-beta T cell": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 1500
+    },
+    "double negative T regulatory cell": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 108
+    },
+    "effector memory CD4-positive, alpha-beta T cell": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 295
+    },
+    "gamma-delta T cell": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 685
+    },
+    "hematopoietic stem cell": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 100
+    },
+    "innate lymphoid cell": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 107
+    },
+    "mucosal invariant T cell": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 271
+    },
+    "myeloid cell": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 530
+    },
+    "naive thymus-derived CD4-positive, alpha-beta T cell": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 1729
+    },
+    "naive thymus-derived CD8-positive, alpha-beta T cell": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 1023
+    },
+    "natural killer cell": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 789
+    },
+    "plasma cell": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 101
+    },
+    "platelet": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 12
+    },
+    "pre-conventional dendritic cell": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 106
+    },
+    "regulatory T cell": {
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "support": 152
+    }
+  },
+  "prediction_path": "predictions.aida-pbmc-v13.celltypist-majority.tsv",
+  "prediction_sha256": "1d2e1251afff2dd9ab6010d9612dd4780b286108aaddba3f72cbc277e2fbda88",
+  "relaxed_accuracy": 0.45096010118431645,
+  "repeat_reproducibility": null,
+  "runtime_seconds": null,
+  "schema_version": 3,
+  "selective_accuracy": 0.0,
+  "split_decision_accuracy": null,
+  "system": "celltypist-majority",
+  "unknown_f1": null,
+  "unknown_precision": null,
+  "unknown_recall": null,
+  "unsplit_parent_invariance": null
+}
