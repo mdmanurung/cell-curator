@@ -12,6 +12,7 @@ Inputs:
     TRUTH         TSV: barcode, true_label, true_cl_id [ground_truth.tsv]
     ONTOLOGY      Cell Ontology OBO snapshot [cl.obo, release pinned in the protocol]
     MAP_TSV       optional TSV: label, cl_id, written before the comparator ran
+    BARCODES      optional, every cell the system was asked to label [splits/B/barcodes.tsv]
 Outputs:
     OUT           neutral TSV: barcode, true_label, predicted_label, true_cl_id,
                   predicted_cl_id, and confidence when the comparator gave uncertainty
@@ -38,6 +39,11 @@ parser.add_argument("truth", type=Path)
 parser.add_argument("ontology", type=Path)
 parser.add_argument("out", type=Path)
 parser.add_argument("--label-map", type=Path)
+parser.add_argument(
+    "--barcodes",
+    type=Path,
+    help="every cell the system was asked to label, one per line; a missing one is Unknown",
+)
 args = parser.parse_args()
 
 if args.out.exists():
@@ -46,6 +52,17 @@ if args.out.exists():
 # Join predictions to truth --------------------------------------------------------
 
 predictions = pd.read_csv(args.predictions, sep="\t", keep_default_na=False, dtype=str)
+if args.barcodes:
+    # A cell the system declined to label is an abstention, not a cell to drop.
+    asked = pd.Index(args.barcodes.read_text().split(), name="barcode")
+    if not predictions["barcode"].isin(asked).all():
+        raise ValueError("predictions contain barcodes the system was not asked to label")
+    missing = asked.difference(predictions["barcode"])
+    filler = {"barcode": missing, "predicted_label": "Unknown"}
+    if "uncertainty" in predictions:
+        filler["uncertainty"] = "1.0"
+    predictions = pd.concat([predictions, pd.DataFrame(filler)], ignore_index=True)
+    print(f"{len(missing)} cells the system did not label are Unknown")
 truth = pd.read_csv(args.truth, sep="\t", keep_default_na=False, dtype=str)
 table = truth.merge(predictions, on="barcode", how="inner", validate="1:1")
 if len(table) != len(predictions):
