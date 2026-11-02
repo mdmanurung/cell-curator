@@ -3,7 +3,9 @@
 Purpose: the popV comparator for protocol v5. OnClass, CellTypist, and scANVI are left
          out of popV's ensemble, so popV is not an average of comparators scored on
          their own; the seven remaining methods run.
-Run:     python benchmarks/scripts/run_popv.py SPLITS_DIR OUT_DIR   (on a GPU node)
+Run:     python benchmarks/scripts/run_popv.py SPLITS_DIR OUT_DIR [HVG]   (on a GPU node)
+         HVG: highly variable genes for popV; omitted keeps every gene (v5),
+         v6 passes popV's default of 4000.
 Inputs:
     SPLITS_DIR/A.h5ad, SPLITS_DIR/B.h5ad   [export_splits.py]; layers counts, obs cell_type
 Outputs (OUT_DIR, must not exist):
@@ -21,6 +23,7 @@ import popv
 
 SPLITS = Path(sys.argv[1])
 OUT = Path(sys.argv[2])
+HVG = int(sys.argv[3]) if len(sys.argv) > 3 else None
 METHODS = [
     "KNN_BBKNN",
     "KNN_HARMONY",
@@ -43,7 +46,7 @@ for part in (reference, query):
     part.X = part.layers["counts"].copy()
 
 # Train and annotate ------------------------------------------------------------------
-# hvg=None keeps the panel's 2,000 genes; popV's default of 4,000 exceeds them.
+# hvg=None keeps every gene (v5's 2,000-gene panel); v6 passes popV's default 4,000.
 
 processed = popv.preprocessing.Process_Query(
     query,
@@ -54,7 +57,7 @@ processed = popv.preprocessing.Process_Query(
     cl_obo_folder=False,
     prediction_mode="retrain",
     save_path_trained_models=str(OUT / "models"),
-    hvg=None,
+    hvg=HVG,
 ).adata
 popv.annotation.annotate_data(processed, methods=METHODS)
 

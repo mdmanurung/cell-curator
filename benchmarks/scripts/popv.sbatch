@@ -1,7 +1,7 @@
 #!/bin/bash
 # popV comparator for protocol v5: train on donor split A, annotate split B.
 #
-# Run:     sbatch benchmarks/scripts/popv.sbatch WORK_DIR ENV_DIR REPO_DIR
+# Run:     sbatch benchmarks/scripts/popv.sbatch WORK_DIR ENV_DIR REPO_DIR [HVG]
 # Inputs:  WORK_DIR/splits/{A,B}.h5ad   [export_splits.py]
 #          ENV_DIR   venv with popv, scvi-tools, and numpy<2
 #          REPO_DIR  checkout at the protocol commit, for run_popv.py
@@ -19,4 +19,4 @@
 set -euo pipefail
 nvidia-smi --query-gpu=name,driver_version --format=csv
 "$2/bin/python" -c "from importlib.metadata import version as v; print('popv', v('popv'), 'scvi-tools', v('scvi-tools'))"
-"$2/bin/python" "$3/benchmarks/scripts/run_popv.py" "$1/splits" "$1/popv"
+"$2/bin/python" "$3/benchmarks/scripts/run_popv.py" "$1/splits" "$1/popv" ${4:-}
