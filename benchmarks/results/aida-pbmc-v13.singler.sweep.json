@@ -1,0 +1,220 @@
+{
+  "abstain_unknown": true,
+  "agreement": "strict",
+  "artifact_kind": "cell_curator_benchmark_risk_coverage",
+  "points": [
+    {
+      "agreement": "strict",
+      "coverage": 0.978939978939979,
+      "n_called": 8367,
+      "n_correct": 6008,
+      "n_total": 8547,
+      "risk": 0.28194095852754875,
+      "selective_accuracy": 0.7180590414724513,
+      "threshold": 0.0
+    },
+    {
+      "agreement": "strict",
+      "coverage": 0.42564642564642563,
+      "n_called": 3638,
+      "n_correct": 3224,
+      "n_total": 8547,
+      "risk": 0.11379879054425512,
+      "selective_accuracy": 0.8862012094557449,
+      "threshold": 0.05
+    },
+    {
+      "agreement": "strict",
+      "coverage": 0.14484614484614486,
+      "n_called": 1238,
+      "n_correct": 1128,
+      "n_total": 8547,
+      "risk": 0.08885298869143776,
+      "selective_accuracy": 0.9111470113085622,
+      "threshold": 0.1
+    },
+    {
+      "agreement": "strict",
+      "coverage": 0.07874107874107875,
+      "n_called": 673,
+      "n_correct": 626,
+      "n_total": 8547,
+      "risk": 0.06983655274888556,
+      "selective_accuracy": 0.9301634472511144,
+      "threshold": 0.15
+    },
+    {
+      "agreement": "strict",
+      "coverage": 0.048438048438048435,
+      "n_called": 414,
+      "n_correct": 391,
+      "n_total": 8547,
+      "risk": 0.05555555555555558,
+      "selective_accuracy": 0.9444444444444444,
+      "threshold": 0.2
+    },
+    {
+      "agreement": "strict",
+      "coverage": 0.027963027963027964,
+      "n_called": 239,
+      "n_correct": 223,
+      "n_total": 8547,
+      "risk": 0.06694560669456062,
+      "selective_accuracy": 0.9330543933054394,
+      "threshold": 0.25
+    },
+    {
+      "agreement": "strict",
+      "coverage": 0.011817011817011816,
+      "n_called": 101,
+      "n_correct": 91,
+      "n_total": 8547,
+      "risk": 0.09900990099009899,
+      "selective_accuracy": 0.900990099009901,
+      "threshold": 0.3
+    },
+    {
+      "agreement": "strict",
+      "coverage": 0.004797004797004797,
+      "n_called": 41,
+      "n_correct": 37,
+      "n_total": 8547,
+      "risk": 0.09756097560975607,
+      "selective_accuracy": 0.9024390243902439,
+      "threshold": 0.35
+    },
+    {
+      "agreement": "strict",
+      "coverage": 0.002457002457002457,
+      "n_called": 21,
+      "n_correct": 19,
+      "n_total": 8547,
+      "risk": 0.09523809523809523,
+      "selective_accuracy": 0.9047619047619048,
+      "threshold": 0.4
+    },
+    {
+      "agreement": "strict",
+      "coverage": 0.001755001755001755,
+      "n_called": 15,
+      "n_correct": 14,
+      "n_total": 8547,
+      "risk": 0.06666666666666665,
+      "selective_accuracy": 0.9333333333333333,
+      "threshold": 0.45
+    },
+    {
+      "agreement": "strict",
+      "coverage": 0.001404001404001404,
+      "n_called": 12,
+      "n_correct": 11,
+      "n_total": 8547,
+      "risk": 0.08333333333333337,
+      "selective_accuracy": 0.9166666666666666,
+      "threshold": 0.5
+    },
+    {
+      "agreement": "strict",
+      "coverage": 0.001404001404001404,
+      "n_called": 12,
+      "n_correct": 11,
+      "n_total": 8547,
+      "risk": 0.08333333333333337,
+      "selective_accuracy": 0.9166666666666666,
+      "threshold": 0.55
+    },
+    {
+      "agreement": "strict",
+      "coverage": 0.00117000117000117,
+      "n_called": 10,
+      "n_correct": 9,
+      "n_total": 8547,
+      "risk": 0.09999999999999998,
+      "selective_accuracy": 0.9,
+      "threshold": 0.6
+    },
+    {
+      "agreement": "strict",
+      "coverage": 0.00117000117000117,
+      "n_called": 10,
+      "n_correct": 9,
+      "n_total": 8547,
+      "risk": 0.09999999999999998,
+      "selective_accuracy": 0.9,
+      "threshold": 0.65
+    },
+    {
+      "agreement": "strict",
+      "coverage": 0.000936000936000936,
+      "n_called": 8,
+      "n_correct": 8,
+      "n_total": 8547,
+      "risk": 0.0,
+      "selective_accuracy": 1.0,
+      "threshold": 0.7
+    },
+    {
+      "agreement": "strict",
+      "coverage": 0.000819000819000819,
+      "n_called": 7,
+      "n_correct": 7,
+      "n_total": 8547,
+      "risk": 0.0,
+      "selective_accuracy": 1.0,
+      "threshold": 0.75
+    },
+    {
+      "agreement": "strict",
+      "coverage": 0.000585000585000585,
+      "n_called": 5,
+      "n_correct": 5,
+      "n_total": 8547,
+      "risk": 0.0,
+      "selective_accuracy": 1.0,
+      "threshold": 0.8
+    },
+    {
+      "agreement": "strict",
+      "coverage": 0.000468000468000468,
+      "n_called": 4,
+      "n_correct": 4,
+      "n_total": 8547,
+      "risk": 0.0,
+      "selective_accuracy": 1.0,
+      "threshold": 0.85
+    },
+    {
+      "agreement": "strict",
+      "coverage": 0.000351000351000351,
+      "n_called": 3,
+      "n_correct": 3,
+      "n_total": 8547,
+      "risk": 0.0,
+      "selective_accuracy": 1.0,
+      "threshold": 0.9
+    },
+    {
+      "agreement": "strict",
+      "coverage": 0.000234000234000234,
+      "n_called": 2,
+      "n_correct": 2,
+      "n_total": 8547,
+      "risk": 0.0,
+      "selective_accuracy": 1.0,
+      "threshold": 0.95
+    },
+    {
+      "agreement": "strict",
+      "coverage": 0.000117000117000117,
+      "n_called": 1,
+      "n_correct": 1,
+      "n_total": 8547,
+      "risk": 0.0,
+      "selective_accuracy": 1.0,
+      "threshold": 1.0
+    }
+  ],
+  "prediction_path": "predictions.aida-pbmc-v13.singler.tsv",
+  "prediction_sha256": "f6789b5a6d3323787ca428d0cef0214e0be61b9f33a6f4c5e8e07e0a6578a76d",
+  "schema_version": 3
+}

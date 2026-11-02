@@ -458,6 +458,45 @@ trying the singular of a label ending in " cells". A label that does not resolve
 its text and no CL id, and the unmapped fraction is reported per system. No mapping
 is written after outputs are seen.
 
+### What v5 measured (partial: CellTypist and the LLM annotators pending)
+
+Recorded 2026-11-02. cell-curator ran as `aida-pbmc-v13` from a clean worktree at
+`6fe7cc7`, with context confirmed and Gate A approved by a named person (recorded as
+`agent_recorded`, because the command ran without a terminal). Comparators ran from
+the committed runners; the scArches mapping step ran with `2acbd9c`, a one-line fix
+that passes the model directory to scvi-tools as a string, and popV ran with its
+plotting UMAP off (`f6255e3` and later). Scored on split B (8,547 cells):
+
+| System | Exact | Coverage | Selective | Descendant | Relaxed | Macro F1 |
+| --- | --- | --- | --- | --- | --- | --- |
+| cell-curator v5 | 0.000 | 0.000 | — | — | — | 0.000 |
+| SingleR 2.12.0 | 0.703 | 0.979 | 0.718 | 0.876 | 0.883 | 0.675 |
+| scANVI (scvi-tools 1.4.2) | 0.865 | 1.000 | 0.865 | 0.916 | 0.937 | 0.848 |
+| popV 0.6.1, seven methods | 0.821 | 0.971 | 0.845 | 0.928 | 0.940 | 0.636 |
+
+popV declined 245 low-expression cells; they are scored as `Unknown`. SingleR,
+scANVI, and popV learn AIDA's own labels from split A, so they are same-cohort
+supervised references, not systems working from an external vocabulary.
+
+**cell-curator called nothing: all 28 clusters on the full slice are `Unknown`.** The
+cause is an engine rule that this protocol did not check. `score_marker_programs`
+sets a program's negative-marker violation to unavailable when any one of its listed
+negatives is absent from the panel, and the gate then refuses the call. Positives
+need only `min_positive_coverage` of their genes. The rule dates from the package's
+first commit and was documented nowhere; it also contradicts the package's own
+principle that panel-absent features are unmeasured, not evidence. The v3 panel had
+3 negatives per type, all in the 2,000-gene panel, so v3 and v4 never met it. In the
+v5 panel, 21 of 30 programs list at least one negative the panel lacks, so they can
+never be called on this slice. Cluster 24 shows the cost: 100 cells, truth HSPC,
+every cell voting for the HSPC program at full positive coverage, abstained because
+none of HSPC's erythroid negatives is in the panel.
+
+**Stop rules.** *Not comparable* cannot be read, because descendant accuracy is
+undefined with no calls. *Dominated* holds: every comparator's curve lies above
+cell-curator's empty one. Under this protocol the selective-prediction claim is
+withdrawn for v5. Nothing is retuned here; any change to the negative rule is a new
+protocol version, declared before it runs.
+
 ## Why the pre-declared evidence bar is not met, measured rather than guessed
 
 Two runs, differing only in measured panel width. Both label one cluster of 28.
