@@ -2,7 +2,8 @@
 
 Purpose: give SingleR (R), scANVI, and popV the same split A (train) and split B (score)
          cells, from the frozen donor split.
-Run:     uv run python benchmarks/scripts/export_splits.py OUT_DIR
+Run:     uv run python benchmarks/scripts/export_splits.py OUT_DIR [INPUT_H5AD SYMBOLS_TSV]
+         (protocol v6 passes the whole-transcriptome input and its gene_symbols.tsv)
 Inputs:
     benchmarks/data/aida-phase1-v2-pbmc-hvg2000/aida_pbmc_clustered.h5ad   pinned v5 input
     benchmarks/data/aida-pbmc-protocol-v5/donor_split.tsv                   frozen split
@@ -25,6 +26,9 @@ ROOT = Path(__file__).resolve().parents[2]
 INPUT = ROOT / "benchmarks/data/aida-phase1-v2-pbmc-hvg2000/aida_pbmc_clustered.h5ad"
 SPLIT = ROOT / "benchmarks/data/aida-pbmc-protocol-v5/donor_split.tsv"
 OUT = Path(sys.argv[1])
+if len(sys.argv) > 2:
+    INPUT = Path(sys.argv[2])
+SYMBOLS = Path(sys.argv[3]) if len(sys.argv) > 3 else None
 
 OUT.mkdir(parents=True)
 adata = ad.read_h5ad(INPUT)
@@ -34,7 +38,11 @@ adata.obs = adata.obs.merge(
 ).set_index(adata.obs.index)
 if adata.obs["split"].isna().any():
     raise ValueError("cells with a donor missing from the split")
-adata.var_names = adata.var["feature_name"].astype(str).to_numpy()
+if SYMBOLS is None:
+    adata.var_names = adata.var["feature_name"].astype(str).to_numpy()
+else:
+    symbols = pd.read_csv(SYMBOLS, sep="\t").set_index("feature_id")["gene_symbol"]
+    adata.var_names = symbols.loc[adata.var_names].to_numpy()
 
 for name in ("A", "B"):
     part = adata[adata.obs["split"].eq(name)].copy()

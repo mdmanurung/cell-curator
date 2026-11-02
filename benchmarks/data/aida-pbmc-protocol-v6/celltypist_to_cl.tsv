@@ -1,0 +1,99 @@
+label	cl_id
+Age-associated B cells	CL:0000787
+Alveolar macrophages	CL:0000583
+B cells	CL:0000236
+CD16+ NK cells	CL:0000623
+CD16- NK cells	CL:0000623
+CD8a/a	CL:0000084
+CD8a/b(entry)	CL:0002430
+CMP	CL:0000049
+CRTAM+ gamma-delta T cells	CL:0000798
+Classical monocytes	CL:0000860
+Cycling B cells	CL:0000236
+Cycling DCs	CL:0001056
+Cycling NK cells	CL:0000623
+Cycling T cells	CL:0000084
+Cycling gamma-delta T cells	CL:0000798
+Cycling monocytes	CL:0000576
+DC	CL:0001056
+DC precursor	CL:0001029
+DC1	CL:0000990
+DC2	CL:0000990
+DC3	CL:0001056
+Double-negative thymocytes	CL:0002489
+Double-positive thymocytes	CL:0000809
+ELP	CL:0000936
+ETP	CL:0000893
+Early MK	CL:0000553
+Early erythroid	CL:0000764
+Early lymphoid/T lymphoid	CL:0000936
+Endothelial cells	CL:0000115
+Epithelial cells	CL:0000066
+Erythrocytes	CL:0000232
+Erythrophagocytic macrophages	CL:0000235
+Fibroblasts	CL:0000057
+Follicular B cells	CL:0000843
+Follicular helper T cells	CL:0002038
+GMP	CL:0000557
+Germinal center B cells	CL:0000844
+Granulocytes	CL:0000094
+HSC/MPP	CL:0000837
+Hofbauer cells	CL:3000001
+ILC	CL:0001065
+ILC precursor	CL:0001082
+ILC1	CL:0001077
+ILC2	CL:0001081
+ILC3	CL:0001078
+Intermediate macrophages	CL:0000235
+Intestinal macrophages	CL:0000235
+Kidney-resident macrophages	CL:1000698
+Kupffer cells	CL:0000091
+Large pre-B cells	CL:0000817
+Late erythroid	CL:0000764
+MAIT cells	CL:0000940
+MEMP	CL:0000050
+MNP	CL:0000113
+Macrophages	CL:0000235
+Mast cells	CL:0000097
+Megakaryocyte precursor	CL:0000553
+Megakaryocyte-erythroid-mast cell progenitor	CL:0000050
+Megakaryocytes/platelets	CL:0000556
+Memory B cells	CL:0000787
+Memory CD4+ cytotoxic T cells	CL:0000934
+Mid erythroid	CL:0000764
+Migratory DCs	CL:0001056
+Mono-mac	CL:0000113
+Monocyte precursor	CL:0000576
+Monocytes	CL:0000576
+Myelocytes	CL:0002193
+NK cells	CL:0000623
+NKT cells	CL:0000814
+Naive B cells	CL:0000788
+Neutrophil-myeloid progenitor	CL:0000834
+Neutrophils	CL:0000775
+Non-classical monocytes	CL:0000875
+Plasma cells	CL:0000786
+Plasmablasts	CL:0000980
+Pre-pro-B cells	CL:0002046
+Pro-B cells	CL:0000826
+Proliferative germinal center B cells	CL:0000844
+Promyelocytes	CL:0000836
+Regulatory T cells	CL:0000815
+Small pre-B cells	CL:0000817
+T(agonist)	CL:0000815
+Tcm/Naive cytotoxic T cells	CL:0000907
+Tcm/Naive helper T cells	CL:0000904
+Tem/Effector helper T cells	CL:0000905
+Tem/Effector helper T cells PD1+	CL:0000905
+Tem/Temra cytotoxic T cells	CL:0001062
+Tem/Trm cytotoxic T cells	CL:0000913
+Transitional B cells	CL:0000818
+Transitional DC	CL:0000840
+Transitional NK	CL:0000823
+Treg(diff)	CL:0000815
+Trm cytotoxic T cells	CL:0000913
+Type 1 helper T cells	CL:0000545
+Type 17 helper T cells	CL:0000899
+gamma-delta T cells	CL:0000798
+pDC	CL:0001058
+pDC precursor	CL:0001058

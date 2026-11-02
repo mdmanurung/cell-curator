@@ -497,6 +497,50 @@ cell-curator's empty one. Under this protocol the selective-prediction claim is
 withdrawn for v5. Nothing is retuned here; any change to the negative rule is a new
 protocol version, declared before it runs.
 
+## Protocol v6: the whole transcriptome, and negatives judged where measured
+
+**Declared 2026-11-02, after v5 was seen and before any v6 run.** The user chose two
+changes at once, so v6 is not a single-change protocol:
+
+1. **Engine.** Expected negatives are judged over the measured ones when at least
+   `min_positive_coverage` of them are in the panel (`5791959`); before, one
+   unmeasured negative voided the check.
+2. **Input.** The same 17,394 cells, in the same order, with the same
+   `bench_cluster`, `annotation_scope`, and `X_pca_bench`, re-read from Census
+   2025-11-08 with all 61,497 genes by `soma_joinid`
+   (`data/aida-phase1-v2-pbmc-wholegenome/acquire_wholegenome.py`, output sha256
+   `1e74a9d6…`). `lognorm` is log1p of counts per 10,000 over **all genes**; v5's was
+   normalized over its 2,000 genes only. Symbols are made unique by
+   `gene_symbols.py` (sha256 `b4d0b6f7…`): of genes sharing a symbol, the one with the
+   most counts keeps it, the others take `SYMBOL--ENSEMBL_ID` (1,469 genes).
+
+**Attribution, checked before running.** On the whole transcriptome every negative of
+every v5 program is measured, so change 1 cannot alter any v6 call; a v5-to-v6
+difference in cell-curator comes from the input. Change 1 matters for gene subsets.
+
+Unchanged: the v5 vocabulary (four of its genes use retired symbols and are
+unmeasured: AC004585.1, AC133644.2, HIST1H2AC, HRASLS2; every program keeps at least
+0.9 of its positives and all of its negatives), the ontology, every threshold, the
+donor split, the scoring, and the stop rules. Run id `aida-pbmc-v14`, config
+`data/aida-pbmc-protocol-v6/config.yaml`, interactive with a human Gate A.
+
+**Predicted effect, stated before measuring.** Most of the 21 programs v5 could not
+call become callable, so coverage rises from 0. Whether calls are right is not
+predicted.
+
+**Comparators.** Rerun on the whole-transcriptome splits with v5's routes and
+confidence rules: SingleR and scANVI on all genes, popV with its default 4,000
+highly variable genes, and CellTypist `Immune_All_Low.pkl` (CellTypist 1.7.1, model
+sha256 `290874d3…`, 98 types) per cell and with majority voting over
+`bench_cluster`. CellTypist labels map to Cell Ontology through the authors' own
+encyclopedia table (`celltypist_encyclopedia_v2.xlsx`, sha256 `c037d777…`;
+`celltypist_to_cl.tsv`); all 98 IDs resolve in the pinned `cl.obo`. CellTypist is
+also run once on the v5 input, as v5 declared.
+
+**LLM annotators are deferred, not dropped.** GPTCelltype, mLLMCelltype, CASSIA, and
+CellTypeAI wait on an API key and a local model server. When they run, they use the
+v6 marker table `data/aida-pbmc-protocol-v6/cluster_markers.tsv` (sha256 `a8677e56…`).
+
 ## Why the pre-declared evidence bar is not met, measured rather than guessed
 
 Two runs, differing only in measured panel width. Both label one cluster of 28.
