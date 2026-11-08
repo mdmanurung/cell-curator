@@ -308,7 +308,10 @@ def derive_candidate_evidence(
                 marker_target = markers[markers["cluster_id"].astype(str).eq("candidate")]
                 if marker_target.empty:
                     marker_significant = False
-                else:
+                elif capability.requires_gpu or (
+                    "method" in marker_target and marker_target["method"].astype(str).eq("logreg").any()
+                ):
+                    # Decision row 18: both methods are needed only when both were run.
                     if "method" not in marker_target:
                         raise ContractError(f"marker table lacks method rows: {lane_id}")
                     wilcoxon = marker_target[
@@ -329,6 +332,18 @@ def derive_candidate_evidence(
                         set(wilcoxon["feature"].astype(str)).intersection(
                             logreg["feature"].astype(str)
                         )
+                    )
+                else:
+                    marker_significant = bool(
+                        (
+                            (pd.to_numeric(marker_target["effect"], errors="coerce") > 0)
+                            & (
+                                pd.to_numeric(
+                                    marker_target["adjusted_pvalue"], errors="coerce"
+                                )
+                                <= config.evidence.adjusted_pvalue_max
+                            )
+                        ).any()
                     )
                 separation = float(comparison["separation"])
                 coverage: float | None

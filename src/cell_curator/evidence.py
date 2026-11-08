@@ -57,6 +57,12 @@ CPU_MARKER_COLUMNS = [
 ]
 
 
+def _methods_run(bottom_up: pd.DataFrame) -> tuple[Any, ...]:
+    """The marker methods a table holds, in receipt order."""
+    present = set(bottom_up["method"]) if "method" in bottom_up else set()
+    return tuple(method for method in ("wilcoxon", "logreg") if method in present)
+
+
 def validate_backend_receipt(receipt: Any, capability: Capability) -> None:
     """Enforce the common no-fallback contract and strict RAPIDS method receipt."""
 
@@ -71,6 +77,8 @@ def validate_backend_receipt(receipt: Any, capability: Capability) -> None:
         ):
             raise ContractError("CPU no-comparator receipt cannot claim executed marker methods")
         return
+    if not capability.requires_gpu and set(receipt.marker_methods) == {"wilcoxon"}:
+        return  # decision row 18: the default CPU lane runs Wilcoxon only
     if set(receipt.marker_methods) != {"wilcoxon", "logreg"}:
         backend = "RAPIDS" if capability.requires_gpu else "CPU"
         raise ContractError(f"{backend} receipt must record Wilcoxon and balanced logreg")
@@ -127,8 +135,11 @@ def compute_bottom_up_markers(
     detection: Any | None,
     top_n: int | None = 100,
     marker_config: dict[str, Any] | None = None,
+    methods: tuple[str, ...] = ("wilcoxon",),
 ) -> pd.DataFrame:
-    """Compute Wilcoxon and balanced, L2 logistic one-vs-rest marker evidence.
+    """Compute Wilcoxon, and optionally balanced L2 logistic, one-vs-rest marker evidence.
+
+    Decision row 18: Wilcoxon is the default. The corpus workflow asks for both methods.
 
     The rank-sum test uses scipy's equivalent Mann-Whitney U test. Logistic
     coefficients come from a multivariate model with an unpenalized intercept;
@@ -151,6 +162,8 @@ def compute_bottom_up_markers(
             raise ContractError("detection matrix must be finite and match marker dimensions")
         if (detected < 0).any():
             raise ContractError("detection matrix must be nonnegative")
+    if "wilcoxon" not in methods or not set(methods) <= {"wilcoxon", "logreg"}:
+        raise ContractError("marker methods must include wilcoxon and may add logreg")
     config = marker_config or {}
     wilcoxon = config.get("wilcoxon", {})
     logreg = config.get("logreg", {})
@@ -207,15 +220,17 @@ def compute_bottom_up_markers(
                 pvalue = 1.0
             pvalues.append(float(pvalue))
         adjusted = benjamini_hochberg(np.asarray(pvalues))
-        coefficients, diagnostics = _cpu_logistic_markers(
-            matrix,
-            target_mask,
-            C=regularization,
-            tolerance=tolerance,
-            max_iter=max_iter,
-            retry_max_iter=retry_max_iter,
-        )
-        fit_diagnostics[str(cluster_id)] = diagnostics
+        coefficients = None
+        if "logreg" in methods:
+            coefficients, diagnostics = _cpu_logistic_markers(
+                matrix,
+                target_mask,
+                C=regularization,
+                tolerance=tolerance,
+                max_iter=max_iter,
+                retry_max_iter=retry_max_iter,
+            )
+            fit_diagnostics[str(cluster_id)] = diagnostics
         if detection is not None:
             target_detect = (_matrix_rows(detection, target_mask) > 0).mean(axis=0)
             reference_detect = (_matrix_rows(detection, reference_mask) > 0).mean(axis=0)
@@ -223,6 +238,8 @@ def compute_bottom_up_markers(
             target_detect = np.full(len(features), np.nan)
             reference_detect = np.full(len(features), np.nan)
         for method, scores in (("wilcoxon", effect), ("logreg", coefficients)):
+            if scores is None:
+                continue
             order = np.lexsort((features.astype(str).to_numpy(), -scores))[:top_n]
             for rank, column in enumerate(order, 1):
                 rows.append(
@@ -256,31 +273,37 @@ def compute_bottom_up_markers(
     result["method_concordant"] = [
         all(
             (str(row.cluster_id), str(row.feature), method) in positive
-            for method in ("wilcoxon", "logreg")
+            for method in methods
         )
         for row in result.itertuples(index=False)
     ]
     import scipy
 
     result.attrs["ranking_group_coverage"] = {
-        method: list(categories) for method in ("wilcoxon", "logreg")
+        method: list(categories) for method in methods
     }
     result.attrs["runtime"] = {
         "scipy": scipy.__version__,
         "native_api": ["scipy.stats.mannwhitneyu", "scipy.optimize.minimize"],
         "ranking_group_coverage": result.attrs["ranking_group_coverage"],
-        "logreg": {
-            "solver": "L-BFGS-B",
-            "class_weight": "balanced",
-            "penalty": "l2",
-            "C": regularization,
-            "tol": tolerance,
-            "max_iter": max_iter,
-            "retry_max_iter": retry_max_iter,
-            "fit_intercept": True,
-            "objective": "balanced_weighted_sum_log_loss_plus_l2_over_2C",
-            "fits": fit_diagnostics,
-        },
+        **(
+            {
+                "logreg": {
+                    "solver": "L-BFGS-B",
+                    "class_weight": "balanced",
+                    "penalty": "l2",
+                    "C": regularization,
+                    "tol": tolerance,
+                    "max_iter": max_iter,
+                    "retry_max_iter": retry_max_iter,
+                    "fit_intercept": True,
+                    "objective": "balanced_weighted_sum_log_loss_plus_l2_over_2C",
+                    "fits": fit_diagnostics,
+                }
+            }
+            if "logreg" in methods
+            else {}
+        ),
         "wilcoxon": {
             "tie_correct": True,
             "continuity_correct": bool(wilcoxon.get("continuity_correct", True)),
@@ -1517,8 +1540,8 @@ def run_lane(
                 if bottom_up.empty else ()
             ),
             runtime=backend_runtime,
-            marker_methods=("wilcoxon", "logreg") if not bottom_up.empty else (),
-            convergence_validated=True if not bottom_up.empty else None,
+            marker_methods=_methods_run(bottom_up),
+            convergence_validated=True if "logreg" in _methods_run(bottom_up) else None,
         )
         publish_json(receipt_path, receipt.model_dump(mode="json"))
         LOG.info("evidence lane complete: key=%s n_rows=%d", key, len(evidence))
@@ -1728,8 +1751,8 @@ def run_candidate_lane(
             groups=list(groups),
             limitations=capability.reasons,
             runtime=backend_runtime,
-            marker_methods=("wilcoxon", "logreg"),
-            convergence_validated=True,
+            marker_methods=_methods_run(bottom_up),
+            convergence_validated=True if "logreg" in _methods_run(bottom_up) else None,
         )
         publish_json(receipt_path, receipt.model_dump(mode="json"))
         return LaneResult(comparison_lane_id, evidence, bottom_up, receipt_path)

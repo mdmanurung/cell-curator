@@ -396,7 +396,7 @@ def collect_level(config_path: str | Path, level: str) -> dict[str, Any]:
             first_frame = len(marker_frames)
             comparators_ran: set[tuple[str, str]] = set()
             if len(clusters) > 1:
-                bottom = compute_bottom_up_markers(matrix[mask], scoped_groups, features, top_n=None,
+                bottom = compute_bottom_up_markers(matrix[mask], scoped_groups, features, top_n=None, methods=("wilcoxon", "logreg"),
                     detection=detection[mask], marker_config=config.markers.model_dump(mode="json"))
                 comparators_ran.update((cluster, "parent_remainder") for cluster in clusters)
                 marker_runtime.append({"parent": parent, "role": "parent_remainder", **bottom.attrs.get("runtime", {})})
@@ -417,7 +417,7 @@ def collect_level(config_path: str | Path, level: str) -> dict[str, Any]:
                                   key=lambda item: (float(np.linalg.norm(centroids[cluster] - centroids[item])), item))
                     pair = scoped_groups.isin([cluster, sibling]).to_numpy()
                     pair_markers = compute_bottom_up_markers(matrix[mask][pair], scoped_groups.iloc[np.flatnonzero(pair)],
-                        features, top_n=None, detection=detection[mask][pair],
+                        features, top_n=None, methods=("wilcoxon", "logreg"), detection=detection[mask][pair],
                         marker_config=config.markers.model_dump(mode="json"))
                     comparators_ran.add((cluster, "closest_sibling"))
                     marker_runtime.append({"parent": parent, "cluster": cluster, "role": "closest_sibling",

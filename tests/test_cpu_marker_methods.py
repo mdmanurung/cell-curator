@@ -19,6 +19,8 @@ from cell_curator.evidence import (
 )
 from cell_curator.models import BackendReceipt, MarkerProgram
 
+BOTH = ("wilcoxon", "logreg")  # decision row 18: logistic regression is opt-in
+
 
 @pytest.mark.parametrize("sparse_input", [False, True])
 def test_balanced_binary_logistic_coefficients_match_the_independent_scalar_optimum(
@@ -33,6 +35,7 @@ def test_balanced_binary_logistic_coefficients_match_the_independent_scalar_opti
         groups,
         pd.Index(["signal", "constant"]),
         detection=np.abs(matrix),
+        methods=BOTH,
         marker_config={"logreg": {"tol": 1e-8}},
     )
     expected = optimize.brentq(
@@ -58,8 +61,8 @@ def test_multiclass_markers_have_independent_binary_fits_and_repeat_exactly() ->
     matrix = np.repeat(np.eye(3) * 5, 8, axis=0)
     groups = pd.Series(np.repeat(["A", "B", "C"], 8))
     arguments = (matrix, groups, pd.Index(["a", "b", "c"]))
-    first = compute_bottom_up_markers(*arguments, detection=matrix, top_n=1)
-    second = compute_bottom_up_markers(*arguments, detection=matrix, top_n=1)
+    first = compute_bottom_up_markers(*arguments, detection=matrix, top_n=1, methods=BOTH)
+    second = compute_bottom_up_markers(*arguments, detection=matrix, top_n=1, methods=BOTH)
     pd.testing.assert_frame_equal(first, second)
     assert len(first) == 6
     assert first["method_concordant"].all()
@@ -73,7 +76,8 @@ def test_multiclass_markers_have_independent_binary_fits_and_repeat_exactly() ->
 def test_constant_panel_does_not_create_markers() -> None:
     matrix = np.full((12, 2), 3.0)
     result = compute_bottom_up_markers(
-        matrix, pd.Series(["A"] * 6 + ["B"] * 6), pd.Index(["x", "y"]), detection=matrix
+        matrix, pd.Series(["A"] * 6 + ["B"] * 6), pd.Index(["x", "y"]), detection=matrix,
+        methods=BOTH,
     )
     assert result["effect"].eq(0).all()
     assert not result["method_concordant"].any()
@@ -108,6 +112,7 @@ def test_invalid_inputs_fail_before_publishing_method_evidence(
             pd.Index(["x", "y"]),
             detection=detection,
             marker_config=options,
+            methods=BOTH,
         )
 
 
@@ -123,7 +128,7 @@ def test_failed_logistic_fit_cannot_publish_a_wilcoxon_only_success(
     matrix = np.eye(2)
     with pytest.raises(ContractError, match="logistic regression did not converge"):
         compute_bottom_up_markers(
-            matrix, pd.Series(["A", "B"]), pd.Index(["x", "y"]), detection=matrix
+            matrix, pd.Series(["A", "B"]), pd.Index(["x", "y"]), detection=matrix, methods=BOTH
         )
 
 
@@ -171,15 +176,11 @@ def test_cpu_lane_receipt_binds_executed_methods_and_rejects_incomplete_resume(
         assert receipt.convergence_validated is None
         assert receipt.runtime["marker_status"] == "unavailable_no_comparator"
     else:
-        assert receipt.marker_methods == ("wilcoxon", "logreg")
-        assert receipt.convergence_validated is True
-        assert receipt.runtime["ranking_group_coverage"] == {
-            "wilcoxon": ["A", "B"],
-            "logreg": ["A", "B"],
-        }
-        assert receipt.runtime["logreg"]["fit_intercept"] is True
+        assert receipt.marker_methods == ("wilcoxon",)
+        assert receipt.convergence_validated is None
+        assert receipt.runtime["ranking_group_coverage"] == {"wilcoxon": ["A", "B"]}
     value = json.loads(result.receipt_path.read_text())
-    value["marker_methods"] = ["wilcoxon"]
+    value["marker_methods"] = ["logreg"]
     result.receipt_path.write_text(json.dumps(value))
     message = "cannot claim" if single_group else "Wilcoxon and balanced logreg"
     with pytest.raises(ContractError, match=message):
@@ -216,7 +217,7 @@ def test_cpu_receipt_requires_successful_logistic_convergence(config: dict) -> N
         validate_backend_receipt(receipt, capability)
 
 
-def test_standalone_marker_artifacts_preserve_configured_method_runtime(tmp_path: Path) -> None:
+def test_standalone_marker_artifacts_record_the_default_wilcoxon_runtime(tmp_path: Path) -> None:
     from cell_curator.markers import run_marker_analysis, write_marker_artifacts
 
     matrix = np.repeat(np.eye(2) * 5, 8, axis=0)
@@ -230,6 +231,24 @@ def test_standalone_marker_artifacts_preserve_configured_method_runtime(tmp_path
     )
     artifacts = write_marker_artifacts(analysis, tmp_path / "markers")
     manifest = json.loads(artifacts["manifest"].read_text())
-    assert manifest["marker_methods"] == ["logreg", "wilcoxon"]
-    assert manifest["marker_runtime"]["logreg"]["C"] == 0.3
-    assert manifest["marker_runtime"]["logreg"]["fits"]["A"]["converged"] is True
+    assert manifest["marker_methods"] == ["wilcoxon"]
+    assert "logreg" not in manifest["marker_runtime"]
+
+
+def test_configured_logistic_runtime_is_kept_when_the_method_is_requested() -> None:
+    matrix = np.repeat(np.eye(2) * 5, 8, axis=0)
+    result = compute_bottom_up_markers(
+        matrix, pd.Series(["A"] * 8 + ["B"] * 8), pd.Index(["a", "b"]), detection=matrix,
+        methods=BOTH, marker_config={"logreg": {"C": 0.3}},
+    )
+    assert result.attrs["runtime"]["logreg"]["C"] == 0.3
+    assert result.attrs["runtime"]["logreg"]["fits"]["A"]["converged"] is True
+
+
+def test_wilcoxon_is_the_default_and_fits_no_logistic_model() -> None:
+    matrix = np.repeat(np.eye(2) * 5, 8, axis=0)
+    result = compute_bottom_up_markers(
+        matrix, pd.Series(["A"] * 8 + ["B"] * 8), pd.Index(["a", "b"]), detection=matrix
+    )
+    assert set(result["method"]) == {"wilcoxon"}
+    assert "logreg" not in result.attrs["runtime"]
