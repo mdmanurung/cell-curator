@@ -21,17 +21,17 @@ Rules for this file:
 | # | Decision | Where (unverified) | Current | Alternatives | Source | Status |
 |---|---|---|---|---|---|---|
 | 2 | Unmeasured negative marker | `annotation.py:384` | NaN fails the gate | Score separately | inherited: plans/annotation-corpus.md line 143 | approved: pass with `unmeasured_negatives` flag (user, 2026-11-08); done in working tree, uncommitted |
-| 3 | Missing comparator table | `annotation.py:395-396` | Fails `{role}:{method}` | Mark unavailable, skip vote | inherited | approved: mark `comparator_unavailable`, skip that vote, show the flag (user, 2026-11-08); not yet implemented |
-| 4 | Label with no declared negatives | `evidence.py:690`, `718` | Coverage 1.0, violation 0.0 | Neutral, or require negatives | inherited | approved: pass with `no_declared_negatives` flag; no score bonus (neutral coverage) (user, 2026-11-08); not yet implemented |
-| 5 | Parent with no differing sibling | `annotation.py:357-361` | No sibling rows, all labels fail | Use a corpus sibling | inherited | approved: use a corpus sibling of the same parent; nearest cluster as fallback (user, 2026-11-08); not yet implemented |
-| 6 | Positive-marker gate | `annotation.py:395` | 1 marker in top 100 | Minimum count or fraction | inherited | approved: at least 2 positive markers, or all if the label has only 1 (user, 2026-11-08); not yet implemented |
-| 7 | Top-N ranking | `evidence.py:224` | Mean difference, N=100 | Rank by p-value; other N | inherited | approved: filter by adjusted p first, rank by effect, N=100 (user, 2026-11-08); not yet implemented |
-| 8 | Multiple-testing family | `evidence.py` | BH per cluster per comparison | One family across siblings | inherited | approved: one BH family per parent scope and method, across all sibling tests (user, 2026-11-08); not yet implemented |
-| 9 | Exact-mapping merge | `corpus.py:373` | Union of positives | Intersection | inherited | approved: intersection of positives; each source's own list kept in the record (user, 2026-11-08); not yet implemented |
-| 14 | Margin definition | `annotation.py:417` | Failed runner-up gets vote 0 | Keep its real vote | inherited | approved: keep the failed runner-up's real vote so near-ties stay visible (user, 2026-11-08); not yet implemented |
-| 15 | LLM near-tie hook | corpus DAG | `evidence.llm.proposals` not read | Wire in, or declare out of scope | inherited: plan line 154 | approved: out of scope for now; a near-tie goes to the parent or Unknown (user, 2026-11-08); not yet implemented |
-| 16 | Corpus context scope | `corpus.py:125`, `293` | Empty tissue/stage/condition matches anywhere | Require tissue and assay | inherited: plan line 71 | approved: require species and tissue; assay and condition optional but recorded (user, 2026-11-08); not yet implemented |
-| 17 | State-call rule | `annotation.py:435` | Every positive gene in every cell | Fraction or score | inherited | approved: at least half the positive genes per cell and no negative gene; threshold in config with its reason (user, 2026-11-08); not yet implemented |
+| 3 | Missing comparator table | `annotation.py:395-396` | Fails `{role}:{method}` | Mark unavailable, skip vote | inherited | approved: mark `comparator_unavailable`, skip that vote, show the flag (user, 2026-11-08); implemented in the working tree 2026-11-08 (see Status) |
+| 4 | Label with no declared negatives | `evidence.py:690`, `718` | Coverage 1.0, violation 0.0 | Neutral, or require negatives | inherited | approved: pass with `no_declared_negatives` flag; no score bonus (neutral coverage) (user, 2026-11-08); implemented in the working tree 2026-11-08 (see Status) |
+| 5 | Parent with no differing sibling | `annotation.py:357-361` | No sibling rows, all labels fail | Use a corpus sibling | inherited | approved: use a corpus sibling of the same parent; nearest cluster as fallback (user, 2026-11-08); implemented in the working tree 2026-11-08 (see Status) |
+| 6 | Positive-marker gate | `annotation.py:395` | 1 marker in top 100 | Minimum count or fraction | inherited | approved: at least 2 positive markers, or all if the label has only 1 (user, 2026-11-08); implemented in the working tree 2026-11-08 (see Status) |
+| 7 | Top-N ranking | `evidence.py:224` | Mean difference, N=100 | Rank by p-value; other N | inherited | approved: filter by adjusted p first, rank by effect, N=100 (user, 2026-11-08); implemented in the working tree 2026-11-08 (see Status) |
+| 8 | Multiple-testing family | `evidence.py` | BH per cluster per comparison | One family across siblings | inherited | approved: one BH family per parent scope and method, across all sibling tests (user, 2026-11-08); implemented in the working tree 2026-11-08 (see Status) |
+| 9 | Exact-mapping merge | `corpus.py:373` | Union of positives | Intersection | inherited | approved: intersection of positives; each source's own list kept in the record (user, 2026-11-08); implemented in the working tree 2026-11-08 (see Status) |
+| 14 | Margin definition | `annotation.py:417` | Failed runner-up gets vote 0 | Keep its real vote | inherited | approved: keep the failed runner-up's real vote so near-ties stay visible (user, 2026-11-08); implemented in the working tree 2026-11-08 (see Status) |
+| 15 | LLM near-tie hook | corpus DAG | `evidence.llm.proposals` not read | Wire in, or declare out of scope | inherited: plan line 154 | approved: out of scope for now; a near-tie goes to the parent or Unknown (user, 2026-11-08); no code change needed |
+| 16 | Corpus context scope | `corpus.py:125`, `293` | Empty tissue/stage/condition matches anywhere | Require tissue and assay | inherited: plan line 71 | approved: require species and tissue; assay and condition optional but recorded (user, 2026-11-08); implemented in the working tree 2026-11-08 (see Status) |
+| 17 | State-call rule | `annotation.py:435` | Every positive gene in every cell | Fraction or score | inherited | approved: at least half the positive genes per cell and no negative gene; threshold in config with its reason (user, 2026-11-08); implemented in the working tree 2026-11-08 (see Status) |
 
 ## Classifier rules
 
@@ -78,7 +78,14 @@ Facts read with `gh` on 2026-11-08, not from the repos' docs sites (those timed 
 
 ## Status 2026-11-08
 
-All 29 rows are approved. Implementation not started except rows 1 (`AGENTS.md` rule) and 2 (`annotation.py`).
+All 29 rows are approved. Implemented: rows 1 (`AGENTS.md` rule), 2, 3, 4, 5, 6, 7, 8, 9, 14, 16, 17. Row 15 needs no code.
+Not yet implemented: rows 10-13, 18-22, and the scGate_models importer (rows 23-29).
+
+Known limits of what was built:
+- Row 4: the label gets the `no_declared_negatives` flag and still has violation 0.0. The score has no penalty for it, so it is not made neutral. A neutral value would need a number you have not chosen.
+- Row 8: the family is every kept Wilcoxon test in a parent scope. Sibling-pair tests keep only the target cluster's side.
+- Row 9: negatives are still a union across mapped sources. Intersection of positives can make an exact mapping fail with `share no positive marker`.
+- Row 16: reviewed labels now need `tissues`, and the dataset context needs `tissue`. Existing reviewed corpora without tissue will no longer load.
 
 ## Suggested order
 
