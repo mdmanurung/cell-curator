@@ -46,6 +46,38 @@ RECONCILIATION_STATES = TERMINAL_RECONCILIATION_STATES | {"OPEN"}
 CRITIC_SEVERITIES = frozenset({"BLOCKER", "ERROR", "WARNING", "INFO", "NONE"})
 
 
+def _corpus_tables(run_root: Path, filename: str) -> pd.DataFrame:
+    paths = sorted((run_root / "annotation" / "levels").glob(f"*/{filename}"))
+    if not paths:
+        raise ContractError(f"corpus review requires {filename} evidence")
+    return pd.concat([pd.read_csv(path, sep="\t", keep_default_na=False) for path in paths], ignore_index=True)
+
+
+def validate_corpus_annotation(config: CellCuratorConfig, run_root: Path) -> dict[str, Any]:
+    """Check the complete corpus evidence chain before review or write-back."""
+    from .annotation import _check_receipt, annotation_contract
+
+    manifest = _check_receipt(run_root / "annotation" / "annotation.manifest.json")
+    if manifest.get("status") != "complete":
+        raise ContractError("corpus annotation has not completed")
+    plan = json.loads((run_root / "plan.json").read_text())
+    if plan.get("annotation_contract") != annotation_contract(config):
+        raise ContractError("corpus or classifier resources changed after planning")
+    state = load_state(run_root)
+    if state.input_sha256 != sha256(Path(config.input.path)):
+        raise ContractError("source input changed after corpus annotation")
+    for level in config.guidance.hierarchy_levels:
+        directory = run_root / "annotation" / "levels" / level
+        _check_receipt(directory / "evidence.manifest.json")
+        _check_receipt(directory / "decision.manifest.json")
+    hierarchy = json.loads((run_root / "hierarchy" / "execution.manifest.json").read_text())
+    for table in hierarchy.get("level_tables", {}).values():
+        path = Path(table["path"])
+        if not path.is_file() or sha256(path) != table["sha256"]:
+            raise ContractError("corpus durable hierarchy labels changed after finalization")
+    return manifest
+
+
 def build_evidence_cards(config: CellCuratorConfig, run_root: Path) -> list[Path]:
     labels_paths = sorted((run_root / "labels").glob("*.tsv"))
     if labels_paths:
@@ -61,7 +93,7 @@ def build_evidence_cards(config: CellCuratorConfig, run_root: Path) -> list[Path
         )
         proposals["level"] = config.guidance.hierarchy_levels[0]
         proposals["parent_scope"] = "ROOT"
-    scores = pd.read_csv(
+    scores = _corpus_tables(run_root, "scores.tsv") if config.annotation.enabled else pd.read_csv(
         run_root / "evidence" / "summary" / "multimodal_label_scores.tsv",
         sep="\t",
         keep_default_na=False,
@@ -103,8 +135,12 @@ def build_evidence_cards(config: CellCuratorConfig, run_root: Path) -> list[Path
                 "label",
                 "score",
                 "probability",
+                "vote_fraction",
+                "program_coverage",
                 "positive_coverage",
                 "negative_violation",
+                "failed_gates",
+                "classifier_support",
                 "lane_winners",
                 "multimodal_disagreement",
             ]
@@ -282,7 +318,7 @@ def build_critic_packet(config: CellCuratorConfig, run_root: Path) -> Path:
             "Record one structured finding per issue; do not directly mutate annotations.",
         ],
         "critic_passes": config.review.critic_passes,
-        "artifacts": {
+        "artifacts": {} if config.annotation.enabled else {
             "proposals": entry(proposals_path),
             "scores": entry(scores_path),
             "parent_decisions": entry(decisions_path),
@@ -290,6 +326,21 @@ def build_critic_packet(config: CellCuratorConfig, run_root: Path) -> Path:
             "labels": [entry(path) for path in label_paths],
         },
     }
+    if config.annotation.enabled:
+        validate_corpus_annotation(config, run_root)
+        directories = [run_root / "annotation" / "levels" / level for level in config.guidance.hierarchy_levels]
+        packet["artifacts"] = {
+            "proposals": entry(run_root / "annotation" / "annotation.manifest.json"),
+            "scores": [entry(path / "scores.tsv") for path in directories],
+            "parent_decisions": [entry(path / "decision.manifest.json") for path in directories],
+            "candidate_evidence": [entry(path / "markers.tsv") for path in directories],
+            "states": [entry(path / "states.tsv") for path in directories],
+            "marker_plots": [entry(path / "marker_evidence.svg") for path in directories],
+            "cells": entry(run_root / "annotation" / "cell_labels.tsv"),
+            "classifiers": [entry(path) for path in sorted((run_root / "annotation" / "classifiers").glob("*/*.tsv"))],
+            "classifier_statuses": [entry(path) for path in sorted((run_root / "annotation" / "classifiers").glob("*/status.json"))],
+            "labels": [entry(path) for path in label_paths],
+        }
     path = run_root / "review" / "critic_packet.json"
     # The packet is a derived index over immutable evidence and must be refreshable
     # when a durable labels table is reviewed or extended.
@@ -609,6 +660,11 @@ def _report_dependency_hashes(
     if len(set(card_paths)) != len(card_paths):
         raise ContractError("durable labels map to colliding evidence-card paths")
     paths.extend(card_paths)
+    if (run_root / "annotation" / "annotation.manifest.json").is_file():
+        paths.extend((run_root / "annotation" / "levels").glob("*/*"))
+        paths.extend((run_root / "annotation" / "classifiers").glob("*/*"))
+        paths.extend([run_root / "annotation" / "annotation.manifest.json", run_root / "annotation" / "cell_labels.tsv",
+                      run_root / "qc" / "cell_metrics.tsv", run_root / "qc" / "qc.manifest.json"])
     return {
         str(path.relative_to(run_root)): sha256(path) if path.is_file() else None
         for path in paths
@@ -917,6 +973,8 @@ def check_report_completeness(
     level: str | None = None,
     require_report: bool = True,
 ) -> dict[str, Any]:
+    if config.annotation.enabled:
+        validate_corpus_annotation(config, run_root)
     if level is not None:
         level = require_safe_path_component(level, field="report level")
     all_labels_paths = sorted((run_root / "labels").glob("*.tsv"))
@@ -1108,6 +1166,8 @@ def build_html_report(
     strict: bool = False,
     level: str | None = None,
 ) -> Path:
+    if config.annotation.enabled:
+        validate_corpus_annotation(config, run_root)
     if level is not None:
         level = require_safe_path_component(level, field="report level")
     all_labels_paths = sorted((run_root / "labels").glob("*.tsv"))
@@ -1153,7 +1213,7 @@ def build_html_report(
         if level
         else all_labels
     )
-    scores = pd.read_csv(
+    scores = _corpus_tables(run_root, "scores.tsv") if config.annotation.enabled else pd.read_csv(
         run_root / "evidence" / "summary" / "multimodal_label_scores.tsv",
         sep="\t",
         keep_default_na=False,
@@ -1162,25 +1222,25 @@ def build_html_report(
     if level is not None and "level" in scores:
         report_scores = scores[scores["level"].astype(str).eq(level)]
     state_path = run_root / "evidence" / "summary" / "cell_state_evidence.tsv"
-    states = (
+    states = _corpus_tables(run_root, "states.tsv") if config.annotation.enabled else (
         pd.read_csv(state_path, sep="\t", keep_default_na=False)
         if state_path.is_file()
         else pd.DataFrame()
     )
-    cooccurrence = pd.read_csv(
+    cooccurrence = pd.DataFrame() if config.annotation.enabled else pd.read_csv(
         run_root / "evidence" / "summary" / "program_cooccurrence.tsv",
         sep="\t",
         keep_default_na=False,
     )
-    corroboration = pd.read_csv(
+    corroboration = pd.DataFrame() if config.annotation.enabled else pd.read_csv(
         run_root / "evidence" / "summary" / "source_corroboration.tsv",
         sep="\t",
         keep_default_na=False,
     )
-    parents = pd.read_csv(
+    parents = dependency_labels if config.annotation.enabled else pd.read_csv(
         run_root / "decisions" / "parent_decision_summary.tsv", sep="\t", keep_default_na=False
     )
-    candidates = pd.read_csv(
+    candidates = scores if config.annotation.enabled else pd.read_csv(
         run_root / "decisions" / "child_evidence_summary.tsv", sep="\t", keep_default_na=False
     )
     mapping_path = run_root / "mapping" / "parent_child_mapping.tsv"
@@ -1196,11 +1256,11 @@ def build_html_report(
         else pd.DataFrame()
     )
     technical = pd.read_csv(
-        run_root / "adaptive" / "technical_summary.tsv",
+        run_root / "qc" / "cell_metrics.tsv" if config.annotation.enabled else run_root / "adaptive" / "technical_summary.tsv",
         sep="\t",
         keep_default_na=False,
     )
-    doublets = pd.read_csv(
+    doublets = pd.DataFrame() if config.annotation.enabled else pd.read_csv(
         run_root / "adaptive" / "doublet_summary.tsv",
         sep="\t",
         keep_default_na=False,
@@ -1320,12 +1380,16 @@ code{background:#eef2f4;padding:.1rem .25rem}section{margin:2rem 0}.tree{line-he
         if not mapping.empty and "leaf_id" in mapping
         else "Mapping not yet constructed."
     )
+    marker_plot = _score_dotplot_svg(report_scores)
+    if config.annotation.enabled:
+        plot_levels = [level] if level else config.guidance.hierarchy_levels
+        marker_plot = "\n".join((run_root / "annotation" / "levels" / item / "marker_evidence.svg").read_text() for item in plot_levels)
     document = f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>cell-curator {html.escape(config.run.run_id)}</title><style>{style}</style></head><body>
 <h1>cell-curator review: {html.escape(config.run.run_id)}</h1>
 <p><strong>Scope:</strong> {html.escape(report_scope)} · <strong>Mode:</strong> {html.escape(config.run.mode.value)} · <strong>Unknown:</strong> {unknown}/{len(labels)} · <strong>Multimodal disagreements:</strong> {disagreement}</p>
 <div class="grid"><section><h2>Reviewed embedding</h2>{embedding}</section><section><h2>Labels source of truth</h2><div class="scroll">{_html_table(labels)}</div></section></div>
 <section><h2>Hierarchy</h2>{_hierarchy_html(labels)}</section>
-<section><h2>Marker dotplot</h2>{_score_dotplot_svg(report_scores)}</section>
+<section><h2>Marker dotplot</h2>{marker_plot}</section>
 <section><h2>Uncertainty and confidence</h2>{_uncertainty_svg(labels)}</section>
 <section><h2>Rejected alternatives</h2><div class="scroll">{_html_table(labels[[column for column in ["level", "parent_scope", "cluster_id", "label", "rejected_alternatives", "rationale"] if column in labels]])}</div></section>
 <section><h2>Multimodal label evidence</h2><div class="scroll">{_html_table(scores)}</div></section>

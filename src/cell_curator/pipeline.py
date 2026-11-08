@@ -30,7 +30,7 @@ from .decisions import (
     derive_candidate_evidence,
 )
 from .evidence import consolidate_lanes, lane_key, run_candidate_lane, run_lane
-from .knowledge import collect_programs, programs_digest, providers_from_config
+from .knowledge import collect_programs, programs_digest
 from .models import RunState
 from .ontology import ontology_from_config, validate_program_ontology
 from .provenance import atomic_publish, atomic_replace, publish_json, replace_json
@@ -87,12 +87,9 @@ def _advance(root: Path, phase: str, *, blockers: list[str] | None = None) -> Ru
 
 
 def _programs(config: CellCuratorConfig):
-    programs = collect_programs(
-        providers_from_config(
-            config.knowledge.providers,
-            policy=config.knowledge.policy,
-        )
-    )
+    from .knowledge import run_providers
+
+    programs = collect_programs(run_providers(config))
     plan_path = run_root(config) / "plan.json"
     if plan_path.is_file():
         # The reviewer approved the vocabulary the plan was built from; a marker file
@@ -1276,6 +1273,19 @@ def validate(config_path: Path) -> dict[str, Any]:
         "decisions/parent_decision_summary.tsv",
         "mapping/mapping.validation.json",
     ]
+    if config.annotation.enabled:
+        from .review import validate_corpus_annotation
+
+        validate_corpus_annotation(config, root)
+        required = [
+            "context.json", "environment.json", "assumptions.json", "plan.json",
+            "input_contract.manifest.json", "qc/qc.manifest.json", "qc/cell_metrics.tsv",
+            "annotation/annotation.manifest.json", "annotation/cell_labels.tsv",
+            "hierarchy/execution.manifest.json", "mapping/parent_child_mapping.tsv",
+            "mapping/mapping.validation.json",
+            *[f"annotation/levels/{level}/{name}" for level in config.guidance.hierarchy_levels
+              for name in ("evidence.manifest.json", "decision.manifest.json", "markers.tsv", "scores.tsv", "states.tsv")],
+        ]
     # Review files are rebuilt after critics reconcile, so they are required but not
     # hashed into this write-once manifest; write-back's approval token binds them.
     review_files = [
@@ -1334,7 +1344,7 @@ def validate(config_path: Path) -> dict[str, Any]:
     # Critic reconciliation is not part of computational validation: critics review
     # the frozen packet this produces, and write-back enforces their reconciliation.
     ontology = ontology_from_config(config)
-    proposals = pd.read_csv(
+    proposals = pd.concat(label_frames, ignore_index=True).rename(columns={"label": "cell_type"}) if config.annotation.enabled else pd.read_csv(
         root / "evidence" / "summary" / "annotation_proposals.tsv",
         sep="\t",
         keep_default_na=False,
@@ -1445,6 +1455,10 @@ def build_review_packet(config_path: Path) -> Path:
         "review",
         "final_provenance.manifest.json",
     ]
+    if config.annotation.enabled:
+        include = [item for item in include if item not in {
+            "adaptive_parent_audit.tsv", "discovery", "evidence", "decisions"}]
+        include.extend(["annotation", "hierarchy", "plan"])
     try:
         for relative in include:
             source = root / relative
@@ -1486,6 +1500,10 @@ def run_annotation(config_path: str | Path) -> Path:
     from .guided import construct_plan, load_state, require_assumption_gate
 
     config = load_config(path)
+    if config.annotation.enabled:
+        from .annotation import execute_annotation_workflow
+
+        return execute_annotation_workflow(path)
     if len(config.guidance.hierarchy_levels) != 1:
         raise ContractError(
             "the standard pipeline supports exactly one hierarchy level; call "

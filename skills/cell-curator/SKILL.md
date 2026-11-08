@@ -8,6 +8,15 @@ description: Annotate pre-clustered AnnData or MuData from local marker, ontolog
 Use cell-curator to annotate an existing clustering. Local inputs are sufficient;
 optional classifiers, atlases, and web resources provide corroborating evidence.
 
+For new annotation tasks, use the reviewed corpus and compiled hierarchy workflow
+in [annotation-corpus.md](references/annotation-corpus.md). Establish the corpus
+and biological context, set `annotation.enabled: true`, and declare the desired
+L1–L3 identity levels. Configure matched CellTypist and popV resources when
+applicable. Record missing or unsuitable methods explicitly; do not silently
+substitute an unrelated reference. Keep established runs on their frozen
+configuration. The shared template retains the legacy disabled setting for
+compatibility, so new corpus runs must enable it explicitly.
+
 ## Analytical constraints
 
 1. Freeze the source hash, working copy, and parent membership before analysis.
@@ -28,6 +37,7 @@ Read only the contract needed for the current decision.
 | --- | --- |
 | Inputs, matrices, and QC | [input-contract.md](references/input-contract.md) |
 | Marker file format | [markers.md](references/markers.md) |
+| Reviewed label corpus and compiled hierarchy | [annotation-corpus.md](references/annotation-corpus.md) |
 | Assays and providers | [assay-routing.md](references/assay-routing.md) |
 | Parent-local refinement | [adaptive-subclustering.md](references/adaptive-subclustering.md) |
 | Multimodal evidence | [multimodal-evidence.md](references/multimodal-evidence.md) |
@@ -41,6 +51,30 @@ Read only the contract needed for the current decision.
 Copy [config.template.yaml](assets/config.template.yaml). Declare the input, cluster
 key, assays, representations, detection source, biological context, knowledge
 providers, hierarchy, compute limits, and output path.
+
+### Versioned corpus
+
+Use local normalized source exports and reviewed proposals as described in the
+[corpus guide](references/annotation-corpus.md). Imports never approve labels.
+These commands inspect or create immutable knowledge artifacts, not run labels:
+
+```bash
+cell-curator corpus validate --input corpus.json
+cell-curator corpus export --input corpus.json --context context.json --output markers.json
+cell-curator corpus import --input corpus.json --records source-records.json \
+  --output imported.json --source-kind generic --source-id study \
+  --name "Study definitions" --url https://example.org/source \
+  --source-version v1 --retrieved-at 2026-11-07
+cell-curator corpus propose --input imported.json --changes changes.json \
+  --output proposal.json --reason "Reviewed marker definition" --proposer REVIEWER
+cell-curator corpus review --input imported.json --proposal proposal.json \
+  --output reviewed.json --reviewer REVIEWER --rationale "Evidence reviewed" \
+  --revision reviewed-v1 --decision accept
+cell-curator corpus diff --input imported.json --other reviewed.json
+```
+
+The corpus reviewer is a person. An agent may prepare a proposal for review;
+do not record a person's acceptance on their behalf.
 
 ## 1. Validate and freeze
 
@@ -103,6 +137,14 @@ Renew approval when a later hierarchy level introduces a material assumption.
 
 ## 3. Generate evidence and assign labels
 
+When `annotation.enabled: true`, use the corpus workflow described in
+[annotation-corpus.md](references/annotation-corpus.md). Snakemake schedules
+CellTypist/popV, marker analysis, decisions within each accepted parent, and the
+study/state display. Use `workflow/annotation.smk`, first with `--dry-run`.
+Do not run the legacy single-level pipeline on this configuration. Source imports
+remain unreviewed until a person reviews a corpus proposal. Keep each source's
+definitions and taxonomy; Allen is one example, not a preferred standard.
+
 Execute each level within one parent. Assess technical association, quality, stress,
 cycling, gradients, mixed states, composition, and spatial context before accepting
 a child label or `Unknown`.
@@ -156,6 +198,10 @@ cell-curator crosscheck celltypist-discover --output-dir results/RUN/crosschecks
 cell-curator crosscheck celltypist-predict --input results/RUN/canonical/input.h5ad \
   --model MODEL --cluster-column CLUSTER_KEY \
   --output-dir results/RUN/crosschecks
+cell-curator crosscheck popv-predict --input results/RUN/canonical/input.h5ad \
+  --reference references/annotated.h5ad --reference-label cell_type \
+  --model-dir models/popv-pretrained --cluster-column CLUSTER_KEY \
+  --output-dir results/RUN/crosschecks/popv
 cell-curator crosscheck reference-knn --query results/RUN/canonical/input.h5ad \
   --reference reference.h5ad --reference-label cell_type --backend cpu \
   --output-dir results/RUN/crosschecks

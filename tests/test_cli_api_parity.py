@@ -22,6 +22,17 @@ from cell_curator.cli import build_parser
 
 # CLI action -> the public name in `cell_curator` that serves it.
 CLI_TO_PUBLIC_NAME: dict[tuple[str, ...], str] = {
+    ("annotation", "classifier"): "run_annotation_classifier",
+    ("annotation", "collect-level"): "collect_annotation_level",
+    ("annotation", "resolve-level"): "resolve_annotation_level",
+    ("annotation", "finalize"): "finalize_corpus_annotation",
+    ("corpus", "validate"): "load_annotation_corpus",
+    ("corpus", "export"): "export_corpus_programs",
+    ("corpus", "import"): "import_annotation_corpus",
+    ("corpus", "propose"): "propose_corpus_update",
+    ("corpus", "review"): "review_corpus_update",
+    ("corpus", "diff"): "compare_annotation_corpora",
+    ("crosscheck", "popv-predict"): "predict_popv",
     ("assumptions", "add"): "record_annotation_assumption",
     ("assumptions", "approve"): "approve_annotation_assumptions",
     ("assumptions", "list"): "list_annotation_assumptions",

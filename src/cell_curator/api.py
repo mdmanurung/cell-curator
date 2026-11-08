@@ -14,6 +14,88 @@ from .config import CellCuratorConfig, ProviderConfig, RepresentationConfig
 from .contracts import ContractError
 from .models import Agreement, RiskCoveragePoint
 
+
+def load_annotation_corpus(path: str | Path, *, expected_sha256: str = "") -> Any:
+    """Load and validate a pinned multi-source label corpus."""
+    from .corpus import load_corpus
+
+    return load_corpus(path, expected_sha256=expected_sha256)
+
+
+def export_corpus_programs(path: str | Path, *, context: Mapping[str, str] | None = None,
+                           measurements: Sequence[str] | None = None, ontology: Any = None) -> Any:
+    """Export reviewed, context-matched corpus definitions as signed programs."""
+    return load_annotation_corpus(path).programs(context, measurements=measurements, ontology=ontology)
+
+
+def import_annotation_corpus(base_path: str | Path, input_path: str | Path,
+                             output_path: str | Path, **kwargs: Any) -> dict[str, Any]:
+    """Import bounded normalized source records without approving their labels."""
+    from .corpus_import import import_corpus_records
+
+    return import_corpus_records(base_path, input_path, output_path, **kwargs)
+
+
+def propose_corpus_update(base_path: str | Path, proposal_path: str | Path, **kwargs: Any) -> Any:
+    """Record a proposed corpus change without changing the active snapshot."""
+    from .corpus import propose_corpus
+
+    return propose_corpus(base_path, proposal_path, **kwargs)
+
+
+def review_corpus_update(base_path: str | Path, proposal_path: str | Path,
+                         output_path: str | Path, **kwargs: Any) -> dict[str, Any]:
+    """Record a review and publish a new immutable corpus revision."""
+    from .corpus import review_corpus
+
+    return review_corpus(base_path, proposal_path, output_path, **kwargs)
+
+
+def compare_annotation_corpora(before_path: str | Path, after_path: str | Path) -> dict[str, Any]:
+    """Compare label definitions, source records, and mappings between revisions."""
+    before, after = load_annotation_corpus(before_path), load_annotation_corpus(after_path)
+    old = {item.label_id: item.model_dump(mode="json") for item in before.labels}
+    new = {item.label_id: item.model_dump(mode="json") for item in after.labels}
+    return {"before": before.revision, "after": after.revision,
+            "added": sorted(new.keys() - old.keys()), "removed": sorted(old.keys() - new.keys()),
+            "changed": sorted(key for key in old.keys() & new.keys() if old[key] != new[key]),
+            "sources_changed": before.sources != after.sources, "mappings_changed": before.mappings != after.mappings}
+
+
+def run_annotation_classifier(config_path: str | Path, name: str) -> dict[str, Any]:
+    """Run one configured local classifier as an immutable evidence stage."""
+    from .annotation import run_classifier
+
+    return run_classifier(config_path, name)
+
+
+def collect_annotation_level(config_path: str | Path, level: str) -> dict[str, Any]:
+    """Collect parent-scoped markers, classifier corroboration, and state evidence."""
+    from .annotation import collect_level
+
+    return collect_level(config_path, level)
+
+
+def resolve_annotation_level(config_path: str | Path, level: str) -> dict[str, Any]:
+    """Resolve one hierarchy level from its hash-validated evidence."""
+    from .annotation import resolve_level
+
+    return resolve_level(config_path, level)
+
+
+def finalize_corpus_annotation(config_path: str | Path) -> dict[str, Any]:
+    """Validate hierarchy nesting and publish cell labels and the evidence report."""
+    from .annotation import finalize_annotation
+
+    return finalize_annotation(config_path)
+
+
+def predict_popv(input_path: str | Path, reference_path: str | Path, **kwargs: Any) -> Any:
+    """Run a local pretrained CPU popV subset with full method provenance."""
+    from .crosschecks import predict_popv_file
+
+    return predict_popv_file(input_path=input_path, reference_path=reference_path, **kwargs)
+
 if TYPE_CHECKING:
     from .ontology import CellOntology
 
@@ -362,7 +444,7 @@ def apply_writeback(
 
 
 def annotate(config_path: str | Path) -> Path:
-    """Execute every computational phase and freeze a review packet."""
+    """Run the configured pipeline; corpus runs execute the compiled Snakemake DAG."""
 
     from .pipeline import run_annotation
 
@@ -396,16 +478,11 @@ def validate_knowledge_providers(config_path: str | Path) -> dict[str, Any]:
     """Validate configured local knowledge providers and any configured ontology."""
 
     from .config import load_config
-    from .knowledge import collect_programs, providers_from_config
+    from .knowledge import collect_programs, run_providers
     from .ontology import ontology_from_config, validate_program_ontology
 
     config = load_config(config_path)
-    programs = collect_programs(
-        providers_from_config(
-            config.knowledge.providers,
-            policy=config.knowledge.policy,
-        )
-    )
+    programs = collect_programs(run_providers(config))
     ontology = ontology_from_config(config)
     if ontology is not None:
         validate_program_ontology(programs, ontology)

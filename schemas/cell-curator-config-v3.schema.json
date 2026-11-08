@@ -33,6 +33,65 @@
       "title": "AdaptiveConfig",
       "type": "object"
     },
+    "AnnotationConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "assay": {
+          "default": "",
+          "title": "Assay",
+          "type": "string"
+        },
+        "classifiers": {
+          "items": {
+            "$ref": "#/$defs/ClassifierConfig"
+          },
+          "title": "Classifiers",
+          "type": "array"
+        },
+        "corpus_assay": {
+          "default": "",
+          "title": "Corpus Assay",
+          "type": "string"
+        },
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "min_classifier_agreement": {
+          "default": 0.5,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Min Classifier Agreement",
+          "type": "number"
+        },
+        "min_state_fraction": {
+          "default": 0.5,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Min State Fraction",
+          "type": "number"
+        },
+        "representation": {
+          "default": "",
+          "title": "Representation",
+          "type": "string"
+        },
+        "seed": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Seed",
+          "type": "integer"
+        },
+        "study_id": {
+          "default": "",
+          "title": "Study Id",
+          "type": "string"
+        }
+      },
+      "title": "AnnotationConfig",
+      "type": "object"
+    },
     "AssayConfig": {
       "additionalProperties": false,
       "properties": {
@@ -289,6 +348,78 @@
         "expected_parent_count"
       ],
       "title": "CanonicalPartitionConfig",
+      "type": "object"
+    },
+    "ClassifierConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "counts_layer": {
+          "default": "counts",
+          "title": "Counts Layer",
+          "type": "string"
+        },
+        "label_map": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Label Map",
+          "type": "object"
+        },
+        "method": {
+          "enum": [
+            "celltypist",
+            "popv"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "methods": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Methods",
+          "type": "array"
+        },
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "python_executable": {
+          "default": "",
+          "title": "Python Executable",
+          "type": "string"
+        },
+        "reference": {
+          "default": "",
+          "title": "Reference",
+          "type": "string"
+        },
+        "reference_counts_layer": {
+          "default": "counts",
+          "title": "Reference Counts Layer",
+          "type": "string"
+        },
+        "reference_label": {
+          "default": "",
+          "title": "Reference Label",
+          "type": "string"
+        },
+        "required": {
+          "default": true,
+          "title": "Required",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "method",
+        "model"
+      ],
+      "title": "ClassifierConfig",
       "type": "object"
     },
     "ComparatorConfig": {
@@ -939,6 +1070,13 @@
           "title": "Cache Path",
           "type": "string"
         },
+        "context": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Context",
+          "type": "object"
+        },
         "kind": {
           "enum": [
             "local_markers",
@@ -947,7 +1085,8 @@
             "live_ontology",
             "reference",
             "cached_table",
-            "remote_table"
+            "remote_table",
+            "corpus"
           ],
           "title": "Kind",
           "type": "string"
@@ -1181,6 +1320,9 @@
   "properties": {
     "adaptive": {
       "$ref": "#/$defs/AdaptiveConfig"
+    },
+    "annotation": {
+      "$ref": "#/$defs/AnnotationConfig"
     },
     "canonical_partitions": {
       "additionalProperties": {

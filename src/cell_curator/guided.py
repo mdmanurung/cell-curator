@@ -20,7 +20,7 @@ from .contracts import (
     sha256,
 )
 from .data import canonicalize, inspect
-from .knowledge import collect_programs, programs_digest, providers_from_config
+from .knowledge import collect_programs, programs_digest
 from .models import RunMode, RunState
 from .ontology import BACKOFF_ASSUMPTION, ontology_from_config
 from .provenance import atomic_publish, atomic_replace, publish_json, replace_json
@@ -518,12 +518,9 @@ def construct_plan(config_path: str | Path) -> dict[str, Any]:
             "cannot plan with unresolved scene context; inspect "
             "annotation_progress(config_path) (CLI: `cell-curator run status`)"
         )
-    programs = collect_programs(
-        providers_from_config(
-            config.knowledge.providers,
-            policy=config.knowledge.policy,
-        )
-    )
+    from .knowledge import run_providers
+
+    programs = collect_programs(run_providers(config))
     vocabulary, missing_parents = (
         _vocabulary(programs)
         if programs
@@ -736,6 +733,16 @@ def construct_plan(config_path: str | Path) -> dict[str, Any]:
                 True,
             )
         )
+    from .annotation import annotation_contract
+
+    contract = annotation_contract(config)
+    for corpus in contract["corpora"]:
+        atomic_publish(root / "plan" / f"corpus-{corpus['sha256']}.json", Path(corpus["path"]).read_bytes())
+    if config.annotation.enabled:
+        assumption_values.append(("global",
+            "Use the pinned corpus records and classifier resources in plan.json; "
+            f"apply the recorded annotation rules {json.dumps(contract['rules'], sort_keys=True)}. "
+            "Classifier agreement corroborates measured markers and is not independent replication.", True))
     _, digest = add_assumptions(root, assumption_values)
     plan = {
         "schema_version": 3,
@@ -751,6 +758,7 @@ def construct_plan(config_path: str | Path) -> dict[str, Any]:
         "unresolved": unresolved,
         "executable": not unresolved,
         "assumptions_sha256": digest,
+        "annotation_contract": contract,
     }
     publish_json(root / "plan.json", plan)
     lines = [
@@ -1100,6 +1108,18 @@ def _next_command(config_path: str | Path, root: Path, state: RunState) -> str:
             "# then a person runs: cell-curator assumptions approve "
             f"{config} --reviewer NAME"
         )
+    if load_config(config_path).annotation.enabled:
+        if not (root / "annotation" / "annotation.manifest.json").is_file():
+            return f"cell-curator run execute {config}"
+        if not (root / "review" / "report.manifest.json").is_file():
+            from shlex import quote
+
+            from .annotation import annotation_workflow_path
+
+            return (f"snakemake --snakefile {quote(str(annotation_workflow_path()))} "
+                    f"--configfile {quote(str(config_path))} --cores 1 annotation_review")
+        if not (root / "review_packet" / "review_packet.manifest.json").is_file():
+            return f"cell-curator pipeline packet {config}"
     if not (root / "review_packet" / "review_packet.manifest.json").is_file():
         return f"cell-curator run execute {config}"
     from .review import validate_reconciliation

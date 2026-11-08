@@ -28,6 +28,7 @@ from .review import (
     check_report_completeness,
     hierarchy_level_sort_key,
     resolve_durable_mapping_values,
+    validate_corpus_annotation,
     validate_reconciliation,
 )
 
@@ -119,6 +120,45 @@ def _align_mapping(mapping: pd.DataFrame, obs_names: pd.Index) -> pd.DataFrame:
     aligned = indexed.loc[list(map(str, obs_names))].copy()
     aligned.insert(0, "barcode", aligned.index.astype(str))
     return aligned.reset_index(drop=True)
+
+
+def _writeback_values(
+    config: CellCuratorConfig,
+    run_root: Path,
+    mapping: pd.DataFrame,
+    labels: pd.DataFrame,
+    prefix: str,
+) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
+    """Resolve the same complete column set for preview and the eventual write."""
+    durable = resolve_durable_mapping_values(mapping, labels)
+    values = {f"{prefix}_type": durable["cell_type"], f"{prefix}_state": durable["cell_state"], f"{prefix}_leaf": durable["leaf_id"]}
+    if not config.annotation.enabled:
+        return values, durable
+    validate_corpus_annotation(config, run_root)
+    sidecar = pd.read_csv(run_root / "annotation" / "cell_labels.tsv", sep="\t", keep_default_na=False)
+    required = {"barcode", "cluster_id", "cell_state", "L4", "annotation_unit", *config.guidance.hierarchy_levels}
+    if required.difference(sidecar) or sidecar["barcode"].astype(str).duplicated().any():
+        raise ContractError("corpus cell labels have missing columns or duplicate barcodes")
+    if set(sidecar["barcode"].astype(str)) != set(mapping["barcode"].astype(str)):
+        raise ContractError("corpus cell-label barcodes differ from the validated mapping")
+    sidecar = _align_mapping(sidecar, pd.Index(mapping["barcode"].astype(str)))
+    if not sidecar["cluster_id"].astype(str).eq(mapping["canonical_parent"].astype(str)).all():
+        raise ContractError("corpus cell labels disagree with frozen cluster membership")
+    if not sidecar["annotation_unit"].eq("cluster_propagated_to_cells").all():
+        raise ContractError("corpus write-back requires the declared annotation unit")
+    for level in config.guidance.hierarchy_levels:
+        expected = resolve_durable_mapping_values(mapping, labels, max_level=level)["cell_type"]
+        if not np.array_equal(sidecar[level].astype(str).to_numpy(), expected):
+            raise ContractError(f"corpus {level} values differ from durable hierarchy labels")
+        values[f"{prefix}_{level}"] = expected
+    state = sidecar["cell_state"].astype(str)
+    display = pd.Series(durable["cell_type"], index=state.index) + state.map(lambda item: f" {item.replace('|', ' ')}" if item else "")
+    if not sidecar["L4"].astype(str).eq(display).all():
+        raise ContractError("corpus L4 must compose the accepted identity and separate state")
+    durable["cell_state"] = state.to_numpy()
+    values[f"{prefix}_state"] = durable["cell_state"]
+    values[f"{prefix}_L4"] = display.to_numpy()
+    return values, durable
 
 
 CONFIRMATION_PREFIX = 12
@@ -301,12 +341,8 @@ def validate_writeback(
         if set(obs_names) != set(mapping["barcode"].astype(str)):
             raise ContractError("write-back mapping barcodes differ from the source object")
         aligned = _align_mapping(mapping, obs_names)
-        durable_values = resolve_durable_mapping_values(aligned, labels)
-        new_values = {
-            output_columns[0]: durable_values["cell_type"],
-            output_columns[1]: durable_values["cell_state"],
-            output_columns[2]: durable_values["leaf_id"],
-        }
+        new_values, durable_values = _writeback_values(config, run_root, aligned, labels, prefix)
+        output_columns = list(new_values)
         diff_rows: list[pd.DataFrame] = []
         changed_by_column: dict[str, int] = {}
         metadata_changed_by_column: dict[str, int] = {}
@@ -394,6 +430,9 @@ def validate_writeback(
         "critic_findings_sha256": run_root / "review" / "critic_findings.tsv",
         "critic_reconciliation_sha256": run_root / "review" / "critic_reconciliation.tsv",
     }
+    if config.annotation.enabled:
+        review_paths["annotation_manifest_sha256"] = run_root / "annotation" / "annotation.manifest.json"
+        review_paths["annotation_cells_sha256"] = run_root / "annotation" / "cell_labels.tsv"
     missing_review = [str(path) for path in review_paths.values() if not path.is_file()]
     if missing_review:
         raise ContractError(f"write-back review artifacts are absent: {missing_review}")
@@ -497,10 +536,11 @@ def write_back(
 
             obj = ad.read_h5ad(source)
             aligned = _align_mapping(mapping, obj.obs_names.astype(str))
-            durable_values = resolve_durable_mapping_values(aligned, labels)
-            value_columns = ("cell_type", "cell_state", "leaf_id")
-            for output_column, value_column in zip(output_columns, value_columns, strict=True):
-                values = durable_values[value_column]
+            prefix = output_columns[0].removesuffix("_type")
+            values_by_column, _ = _writeback_values(config, run_root, aligned, labels, prefix)
+            if list(values_by_column) != output_columns:
+                raise ContractError("write-back columns changed after preview")
+            for output_column, values in values_by_column.items():
                 contract = color_contract.get(output_column, {})
                 categories = list(map(str, contract.get("categories", [])))
                 categories.extend(
@@ -524,10 +564,11 @@ def write_back(
 
             obj = md.read_h5mu(source)
             aligned = _align_mapping(mapping, obj.obs_names.astype(str))
-            durable_values = resolve_durable_mapping_values(aligned, labels)
-            value_columns = ("cell_type", "cell_state", "leaf_id")
-            for output_column, value_column in zip(output_columns, value_columns, strict=True):
-                values = durable_values[value_column]
+            prefix = output_columns[0].removesuffix("_type")
+            values_by_column, _ = _writeback_values(config, run_root, aligned, labels, prefix)
+            if list(values_by_column) != output_columns:
+                raise ContractError("write-back columns changed after preview")
+            for output_column, values in values_by_column.items():
                 contract = color_contract.get(output_column, {})
                 categories = list(map(str, contract.get("categories", [])))
                 categories.extend(

@@ -24,6 +24,7 @@ _generated/cli
 
 _generated/reference/input-contract
 _generated/reference/markers
+_generated/reference/annotation-corpus
 _generated/reference/assay-routing
 _generated/reference/adaptive-subclustering
 _generated/reference/multimodal-evidence

@@ -35,6 +35,37 @@ knowledge:
   network: offline
   allowed_hosts: []
 
+# The corpus workflow is compiled by workflow/annotation.smk. It needs a reviewed,
+# context-matched corpus provider pinned by path, version, and sha256. Source imports
+# are initially unreviewed; the packaged example is not a callable marker panel.
+annotation:
+  enabled: false
+  assay: transcriptome
+  representation: logcounts
+  corpus_assay: ""  # defaults to assay kind (rna/protein/etc); declare a platform scope explicitly
+  study_id: ""
+  seed: 0
+  min_classifier_agreement: 0.5
+  min_state_fraction: 0.5
+  classifiers: []
+  # classifiers:
+  #   - name: tissue-celltypist
+  #     method: celltypist
+  #     model: models/tissue.pkl
+  #     required: true
+  #     label_map: {"Reference label": "Reviewed corpus label"}
+  #   - name: reference-popv
+  #     method: popv
+  #     python_executable: .venv-popv/bin/python  # separate Python 3.11/3.12 popV environment
+  #     model: models/popv-pretrained
+  #     reference: references/annotated.h5ad
+  #     reference_label: cell_type
+  #     counts_layer: counts
+  #     reference_counts_layer: counts
+  #     methods: [CELLTYPIST, Support_Vector, XGboost]
+  #     required: true
+  #     label_map: {}
+
 input:
   kind: h5ad  # h5ad supports one root assay; h5mu supports one or more assays
   path: path/to/input.h5ad

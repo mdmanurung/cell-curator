@@ -12,7 +12,7 @@ from typing import Any
 import pandas as pd
 
 from . import __version__
-from .contracts import ContractError
+from .contracts import ContractError, sha256
 
 LOG = logging.getLogger("cell_curator")
 
@@ -122,6 +122,46 @@ def build_parser() -> argparse.ArgumentParser:
     knowledge_sub = knowledge_command.add_subparsers(dest="action", required=True)
     knowledge_validate = knowledge_sub.add_parser("validate")
     _config_argument(knowledge_validate)
+
+    corpus = commands.add_parser("corpus", help="inspect, import, and review versioned label knowledge")
+    corpus_sub = corpus.add_subparsers(dest="action", required=True)
+    for action in ("validate", "export", "propose", "review", "import", "diff"):
+        item = corpus_sub.add_parser(action)
+        item.add_argument("--input", required=True, type=Path, help="base corpus snapshot")
+        if action in {"export", "propose", "review", "import"}:
+            item.add_argument("--output", required=True, type=Path)
+        if action == "export":
+            item.add_argument("--context", type=Path, help="JSON species/tissue/assay/stage/condition/study_id")
+            item.add_argument("--measurement", action="append")
+            item.add_argument("--ontology", type=Path)
+        if action == "propose":
+            item.add_argument("--changes", required=True, type=Path)
+            item.add_argument("--reason", required=True)
+            item.add_argument("--proposer", required=True)
+        if action == "review":
+            item.add_argument("--proposal", required=True, type=Path)
+            item.add_argument("--reviewer", required=True)
+            item.add_argument("--rationale", required=True)
+            item.add_argument("--revision", required=True)
+            item.add_argument("--decision", choices=("accept", "reject", "dispute"), required=True)
+        if action == "import":
+            item.add_argument("--records", required=True, type=Path)
+            item.add_argument("--source-kind", choices=("cap", "allen", "generic"), required=True)
+            for field in ("source-id", "name", "url", "source-version", "retrieved-at"):
+                item.add_argument(f"--{field}", required=True)
+            item.add_argument("--license", default="")
+        if action == "diff":
+            item.add_argument("--other", required=True, type=Path)
+
+    annotation = commands.add_parser("annotation", help="run a corpus stage scheduled by annotation.smk")
+    annotation_sub = annotation.add_subparsers(dest="action", required=True)
+    for action in ("classifier", "collect-level", "resolve-level", "finalize"):
+        item = annotation_sub.add_parser(action)
+        _config_argument(item)
+        if action == "classifier":
+            item.add_argument("--name", required=True)
+        if action in {"collect-level", "resolve-level"}:
+            item.add_argument("--level", required=True)
 
     ontology_command = commands.add_parser(
         "ontology", help="validate local Cell Ontology names, synonyms, and accessions"
@@ -243,6 +283,17 @@ def build_parser() -> argparse.ArgumentParser:
     typist_predict.add_argument("--model", required=True)
     typist_predict.add_argument("--cluster-column", default="")
     typist_predict.add_argument("--output-dir", required=True, type=Path)
+    popv_predict = crosscheck_sub.add_parser("popv-predict", help="run a local pretrained CPU popV subset")
+    _object_arguments(popv_predict)
+    _object_arguments(popv_predict, name="reference")
+    popv_predict.add_argument("--model-dir", required=True, type=Path)
+    popv_predict.add_argument("--reference-label", required=True)
+    popv_predict.add_argument("--method", action="append", default=[])
+    popv_predict.add_argument("--cluster-column", default="")
+    popv_predict.add_argument("--counts-layer", default="counts")
+    popv_predict.add_argument("--reference-counts-layer", default="counts")
+    popv_predict.add_argument("--seed", type=int, default=0)
+    popv_predict.add_argument("--output-dir", required=True, type=Path)
     reference_knn = crosscheck_sub.add_parser(
         "reference-knn", help="map a labeled reference by CPU or validated GPU kNN"
     )
@@ -535,6 +586,72 @@ def _reference_kwargs(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def dispatch(args: argparse.Namespace) -> Any:
+
+    if args.command == "crosscheck" and args.action == "popv-predict":
+        from .crosschecks import predict_popv_file
+
+        _, status = predict_popv_file(input_path=args.input, reference_path=args.reference,
+            model_dir=args.model_dir, reference_label=args.reference_label,
+            methods=args.method or ("CELLTYPIST", "Support_Vector", "XGboost"),
+            query_counts_layer=args.counts_layer, reference_counts_layer=args.reference_counts_layer,
+            cluster_column=args.cluster_column, modality=args.input_modality,
+            reference_modality=args.reference_modality, output_dir=args.output_dir, seed=args.seed)
+        return status
+    if args.command == "corpus":
+        from .corpus import load_corpus, propose_corpus, review_corpus
+        from .provenance import publish_json
+
+        snapshot = load_corpus(args.input)
+        if args.action == "validate":
+            return {"status": "complete", "corpus_id": snapshot.corpus_id,
+                    "revision": snapshot.revision, "content_digest": snapshot.digest,
+                    "file_sha256": sha256(args.input),
+                    "sources": len(snapshot.sources), "labels": len(snapshot.labels),
+                    "reviewed": sum(item.status == "reviewed" for item in snapshot.labels)}
+        if args.action == "export":
+            from .ontology import CellOntology
+
+            context = json.loads(args.context.read_text()) if args.context else None
+            ontology = CellOntology.load(args.ontology) if args.ontology else None
+            programs = snapshot.programs(context=context, measurements=args.measurement, ontology=ontology)
+            publish_json(args.output, [item.model_dump(mode="json") for item in programs])
+            return {"status": "complete", "programs": len(programs), "output": str(args.output)}
+        if args.action == "propose":
+            changes = json.loads(args.changes.read_text())
+            if not isinstance(changes, dict) or set(changes) - {"labels", "sources", "mappings"}:
+                raise ContractError("corpus changes require only labels, sources, and mappings")
+            return propose_corpus(args.input, args.output, **changes, reason=args.reason, proposer=args.proposer)
+        if args.action == "review":
+            return review_corpus(args.input, args.proposal, args.output, reviewer=args.reviewer,
+                rationale=args.rationale, decision=args.decision, revision=args.revision)
+        if args.action == "import":
+            from .corpus_import import import_corpus_records
+
+            return import_corpus_records(args.input, args.records, args.output,
+                source_kind=args.source_kind, source_id=args.source_id, name=args.name, url=args.url,
+                version=args.source_version, retrieved_at=args.retrieved_at, license=args.license)
+        other = load_corpus(args.other)
+        before = {item.label_id: item.model_dump(mode="json") for item in snapshot.labels}
+        after = {item.label_id: item.model_dump(mode="json") for item in other.labels}
+        return {"before": snapshot.revision, "after": other.revision,
+                "added": sorted(after.keys() - before.keys()), "removed": sorted(before.keys() - after.keys()),
+                "changed": sorted(key for key in before.keys() & after.keys() if before[key] != after[key]),
+                "sources_changed": snapshot.sources != other.sources, "mappings_changed": snapshot.mappings != other.mappings}
+    if args.command == "annotation":
+        from .annotation import (
+            collect_level,
+            finalize_annotation,
+            resolve_level,
+            run_classifier,
+        )
+
+        if args.action == "classifier":
+            return run_classifier(args.config, args.name)
+        if args.action == "collect-level":
+            return collect_level(args.config, args.level)
+        if args.action == "resolve-level":
+            return resolve_level(args.config, args.level)
+        return finalize_annotation(args.config)
     if args.command == "config":
         from .config import configuration_schema, load_config
         from .provenance import publish_json
@@ -647,7 +764,9 @@ def dispatch(args: argparse.Namespace) -> Any:
                 from .pipeline import execute_recursive_hierarchy_manifest
 
                 return execute_recursive_hierarchy_manifest(args.config, args.score_manifest)
-            return {"review_packet": str(run_annotation(args.config))}
+            output = run_annotation(args.config)
+            key = "annotation_manifest" if load_config(args.config).annotation.enabled else "review_packet"
+            return {key: str(output)}
         if args.action == "status":
             return guided_status(args.config)
         load_config(args.config)
@@ -990,7 +1109,6 @@ def dispatch(args: argparse.Namespace) -> Any:
             ).model_dump(mode="json")
         if args.action == "sweep":
             from .api import sweep_benchmark_risk_coverage
-            from .contracts import sha256
             from .provenance import publish_json
 
             points = sweep_benchmark_risk_coverage(

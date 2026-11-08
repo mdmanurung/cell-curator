@@ -110,6 +110,13 @@ tested example is available in
 
 ## Configure the input
 
+For a versioned, multi-source label corpus and a compiled L1–L3 workflow, see
+[the corpus guide](skills/cell-curator/references/annotation-corpus.md).
+It collects Wilcoxon and logistic-regression markers, runs configured local
+CellTypist/popV models, and records deterministic decisions within accepted
+parents. A separate state/study display supplies L4. New corpus knowledge enters
+through reviewed proposals; no atlas is treated as a gold standard.
+
 For file-based CLI or Snakemake runs, copy and validate the configuration template:
 
 ```bash
@@ -175,7 +182,7 @@ uv run cell-curator run execute --config config.yaml
 uv run cell-curator run validate --config config.yaml
 ```
 
-For additional commands, `cell-curator --help` lists all 22 command groups.
+For additional commands, `cell-curator --help` lists all 24 command groups.
 
 For resumable execution, Snakemake manages dependencies and stale artifacts. The
 targets below preserve the evidence, review, and finalization boundaries. Write-back

@@ -34,6 +34,7 @@ PAGES: dict[str, str] = {
         for name in (
             "input-contract",
             "markers",
+            "annotation-corpus",
             "assay-routing",
             "adaptive-subclustering",
             "multimodal-evidence",

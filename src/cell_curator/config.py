@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 from typing import Any, Literal
@@ -142,6 +143,7 @@ class ProviderConfig(StrictModel):
         "reference",
         "cached_table",
         "remote_table",
+        "corpus",
     ]
     path: str = ""
     url: str = ""
@@ -151,14 +153,18 @@ class ProviderConfig(StrictModel):
     parent_key: str = ""
     cache_path: str = ""
     timeout_seconds: float = Field(default=30.0, gt=0)
+    context: dict[str, str] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def provider_contract(self) -> ProviderConfig:
         if (
-            self.kind in {"local_markers", "ontology", "reference", "cached_table"}
+            self.kind in {"local_markers", "ontology", "reference", "cached_table", "corpus"}
             and not self.path
         ):
             raise ValueError(f"{self.kind} provider requires path")
+        if self.kind == "corpus":
+            if self.version == "unversioned" or not re.fullmatch(r"[0-9a-f]{64}", self.sha256):
+                raise ValueError("corpus provider requires version and a lowercase SHA-256 digest")
         if self.kind == "reference" and not self.label_key:
             raise ValueError("reference provider requires label_key")
         if self.kind in {"remote_table", "remote_ontology"}:
@@ -348,6 +354,42 @@ class LlmConfig(StrictModel):
     min_cells: int = Field(default=20, ge=1)
 
 
+class ClassifierConfig(StrictModel):
+    name: str
+    method: Literal["celltypist", "popv"]
+    model: str
+    python_executable: str = ""
+    reference: str = ""
+    reference_label: str = ""
+    counts_layer: str = "counts"
+    reference_counts_layer: str = "counts"
+    methods: list[str] = Field(default_factory=lambda: ["CELLTYPIST", "Support_Vector", "XGboost"])
+    required: bool = True
+    label_map: dict[str, str] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def valid_classifier(self) -> ClassifierConfig:
+        if not _is_safe_component(self.name):
+            raise ValueError("classifier name must be a safe path component")
+        if not self.model.strip():
+            raise ValueError("classifier requires a local model path")
+        if self.method == "popv" and (not self.reference or not self.reference_label):
+            raise ValueError("popv requires a local reference and reference_label")
+        return self
+
+
+class AnnotationConfig(StrictModel):
+    enabled: bool = False
+    assay: str = ""
+    representation: str = ""
+    corpus_assay: str = ""
+    study_id: str = ""
+    classifiers: list[ClassifierConfig] = Field(default_factory=list)
+    min_classifier_agreement: float = Field(default=0.5, gt=0, le=1)
+    min_state_fraction: float = Field(default=0.5, gt=0, le=1)
+    seed: int = Field(default=0, ge=0)
+
+
 class EvidenceConfig(StrictModel):
     llm: LlmConfig = Field(default_factory=LlmConfig)
     lanes: list[EvidenceLaneConfig] = Field(default_factory=list)
@@ -475,6 +517,7 @@ class CellCuratorConfig(StrictModel):
     review: ReviewConfig
     hpc: HpcConfig = Field(default_factory=HpcConfig)
     guidance: GuidanceConfig = Field(default_factory=GuidanceConfig)
+    annotation: AnnotationConfig = Field(default_factory=AnnotationConfig)
 
     @field_validator("schema_version")
     @classmethod
@@ -489,12 +532,26 @@ class CellCuratorConfig(StrictModel):
             self.run.mode is RunMode.ANNOTATION
             and self.knowledge.require_local_grounding_for_labels
         ):
-            grounding_kinds = {"local_markers", "reference", "cached_table"}
+            grounding_kinds = {"local_markers", "reference", "cached_table", "corpus"}
             if not any(item.kind in grounding_kinds for item in self.knowledge.providers):
                 raise ValueError(
                     "annotation mode requires a local marker, labeled reference, or cached-table "
                     "provider for biological grounding"
                 )
+        if self.annotation.enabled:
+            if self.evidence.min_confidence <= 0 or self.evidence.min_margin <= 0:
+                raise ValueError("corpus annotation requires positive confidence and margin thresholds")
+            if self.guidance.hierarchy_levels not in (["L1"], ["L1", "L2"], ["L1", "L2", "L3"]):
+                raise ValueError("corpus annotation identity levels must be consecutive L1 through at most L3; L4 is the study/state display")
+            if self.annotation.assay not in self.input.assays:
+                raise ValueError("annotation.assay must name an input assay")
+            if self.annotation.representation not in self.input.assays[self.annotation.assay].representations:
+                raise ValueError("annotation.representation must name an assay representation")
+            if not any(provider.kind == "corpus" for provider in self.knowledge.providers):
+                raise ValueError("annotation.enabled requires a pinned corpus provider")
+            names = [item.name for item in self.annotation.classifiers]
+            if len(names) != len(set(names)):
+                raise ValueError("annotation classifier names must be unique")
         gpu_lane = False
         lane_keys: set[str] = set()
         lane_pairs: set[tuple[str, str]] = set()
@@ -607,6 +664,18 @@ def anchor_relative_paths(config: CellCuratorConfig, *, config_dir: Path) -> Cel
                 )
             }
         )
+
+    classifiers = []
+    for classifier in config.annotation.classifiers:
+        paths = {
+            name: (os.path.abspath(config_dir / value) if name == "python_executable"
+                   else str((config_dir / value).resolve()))
+            for name in ("model", "reference", "python_executable")
+            if (value := getattr(classifier, name)) and not Path(value).is_absolute()
+        }
+        classifiers.append(classifier.model_copy(update=paths))
+    if classifiers:
+        updates["annotation"] = config.annotation.model_copy(update={"classifiers": classifiers})
 
     anchored_providers = []
     provider_changed = False
