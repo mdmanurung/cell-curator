@@ -60,9 +60,15 @@ def test_corpus_cli_propose_review_diff_preserve_base(monkeypatch, capsys, corpu
     assert review["label_changes"][0]["label_id"] == "a"
     diff = run_cli(monkeypatch, capsys, "corpus", "diff", "--input", corpus_path, "--other", revised)
     assert diff["changed"] == ["a"]
-    assert diff["added"] == diff["removed"] == []
+    # Decision row 20: the replaced record stays, superseded and linked to its successor.
+    assert diff["added"] == [f"a~{load_corpus(corpus_path).revision}"]
+    assert diff["removed"] == []
     assert corpus_path.read_bytes() == original
-    assert load_corpus(revised).labels[0].description == "Corrected synthetic definition."
+    labels = {item.label_id: item for item in load_corpus(revised).labels}
+    assert labels["a"].description == "Corrected synthetic definition."
+    old = labels[diff["added"][0]]
+    assert (old.status, old.superseded_by) == ("superseded", "a")
+    assert len(load_corpus(revised).programs({"species": "human", "tissue": "blood"})) == 1
 
 
 def test_corpus_cli_import_is_local_and_unreviewed(monkeypatch, capsys, corpus_path: Path, tmp_path: Path) -> None:

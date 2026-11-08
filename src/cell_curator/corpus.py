@@ -113,6 +113,7 @@ class CorpusLabel(_CorpusModel):
     reviewer: str = ""
     rationale: str = ""
     study_id: str = ""
+    superseded_by: str = ""
     alternatives: tuple[str, ...] = ()
     limitations: tuple[str, ...] = ()
     assertions: tuple[CorpusAssertion, ...] = ()
@@ -124,6 +125,8 @@ class CorpusLabel(_CorpusModel):
             raise ValueError("reviewed corpus labels require reviewer and rationale")
         if self.status == "reviewed" and not self.species:
             raise ValueError("reviewed corpus labels require an explicit species scope")
+        if self.status == "superseded" and not self.superseded_by:
+            raise ValueError("a superseded corpus label must name the label that replaced it")
         if self.status == "reviewed" and not self.tissues:
             raise ValueError("reviewed corpus labels require an explicit tissue scope")
         overlap = {value.casefold() for value in self.positive}.intersection(
@@ -486,6 +489,18 @@ def _merge_proposal(
         rows.update({getattr(item, key): item for item in new})
         return [rows[item] for item in sorted(rows)]
 
+    def retained(old: Sequence[CorpusLabel], new: Sequence[CorpusLabel]) -> list[CorpusLabel]:
+        # Decision row 20: a replaced record stays, marked superseded and linked to its
+        # successor, under an id that names the revision it came from.
+        replaced = {item.label_id for item in new}
+        return [
+            item.model_copy(update={
+                "label_id": f"{item.label_id}~{base.revision}", "status": "superseded",
+                "superseded_by": item.label_id,
+            })
+            for item in old if item.label_id in replaced and item.status != "superseded"
+        ]
+
     labels = proposal.labels
     if review:
         labels = tuple(CorpusLabel.model_validate({
@@ -500,7 +515,7 @@ def _merge_proposal(
         return CorpusSnapshot(
             corpus_id=base.corpus_id, revision=revision, parent_revision=base.revision,
             sources=tuple(merge(base.sources, proposal.sources, "source_id")),
-            labels=tuple(merge(base.labels, labels, "label_id")),
+            labels=tuple(merge([*base.labels, *retained(base.labels, labels)], labels, "label_id")),
             mappings=tuple(old_mappings[key] for key in sorted(old_mappings)), review=review,
         )
     except ValueError as exc:
