@@ -378,6 +378,14 @@ class ClassifierConfig(StrictModel):
         return self
 
 
+class IsolationConfig(StrictModel):
+    """Decision row 21: the corpus may not be learned from the test split's donors."""
+
+    donor_split: str = Field(min_length=1)
+    test_split: str = Field(min_length=1)
+    dataset_id: str = ""
+
+
 class AnnotationConfig(StrictModel):
     enabled: bool = False
     assay: str = ""
@@ -391,6 +399,7 @@ class AnnotationConfig(StrictModel):
     # state's positive genes is detected in it and no negative gene is.
     min_state_positive_fraction: float = Field(default=0.5, gt=0, le=1)
     seed: int = Field(default=0, ge=0)
+    isolation: IsolationConfig | None = None
 
 
 class EvidenceConfig(StrictModel):
@@ -677,8 +686,14 @@ def anchor_relative_paths(config: CellCuratorConfig, *, config_dir: Path) -> Cel
             if (value := getattr(classifier, name)) and not Path(value).is_absolute()
         }
         classifiers.append(classifier.model_copy(update=paths))
-    if classifiers:
-        updates["annotation"] = config.annotation.model_copy(update={"classifiers": classifiers})
+    annotation_updates: dict[str, Any] = {"classifiers": classifiers} if classifiers else {}
+    isolation = config.annotation.isolation
+    if isolation and not Path(isolation.donor_split).is_absolute():
+        annotation_updates["isolation"] = isolation.model_copy(
+            update={"donor_split": str((config_dir / isolation.donor_split).resolve())}
+        )
+    if annotation_updates:
+        updates["annotation"] = config.annotation.model_copy(update=annotation_updates)
 
     anchored_providers = []
     provider_changed = False

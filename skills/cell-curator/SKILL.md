@@ -71,6 +71,8 @@ cell-curator corpus review --input imported.json --proposal proposal.json \
   --output reviewed.json --reviewer REVIEWER --rationale "Evidence reviewed" \
   --revision reviewed-v1 --decision accept
 cell-curator corpus diff --input imported.json --other reviewed.json
+cell-curator corpus check-isolation --input reviewed.json --donor-split donor_split.tsv \
+  --test-split B --dataset-id DATASET_ID
 ```
 
 The corpus reviewer is a person. An agent may prepare a proposal for review;

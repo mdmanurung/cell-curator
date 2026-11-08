@@ -17,6 +17,7 @@ from .api import (
     build_marker_vocabulary,
     build_review_artifacts,
     canonicalize_input,
+    check_corpus_isolation,
     check_review_report,
     collect_annotation_level,
     compare_annotation_corpora,
@@ -105,6 +106,7 @@ except PackageNotFoundError:  # Source checkout before installation.
 
 __all__ = [
     "collect_annotation_level",
+    "check_corpus_isolation",
     "compare_annotation_corpora",
     "export_corpus_programs",
     "finalize_corpus_annotation",

@@ -74,7 +74,16 @@ def annotation_contract(config: CellCuratorConfig) -> dict[str, Any]:
             raise ContractError("configured corpus version differs from its snapshot")
         context = merge_corpus_context(corpus_context(config), provider.context)
         selected = {record.label_id for record in snapshot.select(context)}
+        isolation = None
+        if config.annotation.isolation:
+            from .corpus import check_test_isolation
+
+            isolation = check_test_isolation(
+                snapshot, config.annotation.isolation.donor_split,
+                test_split=config.annotation.isolation.test_split,
+                dataset_id=config.annotation.isolation.dataset_id)
         corpora.append({"path": provider.path, "sha256": sha256(Path(provider.path)),
+                        "isolation": isolation,
                         "revision": snapshot.revision, "context": context,
                         "selected": sorted(selected),
                         "excluded": sorted(record.label_id for record in snapshot.labels

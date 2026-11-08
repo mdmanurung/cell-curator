@@ -102,3 +102,11 @@ def test_corpus_cli_refuses_invalid_trust_boundary_inputs(monkeypatch, capsys, c
     response = capsys.readouterr()
     assert json.loads(response.err)["error"] == "ContractError"
     assert not output.exists()
+
+
+def test_corpus_cli_check_isolation(monkeypatch, capsys, corpus_path: Path, tmp_path: Path) -> None:
+    split = tmp_path / "split.tsv"
+    split.write_text("donor_id\tsplit\tn_cells\nd1\tA\t1\nd2\tB\t1\n")
+    result = run_cli(monkeypatch, capsys, "corpus", "check-isolation", "--input", corpus_path,
+                     "--donor-split", split, "--test-split", "B")
+    assert result["status"] == "isolated" and result["learned_donors"] == 0

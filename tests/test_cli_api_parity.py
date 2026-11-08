@@ -31,6 +31,7 @@ CLI_TO_PUBLIC_NAME: dict[tuple[str, ...], str] = {
     ("corpus", "import"): "import_annotation_corpus",
     ("corpus", "propose"): "propose_corpus_update",
     ("corpus", "review"): "review_corpus_update",
+    ("corpus", "check-isolation"): "check_corpus_isolation",
     ("corpus", "diff"): "compare_annotation_corpora",
     ("crosscheck", "popv-predict"): "predict_popv",
     ("assumptions", "add"): "record_annotation_assumption",

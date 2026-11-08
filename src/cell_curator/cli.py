@@ -125,7 +125,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     corpus = commands.add_parser("corpus", help="inspect, import, and review versioned label knowledge")
     corpus_sub = corpus.add_subparsers(dest="action", required=True)
-    for action in ("validate", "export", "propose", "review", "import", "diff"):
+    for action in ("validate", "export", "propose", "review", "import", "diff", "check-isolation"):
         item = corpus_sub.add_parser(action)
         item.add_argument("--input", required=True, type=Path, help="base corpus snapshot")
         if action in {"export", "propose", "review", "import"}:
@@ -157,6 +157,10 @@ def build_parser() -> argparse.ArgumentParser:
             item.add_argument("--tissue", default="", help="scgate source: tissue scope of the imported labels")
         if action == "diff":
             item.add_argument("--other", required=True, type=Path)
+        if action == "check-isolation":
+            item.add_argument("--donor-split", required=True, type=Path, help="TSV with donor_id and split")
+            item.add_argument("--test-split", required=True, help="split label whose donors must not be learned from")
+            item.add_argument("--dataset-id", default="", help="test dataset id; records citing it must name donors")
 
     annotation = commands.add_parser("annotation", help="run a corpus stage scheduled by annotation.smk")
     annotation_sub = annotation.add_subparsers(dest="action", required=True)
@@ -637,6 +641,11 @@ def dispatch(args: argparse.Namespace) -> Any:
                 version=args.source_version, retrieved_at=args.retrieved_at, license=args.license,
                 scgate={"collections": args.scgate_collection, "tag": args.scgate_tag,
                         "species": args.species, "tissue": args.tissue})
+        if args.action == "check-isolation":
+            from .corpus import check_test_isolation
+
+            return check_test_isolation(snapshot, args.donor_split, test_split=args.test_split,
+                                        dataset_id=args.dataset_id)
         other = load_corpus(args.other)
         before = {item.label_id: item.model_dump(mode="json") for item in snapshot.labels}
         after = {item.label_id: item.model_dump(mode="json") for item in other.labels}

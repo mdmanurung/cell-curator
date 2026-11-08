@@ -58,6 +58,17 @@
           "title": "Enabled",
           "type": "boolean"
         },
+        "isolation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IsolationConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "min_classifier_agreement": {
           "default": 0.5,
           "exclusiveMinimum": 0,
@@ -884,6 +895,33 @@
         "scope"
       ],
       "title": "InputKeysConfig",
+      "type": "object"
+    },
+    "IsolationConfig": {
+      "additionalProperties": false,
+      "description": "Decision row 21: the corpus may not be learned from the test split's donors.",
+      "properties": {
+        "dataset_id": {
+          "default": "",
+          "title": "Dataset Id",
+          "type": "string"
+        },
+        "donor_split": {
+          "minLength": 1,
+          "title": "Donor Split",
+          "type": "string"
+        },
+        "test_split": {
+          "minLength": 1,
+          "title": "Test Split",
+          "type": "string"
+        }
+      },
+      "required": [
+        "donor_split",
+        "test_split"
+      ],
+      "title": "IsolationConfig",
       "type": "object"
     },
     "KnowledgeConfig": {

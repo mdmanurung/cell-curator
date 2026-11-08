@@ -81,6 +81,13 @@ class CorpusExclusion(_CorpusModel):
     negative: tuple[str, ...] = ()
 
 
+class CorpusDerivation(_CorpusModel):
+    """Data a record was learned from. Donors let a benchmark prove its test donors were not used."""
+
+    dataset_id: str = Field(min_length=1)
+    donors: tuple[str, ...] = ()
+
+
 class CorpusObservation(_CorpusModel):
     run_id: str = Field(min_length=1)
     dataset_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -123,6 +130,7 @@ class CorpusLabel(_CorpusModel):
     study_id: str = ""
     superseded_by: str = ""
     exclusions: tuple[CorpusExclusion, ...] = ()
+    derived_from: tuple[CorpusDerivation, ...] = ()
     alternatives: tuple[str, ...] = ()
     limitations: tuple[str, ...] = ()
     assertions: tuple[CorpusAssertion, ...] = ()
@@ -209,6 +217,10 @@ class CorpusSnapshot(_CorpusModel):
     labels: tuple[CorpusLabel, ...]
     mappings: tuple[CorpusMapping, ...] = ()
     review: CorpusReview | None = None
+
+    def learned_donors(self) -> tuple[str, ...]:
+        """Decision row 21: every donor any record was learned from. Labels pin it via the digest."""
+        return tuple(sorted({d for label in self.labels for item in label.derived_from for d in item.donors}))
 
     @model_validator(mode="after")
     def validate_records(self) -> CorpusSnapshot:
@@ -417,6 +429,41 @@ def _context_value(key: str, value: str) -> str:
             "mouse": "mus musculus", "10090": "mus musculus", "ncbitaxon:10090": "mus musculus",
         }.get(normalized, normalized)
     return normalized
+
+
+def check_test_isolation(
+    snapshot: CorpusSnapshot, donor_split: str | Path, *, test_split: str, dataset_id: str = "",
+) -> dict[str, Any]:
+    """Decision row 21: refuse a corpus learned from test donors.
+
+    ``donor_split`` is a TSV with ``donor_id`` and ``split``. A record that cites the test
+    dataset must name its donors, so each one can be shown to sit outside the test split.
+    """
+    import csv
+
+    path = Path(donor_split)
+    with path.open(newline="") as handle:
+        rows = [(row["donor_id"], row["split"]) for row in csv.DictReader(handle, delimiter="\t")]
+    if not any(split == test_split for _, split in rows):
+        raise ContractError(f"donor split has no donors in test split {test_split!r}")
+    test = {donor for donor, split in rows if split == test_split}
+    known = {donor for donor, _ in rows}
+    problems = []
+    for label in snapshot.labels:
+        for item in label.derived_from:
+            leaked = sorted(set(item.donors) & test)
+            if leaked:
+                problems.append(f"{label.label_id}: learned from test donors {leaked[:3]}")
+            if dataset_id and item.dataset_id == dataset_id:
+                if not item.donors:
+                    problems.append(f"{label.label_id}: cites {dataset_id} without naming donors")
+                elif set(item.donors) - known:
+                    problems.append(f"{label.label_id}: donors absent from the split file")
+    if problems:
+        raise ContractError("corpus is not isolated from the test split: " + "; ".join(problems))
+    return {"status": "isolated", "test_split": test_split, "dataset_id": dataset_id,
+            "split_sha256": sha256(path), "labels": len(snapshot.labels),
+            "learned_donors": len(snapshot.learned_donors())}
 
 
 def load_corpus(path: str | Path, expected_sha256: str = "") -> CorpusSnapshot:

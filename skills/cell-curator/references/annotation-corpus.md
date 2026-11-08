@@ -153,6 +153,17 @@ An exclusion the panel does not measure is flagged `exclusion_unmeasured:<name>`
 still runs at review. Import one collection per source id: two collections that
 define the same label name need an explicit exact mapping.
 
+### Keep a benchmark's test donors out of the corpus
+
+A record can say where it was learned from: `derived_from` lists a `dataset_id` and
+the `donors` it used. `corpus check-isolation` reads a TSV with `donor_id` and `split`
+and refuses the corpus when any record names a donor from `--test-split`. With
+`--dataset-id`, a record that cites the test dataset must name its donors, and each
+must be in the split file. Set `annotation.isolation` (`donor_split`, `test_split`,
+`dataset_id`) in the config and `annotation_contract` runs the same check before
+Gate A. `CorpusSnapshot.learned_donors()` lists every donor the corpus learned from;
+the corpus digest pins that list.
+
 ## Review and release corpus knowledge
 
 Create `changes.json` with `labels`, `sources`, and/or `mappings`. Supply full

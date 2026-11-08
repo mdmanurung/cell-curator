@@ -51,6 +51,15 @@ def review_corpus_update(base_path: str | Path, proposal_path: str | Path,
     return review_corpus(base_path, proposal_path, output_path, **kwargs)
 
 
+def check_corpus_isolation(path: str | Path, donor_split: str | Path, *, test_split: str,
+                           dataset_id: str = "") -> dict[str, Any]:
+    """Refuse a corpus whose records were learned from the test split's donors."""
+    from .corpus import check_test_isolation
+
+    return check_test_isolation(load_annotation_corpus(path), donor_split,
+                                test_split=test_split, dataset_id=dataset_id)
+
+
 def compare_annotation_corpora(before_path: str | Path, after_path: str | Path) -> dict[str, Any]:
     """Compare label definitions, source records, and mappings between revisions."""
     before, after = load_annotation_corpus(before_path), load_annotation_corpus(after_path)
