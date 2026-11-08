@@ -17,7 +17,10 @@ anything.
    `cell-curator assumptions approve` on your own initiative. Ask the user.
 2. **Critics.** Every configured critic pass needs a finding or an attestation
    before write-back.
-3. **Write-back.** `cell-curator write-back apply` asks a person to type the
+3. **Corpus review.** `cell-curator corpus review` makes records callable. Run it
+   only after the user says OK in the conversation for that proposal. Pass the
+   user's name as `--reviewer`. Never review on your own initiative.
+4. **Write-back.** `cell-curator write-back apply` asks a person to type the
    approval token in a terminal. Stop and ask the user to run it. Never pipe the
    token in.
 

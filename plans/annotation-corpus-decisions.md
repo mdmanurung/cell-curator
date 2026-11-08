@@ -14,49 +14,71 @@ Rules for this file:
 
 | # | Decision | Where (unverified) | Current | Alternatives | Source | Status |
 |---|---|---|---|---|---|---|
-| 1 | Who approves corpus records | `corpus.py:503-562`, `484-487` | Free-text `--reviewer`; accept makes records callable | Typed terminal token as in write-back; list as an `AGENTS.md` gate | inherited: plans/annotation-corpus.md | open |
+| 1 | Who approves corpus records | `corpus.py:503-562`, `484-487` | Free-text `--reviewer`; accept makes records callable | Typed terminal token as in write-back; list as an `AGENTS.md` gate | inherited: plans/annotation-corpus.md | approved: user's own OK in chat per proposal, no token; rule added to `AGENTS.md` (2026-11-08) |
 
 ## Label-call rules
 
 | # | Decision | Where (unverified) | Current | Alternatives | Source | Status |
 |---|---|---|---|---|---|---|
-| 2 | Unmeasured negative marker | `annotation.py:384` | NaN fails the gate | Score separately | inherited: plans/annotation-corpus.md line 143 | open |
-| 3 | Missing comparator table | `annotation.py:395-396` | Fails `{role}:{method}` | Mark unavailable, skip vote | inherited | open |
-| 4 | Label with no declared negatives | `evidence.py:690`, `718` | Coverage 1.0, violation 0.0 | Neutral, or require negatives | inherited | open |
-| 5 | Parent with no differing sibling | `annotation.py:357-361` | No sibling rows, all labels fail | Use a corpus sibling | inherited | open |
-| 6 | Positive-marker gate | `annotation.py:395` | 1 marker in top 100 | Minimum count or fraction | inherited | open |
-| 7 | Top-N ranking | `evidence.py:224` | Mean difference, N=100 | Rank by p-value; other N | inherited | open |
-| 8 | Multiple-testing family | `evidence.py` | BH per cluster per comparison | One family across siblings | inherited | open |
-| 9 | Exact-mapping merge | `corpus.py:373` | Union of positives | Intersection | inherited | open |
-| 14 | Margin definition | `annotation.py:417` | Failed runner-up gets vote 0 | Keep its real vote | inherited | open |
-| 15 | LLM near-tie hook | corpus DAG | `evidence.llm.proposals` not read | Wire in, or declare out of scope | inherited: plan line 154 | open |
-| 16 | Corpus context scope | `corpus.py:125`, `293` | Empty tissue/stage/condition matches anywhere | Require tissue and assay | inherited: plan line 71 | open |
-| 17 | State-call rule | `annotation.py:435` | Every positive gene in every cell | Fraction or score | inherited | open |
+| 2 | Unmeasured negative marker | `annotation.py:384` | NaN fails the gate | Score separately | inherited: plans/annotation-corpus.md line 143 | approved: pass with `unmeasured_negatives` flag (user, 2026-11-08); done in working tree, uncommitted |
+| 3 | Missing comparator table | `annotation.py:395-396` | Fails `{role}:{method}` | Mark unavailable, skip vote | inherited | approved: mark `comparator_unavailable`, skip that vote, show the flag (user, 2026-11-08); not yet implemented |
+| 4 | Label with no declared negatives | `evidence.py:690`, `718` | Coverage 1.0, violation 0.0 | Neutral, or require negatives | inherited | approved: pass with `no_declared_negatives` flag; no score bonus (neutral coverage) (user, 2026-11-08); not yet implemented |
+| 5 | Parent with no differing sibling | `annotation.py:357-361` | No sibling rows, all labels fail | Use a corpus sibling | inherited | approved: use a corpus sibling of the same parent; nearest cluster as fallback (user, 2026-11-08); not yet implemented |
+| 6 | Positive-marker gate | `annotation.py:395` | 1 marker in top 100 | Minimum count or fraction | inherited | approved: at least 2 positive markers, or all if the label has only 1 (user, 2026-11-08); not yet implemented |
+| 7 | Top-N ranking | `evidence.py:224` | Mean difference, N=100 | Rank by p-value; other N | inherited | approved: filter by adjusted p first, rank by effect, N=100 (user, 2026-11-08); not yet implemented |
+| 8 | Multiple-testing family | `evidence.py` | BH per cluster per comparison | One family across siblings | inherited | approved: one BH family per parent scope and method, across all sibling tests (user, 2026-11-08); not yet implemented |
+| 9 | Exact-mapping merge | `corpus.py:373` | Union of positives | Intersection | inherited | approved: intersection of positives; each source's own list kept in the record (user, 2026-11-08); not yet implemented |
+| 14 | Margin definition | `annotation.py:417` | Failed runner-up gets vote 0 | Keep its real vote | inherited | approved: keep the failed runner-up's real vote so near-ties stay visible (user, 2026-11-08); not yet implemented |
+| 15 | LLM near-tie hook | corpus DAG | `evidence.llm.proposals` not read | Wire in, or declare out of scope | inherited: plan line 154 | approved: out of scope for now; a near-tie goes to the parent or Unknown (user, 2026-11-08); not yet implemented |
+| 16 | Corpus context scope | `corpus.py:125`, `293` | Empty tissue/stage/condition matches anywhere | Require tissue and assay | inherited: plan line 71 | approved: require species and tissue; assay and condition optional but recorded (user, 2026-11-08); not yet implemented |
+| 17 | State-call rule | `annotation.py:435` | Every positive gene in every cell | Fraction or score | inherited | approved: at least half the positive genes per cell and no negative gene; threshold in config with its reason (user, 2026-11-08); not yet implemented |
 
 ## Classifier rules
 
 | # | Decision | Where (unverified) | Current | Alternatives | Source | Status |
 |---|---|---|---|---|---|---|
-| 10 | Classifier role | `config.py:367` | `required` by default | Advisory | inherited | open |
-| 11 | popV and CellTypist dependence | `crosschecks.py:966`, `reconciliation.py` | Both can veto; `reconcile_predictions` never called | One vote; call reconciliation | inherited | open |
-| 12 | Coarser classifier label at finer level | `annotation.py:262-267` | Counts as disagreement | Counts as compatible | inherited | open |
-| 13 | Unmapped raw labels | `annotation.py:406` | Unknown, lowers agreement | Drop from denominator | inherited | open |
+| 10 | Classifier role | `config.py:367` | `required` by default | Advisory | inherited | approved: advisory by default; disagreement shown as a flag and in the review packet; `required` settable per classifier in config (user, 2026-11-08); not yet implemented |
+| 11 | popV and CellTypist dependence | `crosschecks.py:966`, `reconciliation.py` | Both can veto; `reconcile_predictions` never called | One vote; call reconciliation | inherited | approved: popV and its embedded CellTypist count as one vote, via `reconcile_predictions` (user, 2026-11-08); not yet implemented |
+| 12 | Coarser classifier label at finer level | `annotation.py:262-267` | Counts as disagreement | Counts as compatible | inherited | approved: abstain: leave out of the agreement rate and report the count (user, 2026-11-08); not yet implemented |
+| 13 | Unmapped raw labels | `annotation.py:406` | Unknown, lowers agreement | Drop from denominator | inherited | approved: drop from the agreement rate and report the unmapped count (user, 2026-11-08); not yet implemented |
 
 ## Engine and corpus lifecycle
 
 | # | Decision | Where (unverified) | Current | Alternatives | Source | Status |
 |---|---|---|---|---|---|---|
-| 18 | CPU marker methods | `decisions.py:311-332` | Wilcoxon and logistic regression both needed | Wilcoxon only (earlier behaviour) | unplanned: Codex edit, commit `85b8077` | open |
-| 19 | Logistic regression setup | `evidence.py:304-340` | Balanced L2, L-BFGS, all genes | Gene prefilter, other penalty | unplanned: Codex edit, commit `85b8077` | open |
-| 20 | Corpus update rule | `corpus.py:479` | Same `label_id` replaces record | Mark old `superseded` | inherited | open |
-| 21 | Learning loop | `experience` unused | No held-out set; run output could feed its own test | Hold out a split | inherited | open |
-| 22 | Validation target | `tests/test_annotation_pipeline.py:189` | Circular synthetic truth; no real-data accuracy test | Held-out real data plus a comparator | inherited | open |
+| 18 | CPU marker methods | `decisions.py:311-332` | Wilcoxon and logistic regression both needed | Wilcoxon only (earlier behaviour) | unplanned: Codex edit, commit `85b8077` | approved: Wilcoxon is the default; logistic regression only in the corpus workflow (user, 2026-11-08); not yet implemented |
+| 19 | Logistic regression setup | `evidence.py:304-340` | Balanced L2, L-BFGS, all genes | Gene prefilter, other penalty | unplanned: Codex edit, commit `85b8077` | approved: keep balanced L2 on all genes; time one profile first; any prefilter gets its own row (user, 2026-11-08); not yet implemented |
+| 20 | Corpus update rule | `corpus.py:479` | Same `label_id` replaces record | Mark old `superseded` | inherited | approved: mark the old record `superseded` with a link; old runs keep their pinned version (user, 2026-11-08); not yet implemented |
+| 21 | Learning loop | `experience` unused | No held-out set; run output could feed its own test | Hold out a split | inherited | approved: learn only from split A donors (`benchmarks/data/aida-pbmc-protocol-v5/donor_split.tsv`); split B never proposes or accepts a record; the corpus pins the donor list it learned from. No record may cite AIDA or its labels as a source for the benchmark run: records get `derived_from`, and the evaluator refuses any link to test donors (user, 2026-11-08); not yet implemented |
+| 22 | Validation target | `tests/test_annotation_pipeline.py:189` | Circular synthetic truth; no real-data accuracy test | Held-out real data plus a comparator | inherited | approved: new frozen protocol v7 declared before any run: AIDA split B through the corpus workflow; comparators CellTypist, SingleR, scANVI, popV plus v14 cell-curator as baseline (no scGate); corpus = scGate_models `generic` and `PBMC` at tag v0.16, every record reviewed by the user before the run; headline claim stays selective prediction at matched coverage and calibrated abstention, plus unknown rate and the row 2, 3, 4 flag counts reported; v6 stop rules reused unchanged; synthetic test kept as a plumbing check only (user, 2026-11-08); not yet implemented |
+
+## External methods added 2026-11-08 (user request)
+
+Facts read with `gh` on 2026-11-08, not from the repos' docs sites (those timed out):
+
+- scGate v1.7.0 (2025-04-24), R, GPL-3 in `DESCRIPTION`. Scores cells with UCell, smooths over kNN, runs a hierarchical gating model, calls `Pure`/`Impure`.
+- scGate_models v0.16 (2023-12-18), no licence file seen. Human and mouse. Each model is a TSV with columns `levels`, `use_as` (`positive` or `negative`), `name`, `signature`. `master_table.tsv` holds `name` and `signature` (genes joined by `;`, a trailing `-` marks a negative gene). Collections: PBMC, TME_broad, TME_HiRes, HiTME, CD4_TIL, CD8_TIL. `CellOntology_dictionary.tsv` maps names to Cell Ontology.
+- MMoCHi, Python, GPL-3.0, no release tag. Hierarchy of random forests trained on high-confidence thresholded cells, built for CITE-seq. Uses ADT, RNA and metadata.
+
+| # | Decision | Alternatives | What it changes | Source | Status |
+|---|---|---|---|---|---|
+| 23 | Role of scGate_models (first import: human `generic` and `PBMC`; TME and mouse after the first review round, approved 2026-11-08) | Import as corpus source (via `corpus import`); reference only; runtime download | Which labels and negatives the corpus holds | user request 2026-11-08 | approved: import as corpus source, records start as proposals needing the user's OK (user, 2026-11-08); licence (row 24) must clear before any file is shipped |
+| 24 | Licence and bundling | Ship copies; fetch at run time and pin; do not ship | Whether GPL-3 or unlicensed files enter the package. Needs a licence check first (scGate_models has none) | user request 2026-11-08 | approved: (a) ship nothing; import at run time from a clone the user points to; records carry source URL, tag and file hash. (b) asking carmonalab for a licence is the user's to send (user, 2026-11-08) |
+| 25 | Map scGate negatives | Level-wise negative = a whole population signature; `GENE-` = a single gene. Map both to corpus `negative`, or only the single genes | Negative-marker gate (rows 2-4) | user request 2026-11-08 | approved: level negatives become a "must not match" link to another label, measured through that label's markers; single `GENE-` negatives map to corpus `negative` (user, 2026-11-08) |
+| 26 | Run scGate as a classifier | Add as a crosscheck beside CellTypist and popV (R dependency, cell-level, own UCell/kNN); or markers only | Adds an evidence source and a possible veto (rows 10-11) | user request 2026-11-08 | approved: no scGate crosscheck for now; markers only; revisit after real-data validation (user, 2026-11-08) |
+| 27 | Use of MMoCHi | Design reference for hierarchy and high-confidence thresholds; or a crosscheck trained on the user's own data (needs labelled cells, CITE-seq suits it best) | Hierarchy rules; a possible training-set circularity (row 21) | user request 2026-11-08 | approved: design reference only; no MMoCHi classifier (user, 2026-11-08) |
+| 28 | Version pins | scGate_models tag v0.16, scGate v1.7.0, MMoCHi commit SHA (no tag) | Reproducibility of imported records | user request 2026-11-08 | approved: scGate_models tag v0.16 by default; a newer tag or commit needs an explicit config value and a `corpus diff` first. scGate and MMoCHi pins moot while unused at run time (user, 2026-11-08) |
+| 29 | Ontology mapping of imported labels | Use `CellOntology_dictionary.tsv` as-is; or re-map all through the package check | Which terms enter the corpus | user request 2026-11-08 | approved: dictionary is a first guess only; package ontology check runs on every label and a failing term blocks the proposal (user, 2026-11-08) |
 
 ## Not decisions, still to do
 
 - Re-run the full suite on the tip (the last full run predates the final edits).
 - Check whether the all-gene CPU logistic fits explain the slow PBMC3k run.
 - Native CellTypist and popV installs; real-data validation. Not started.
+
+## Status 2026-11-08
+
+All 29 rows are approved. Implementation not started except rows 1 (`AGENTS.md` rule) and 2 (`annotation.py`).
 
 ## Suggested order
 
