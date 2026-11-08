@@ -37,10 +37,10 @@ Rules for this file:
 
 | # | Decision | Where (unverified) | Current | Alternatives | Source | Status |
 |---|---|---|---|---|---|---|
-| 10 | Classifier role | `config.py:367` | `required` by default | Advisory | inherited | approved: advisory by default; disagreement shown as a flag and in the review packet; `required` settable per classifier in config (user, 2026-11-08); not yet implemented |
-| 11 | popV and CellTypist dependence | `crosschecks.py:966`, `reconciliation.py` | Both can veto; `reconcile_predictions` never called | One vote; call reconciliation | inherited | approved: popV and its embedded CellTypist count as one vote, via `reconcile_predictions` (user, 2026-11-08); not yet implemented |
-| 12 | Coarser classifier label at finer level | `annotation.py:262-267` | Counts as disagreement | Counts as compatible | inherited | approved: abstain: leave out of the agreement rate and report the count (user, 2026-11-08); not yet implemented |
-| 13 | Unmapped raw labels | `annotation.py:406` | Unknown, lowers agreement | Drop from denominator | inherited | approved: drop from the agreement rate and report the unmapped count (user, 2026-11-08); not yet implemented |
+| 10 | Classifier role | `config.py:367` | `required` by default | Advisory | inherited | approved: advisory by default; disagreement shown as a flag and in the review packet; `required` settable per classifier in config (user, 2026-11-08); implemented in the working tree 2026-11-08 |
+| 11 | popV and CellTypist dependence | `crosschecks.py:966`, `reconciliation.py` | Both can veto; `reconcile_predictions` never called | One vote; call reconciliation | inherited | approved: popV and its embedded CellTypist count as one vote, via `reconcile_predictions` (user, 2026-11-08); implemented in the working tree 2026-11-08 |
+| 12 | Coarser classifier label at finer level | `annotation.py:262-267` | Counts as disagreement | Counts as compatible | inherited | approved: abstain: leave out of the agreement rate and report the count (user, 2026-11-08); implemented in the working tree 2026-11-08 |
+| 13 | Unmapped raw labels | `annotation.py:406` | Unknown, lowers agreement | Drop from denominator | inherited | approved: drop from the agreement rate and report the unmapped count (user, 2026-11-08); implemented in the working tree 2026-11-08 |
 
 ## Engine and corpus lifecycle
 
@@ -78,13 +78,14 @@ Facts read with `gh` on 2026-11-08, not from the repos' docs sites (those timed 
 
 ## Status 2026-11-08
 
-All 29 rows are approved. Implemented: rows 1 (`AGENTS.md` rule), 2, 3, 4, 5, 6, 7, 8, 9, 14, 16, 17. Row 15 needs no code.
-Not yet implemented: rows 10-13, 18-22, and the scGate_models importer (rows 23-29).
+All 29 rows are approved. Implemented: rows 1 (`AGENTS.md` rule), 2 to 14, 16, 17. Row 15 needs no code.
+Not yet implemented: rows 18-22, and the scGate_models importer (rows 23-29).
 
 Known limits of what was built:
 - Row 4: the label gets the `no_declared_negatives` flag and still has violation 0.0. The score has no penalty for it, so it is not made neutral. A neutral value would need a number you have not chosen.
 - Row 8: the family is every kept Wilcoxon test in a parent scope. Sibling-pair tests keep only the target cluster's side.
 - Row 9: negatives are still a union across mapped sources. Intersection of positives can make an exact mapping fail with `share no positive marker`.
+- Row 11: the one-vote rule is in `annotation.py` (members of a dependency group share one mean agreement). `reconcile_predictions` is still not called; it reports per-cluster composition and does not combine votes.
 - Row 16: reviewed labels now need `tissues`, and the dataset context needs `tissue`. Existing reviewed corpora without tissue will no longer load.
 
 ## Suggested order
