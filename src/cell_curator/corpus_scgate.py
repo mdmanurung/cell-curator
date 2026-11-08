@@ -93,6 +93,12 @@ def scgate_payload(
                 positive += plus
                 negative += minus
             excludes = sorted({row["name"] for row in rows if row["use_as"] == "negative"})
+            # Decision row 30: each excluded population is tested through its own signature.
+            exclusions = []
+            for excluded in excludes:
+                plus, minus = _genes(master.get(excluded, ""))
+                if plus:
+                    exclusions.append({"name": excluded, "positive": plus, "negative": minus})
             record_id = f"{species}.{collection}.{name}"
             labels.append({
                 "source_record_id": record_id, "name": name,
@@ -108,7 +114,9 @@ def scgate_payload(
                 "negative": [gene for gene in dict.fromkeys(negative) if gene not in positive],
                 "source_level": levels[-1],
                 "cl_id": dictionary.get(name) or dictionary.get(name.removesuffix("s")),
+                "exclusions": exclusions,
                 "scgate_gate_path": gate_path, "scgate_excludes": excludes,
+                "scgate_excludes_without_signature": sorted(set(excludes) - {item["name"] for item in exclusions}),
                 "scgate_file": str(path.relative_to(models_dir)),
                 "scgate_file_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
             })

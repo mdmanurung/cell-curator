@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cell_curator.annotation import _classifier_counts, _marker_family
+from cell_curator.annotation import _classifier_counts, _marker_family, _signature_support
 from cell_curator.evidence import benjamini_hochberg
 from cell_curator.hierarchy import assign_parent_scoped_level
 
@@ -61,3 +61,21 @@ def test_coarser_classifier_label_abstains_and_unmapped_label_is_dropped() -> No
     raw = pd.Series(["CD8 T", "T", "B", "raw-x", "raw-y"])
     counts = _classifier_counts(raw, {"raw-y": "B"}, canonical, parents, "CD8 T")
     assert counts == {"agree": 1, "disagree": 2, "coarser": 1, "unmapped": 1}
+
+
+def test_signature_support_uses_the_state_rule() -> None:
+    from types import SimpleNamespace
+
+    config = SimpleNamespace(
+        evidence=SimpleNamespace(min_positive_coverage=0.5),
+        annotation=SimpleNamespace(min_state_positive_fraction=0.5),
+    )
+    detection = np.array([[1, 1, 0], [1, 0, 0], [0, 0, 1], [1, 1, 1]], dtype=float)
+    groups = pd.Series(["a", "a", "b", "b"])
+    lookup = {"g0": 0, "g1": 1, "g2": 2}
+    support, measured, coverage = _signature_support(detection, groups, lookup, ("g0", "g1"), ("g2",), config)
+    assert measured and coverage == 1.0
+    # cluster a: both cells detect >= half the positives and no g2; cluster b: neither passes.
+    assert support == {"a": 1.0, "b": 0.0}
+    _, measured, _ = _signature_support(detection, groups, lookup, ("nope",), (), config)
+    assert not measured

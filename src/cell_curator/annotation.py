@@ -263,6 +263,48 @@ def _predictions(
     return predictions, paths, dependent
 
 
+def _signature_support(
+    detection: Any, groups: pd.Series, feature_lookup: dict[str, int],
+    positive_genes: tuple[str, ...], negative_genes: tuple[str, ...], config: CellCuratorConfig,
+) -> tuple[dict[str, float], bool, float]:
+    """Decision row 17 for one gene signature: per cluster, the share of cells that detect
+    enough positive genes and no negative gene. Returns (support by cluster, measured, coverage)."""
+    pos = [feature_lookup[gene.casefold()] for gene in positive_genes if gene.casefold() in feature_lookup]
+    neg = [feature_lookup[gene.casefold()] for gene in negative_genes if gene.casefold() in feature_lookup]
+    coverage = len(pos) / max(len(positive_genes), 1)
+    negative_coverage = len(neg) / len(negative_genes) if negative_genes else 1.
+    minimum = config.evidence.min_positive_coverage
+    measured = bool(pos) and coverage >= minimum and negative_coverage >= minimum
+    support: dict[str, float] = {}
+    for cluster in sorted(set(groups)):
+        if not measured:
+            support[cluster] = float("nan")
+            continue
+        values = detection[groups.eq(cluster).to_numpy()]
+        positive = values[:, pos].toarray() if sparse.issparse(values) else np.asarray(values)[:, pos]
+        negative = values[:, neg].toarray() if sparse.issparse(values) else np.asarray(values)[:, neg]
+        cell_positive = (positive > 0).mean(axis=1) >= config.annotation.min_state_positive_fraction
+        support[cluster] = float((cell_positive & ~(negative > 0).any(axis=1)).mean())
+    return support, measured, coverage
+
+
+def _program_exclusions(config: CellCuratorConfig, programs: list[Any]) -> dict[str, tuple[Any, ...]]:
+    """Decision row 30: the exclusions each corpus-backed program carries, by program source."""
+    from .corpus import load_corpus
+
+    found: dict[str, tuple[Any, ...]] = {}
+    for provider in config.knowledge.providers:
+        if provider.kind != "corpus":
+            continue
+        snapshot = load_corpus(provider.path, expected_sha256=provider.sha256)
+        by_id = {label.label_id: label for label in snapshot.labels}
+        prefix = f"corpus:{snapshot.corpus_id}:{snapshot.digest}:"
+        for program in programs:
+            if program.source.startswith(prefix) and program.source[len(prefix):] in by_id:
+                found[program.source] = by_id[program.source[len(prefix):]].exclusions
+    return found
+
+
 def _marker_family(frames: list[pd.DataFrame], adjusted_pvalue_max: float, top_n: int = 100) -> pd.DataFrame:
     """Decision rows 7 and 8: one BH family per parent scope and method, then the top
     genes by effect among the tests that pass it."""
@@ -362,6 +404,9 @@ def collect_level(config_path: str | Path, level: str) -> dict[str, Any]:
         if not features.equals(detection_features):
             raise ContractError("detection and ranking feature orders differ")
         programs = [item for item in _programs(config) if item.feature_space == capability.feature_space]
+        feature_lookup = {str(item).casefold(): index for index, item in enumerate(features)}
+        exclusions_by_source = _program_exclusions(config, programs)
+        exclusion_cache: dict[tuple[Any, ...], tuple[dict[str, float], bool, float]] = {}
         score_frames: list[pd.DataFrame] = []
         marker_frames: list[pd.DataFrame] = []
         statuses: list[dict[str, Any]] = []
@@ -449,6 +494,18 @@ def collect_level(config_path: str | Path, level: str) -> dict[str, Any]:
                     failures.append("negative_markers")
                 if not program.negative:
                     flags.append("no_declared_negatives")  # decision row 4
+                for excluded in exclusions_by_source.get(program.source, ()):
+                    # Decision row 30: a population the label must not match fails it when the
+                    # cluster shows that population's own signature (the row 17 state rule).
+                    signature = (excluded.name, excluded.positive, excluded.negative)
+                    if signature not in exclusion_cache:
+                        exclusion_cache[signature] = _signature_support(
+                            detection, groups, feature_lookup, excluded.positive, excluded.negative, config)
+                    by_cluster, excluded_measured, _ = exclusion_cache[signature]
+                    if not excluded_measured:
+                        flags.append(f"exclusion_unmeasured:{excluded.name}")
+                    elif by_cluster[str(row["cluster_id"])] >= config.annotation.min_state_fraction:
+                        failures.append(f"excluded:{excluded.name}")
                 # Decision row 6: at least 2 positive markers, or all if the label has 1.
                 needed = min(2, len(program.positive))
                 for role in ("parent_remainder", "closest_sibling"):
@@ -514,20 +571,10 @@ def collect_level(config_path: str | Path, level: str) -> dict[str, Any]:
         markers = pd.concat(marker_frames, ignore_index=True) if marker_frames else pd.DataFrame(columns=["cluster_id", "feature", "method", "comparator_role", "level", "parent_scope"])
         # States are tested independently, so co-occurring programs can both pass.
         state_rows = []
-        feature_lookup = {str(item).casefold(): index for index, item in enumerate(features)}
         for program in (item for item in programs if item.axis == "cell_state"):
-            pos = [feature_lookup[gene.casefold()] for gene in program.positive if gene.casefold() in feature_lookup]
-            neg = [feature_lookup[gene.casefold()] for gene in program.negative if gene.casefold() in feature_lookup]
-            coverage = len(pos) / max(len(program.positive), 1)
-            negative_coverage = len(neg) / len(program.negative) if program.negative else 1.
-            for cluster in sorted(set(groups)):
-                values = detection[groups.eq(cluster).to_numpy()]
-                positive = values[:, pos].toarray() if sparse.issparse(values) else np.asarray(values)[:, pos]
-                negative = values[:, neg].toarray() if sparse.issparse(values) else np.asarray(values)[:, neg]
-                measured = bool(pos) and coverage >= config.evidence.min_positive_coverage and negative_coverage >= config.evidence.min_positive_coverage
-                # Decision row 17: enough of the positive genes detected, and no negative gene.
-                cell_positive = (positive > 0).mean(axis=1) >= config.annotation.min_state_positive_fraction
-                support = float((cell_positive & ~(negative > 0).any(axis=1)).mean()) if measured else float("nan")
+            support_by_cluster, measured, coverage = _signature_support(
+                detection, groups, feature_lookup, program.positive, program.negative, config)
+            for cluster, support in support_by_cluster.items():
                 state_rows.append({"cluster_id": cluster, "state": program.label, "parent_scope": program.parent or "ROOT",
                     "fraction": support, "measured": measured, "coverage": coverage,
                     "passes": measured and support >= config.annotation.min_state_fraction})

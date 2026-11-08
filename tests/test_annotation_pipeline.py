@@ -38,6 +38,7 @@ def annotation_fixture(
     approved: bool = True,
     collapse_lineage: bool = False,
     required: bool = True,
+    exclusions: dict[str, list[dict]] | None = None,
 ) -> tuple[Path, Path, dict[str, list[str]]]:
     """Eight terminal clusters share their broad markers with sibling clusters."""
     features = [
@@ -75,6 +76,7 @@ def annotation_fixture(
                     "level": level,
                     "parent_id": parent,
                     "axis": axis,
+                    "exclusions": (exclusions or {}).get(identifier, []),
                     "status": "reviewed",
                     "reviewer": "synthetic-curator",
                     "rationale": "Known synthetic construction.",
@@ -418,3 +420,31 @@ def test_advisory_classifier_conflict_is_a_flag_not_a_veto(
     ].iloc[0]
     assert "classifier:celltypist" not in supported["gate_failures"]
     assert "classifier_disagreement:celltypist" in supported["gate_flags"]
+
+
+def test_exclusion_is_tested_through_its_own_signature(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Decision row 30: a cluster that shows an excluded population's genes fails the label;
+    # an exclusion whose genes the panel does not measure is flagged, not failed.
+    config_path, root, _ = annotation_fixture(
+        tmp_path,
+        monkeypatch,
+        exclusions={
+            "lineage-A": [
+                {"name": "self", "positive": ["lineage-A"]},
+                {"name": "ghost", "positive": ["not-a-feature"]},
+            ]
+        },
+    )
+    collect_level(config_path, "L1")
+    scores = pd.read_csv(
+        root / "annotation" / "levels" / "L1" / "scores.tsv", sep="\t", keep_default_na=False
+    )
+    a0 = scores[scores["label"].eq("Lineage A") & scores["cluster_id"].astype(str).eq("0")].iloc[0]
+    assert "excluded:self" in a0["gate_failures"]
+    assert "excluded:ghost" not in a0["gate_failures"]
+    assert "exclusion_unmeasured:ghost" in a0["gate_flags"]
+    b4 = scores[scores["label"].eq("Lineage B") & scores["cluster_id"].astype(str).eq("4")].iloc[0]
+    assert "excluded" not in b4["gate_failures"]

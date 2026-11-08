@@ -63,6 +63,8 @@ def test_model_becomes_one_label_with_signed_genes_and_its_exclusions(clone: Pat
     assert (label["name"], label["positive"], label["negative"]) == ("NK", ["KLRD1", "NKG7"], ["CD3D"])
     assert label["cl_id"] == "CL:0000623"  # decision row 29: a first guess for the ontology check
     assert label["scgate_excludes"] == ["Epithelial"]
+    # Decision row 30: the excluded population travels with its own signature genes.
+    assert label["exclusions"] == [{"name": "Epithelial", "positive": ["KRT8"], "negative": []}]
     assert label["scgate_gate_path"]["level1"] == {"positive": ["Immune"], "negative": ["Epithelial"]}
     assert payload["context"] == {"species": "human", "tissue": "blood"}
 

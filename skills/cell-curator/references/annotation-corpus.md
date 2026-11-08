@@ -144,7 +144,11 @@ cell-curator corpus import --input corpus-v1.json --records /path/to/scGate_mode
 Each model file becomes one label. Its positive genes are the signature of the
 model's last level. A gene written `GENE-` is a negative gene. The gating path,
 the populations the model excludes (`scgate_excludes`) and the model file hash
-stay in the `.source.json` copy for the reviewer. They do not act as a gate yet.
+stay in the `.source.json` copy for the reviewer. Each excluded population that has
+a signature in `master_table.tsv` becomes an `exclusions` entry on the label. At
+`collect-level`, a cluster fails the label (`excluded:<name>`) when that population's
+own genes pass the state rule (`min_state_positive_fraction`, `min_state_fraction`).
+An exclusion the panel does not measure is flagged `exclusion_unmeasured:<name>`.
 `CellOntology_dictionary.tsv` gives a first guess for `cl_id`; the ontology check
 still runs at review. Import one collection per source id: two collections that
 define the same label name need an explicit exact mapping.

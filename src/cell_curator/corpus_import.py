@@ -17,7 +17,14 @@ from typing import Any, Literal
 from pydantic import ValidationError
 
 from .contracts import ContractError
-from .corpus import CorpusAssertion, CorpusLabel, CorpusSnapshot, CorpusSource, load_corpus
+from .corpus import (
+    CorpusAssertion,
+    CorpusExclusion,
+    CorpusLabel,
+    CorpusSnapshot,
+    CorpusSource,
+    load_corpus,
+)
 from .provenance import atomic_publish, publish_json
 
 
@@ -97,6 +104,7 @@ def _record(
         synonyms=_strings(row.get("synonyms", [])), cl_id=cl_id, ontology_relation=relation,
         measurement=measurement, feature_space=row.get("feature_space", "gene"),
         status="imported", limitations=tuple(limitations), assertions=tuple(assertions),
+        exclusions=tuple(CorpusExclusion.model_validate(item) for item in row.get("exclusions", [])),
         species=scope["species"], tissues=scope["tissues"], assays=scope["assays"],
         stages=scope["stages"], conditions=scope["conditions"],
     )

@@ -73,6 +73,14 @@ class CorpusAssertion(_CorpusModel):
         return self
 
 
+class CorpusExclusion(_CorpusModel):
+    """A population this label must not match, tested through its own marker genes."""
+
+    name: str = Field(min_length=1)
+    positive: tuple[str, ...] = Field(min_length=1)
+    negative: tuple[str, ...] = ()
+
+
 class CorpusObservation(_CorpusModel):
     run_id: str = Field(min_length=1)
     dataset_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -114,6 +122,7 @@ class CorpusLabel(_CorpusModel):
     rationale: str = ""
     study_id: str = ""
     superseded_by: str = ""
+    exclusions: tuple[CorpusExclusion, ...] = ()
     alternatives: tuple[str, ...] = ()
     limitations: tuple[str, ...] = ()
     assertions: tuple[CorpusAssertion, ...] = ()
