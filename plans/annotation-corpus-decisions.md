@@ -70,7 +70,7 @@ Facts read with `gh` on 2026-11-08, not from the repos' docs sites (those timed 
 | 28 | Version pins | scGate_models tag v0.16, scGate v1.7.0, MMoCHi commit SHA (no tag) | Reproducibility of imported records | user request 2026-11-08 | approved: scGate_models tag v0.16 by default; a newer tag or commit needs an explicit config value and a `corpus diff` first. scGate and MMoCHi pins moot while unused at run time (user, 2026-11-08) |
 | 29 | Ontology mapping of imported labels | Use `CellOntology_dictionary.tsv` as-is; or re-map all through the package check | Which terms enter the corpus | user request 2026-11-08 | approved: dictionary is a first guess only; package ontology check runs on every label and a failing term blocks the proposal (user, 2026-11-08) |
 
-| 30 | How a level negative (`scgate_excludes`) acts as a gate | Names refer to signatures in the collection's `master_table.tsv`, and most have no model. Options: (a) import every referenced signature as a helper label and require the cluster not to pass it; (b) test the signature genes directly with the row 17 state rule; (c) keep as reviewer-only text | Whether exclusion has any effect on calls; adds labels to the vocabulary under (a) | arises from rows 23 and 25 | open |
+| 30 | How a level negative (`scgate_excludes`) acts as a gate | Names refer to signatures in the collection's `master_table.tsv`, and most have no model. Options: (a) import every referenced signature as a helper label and require the cluster not to pass it; (b) test the signature genes directly with the row 17 state rule; (c) keep as reviewer-only text | Whether exclusion has any effect on calls; adds labels to the vocabulary under (a) | arises from rows 23 and 25 | approved: (b) test the signature genes with the row 17 state rule (user, 2026-11-08); implemented 2026-11-08 |
 
 ## Not decisions, still to do
 
@@ -80,9 +80,9 @@ Facts read with `gh` on 2026-11-08, not from the repos' docs sites (those timed 
 
 ## Status 2026-11-08
 
-Rows 1 to 29 are approved. Row 30 is new and open.
-Implemented: rows 1 (`AGENTS.md` rule), 2 to 14, 16 to 18, 20, 23, 24, 28, 29. Row 25 is half done (see below). Row 15 needs no code. Rows 26 and 27 were decided "no", so no code.
-Not yet implemented: row 19 (needs a timing run on real data), rows 21 and 22 (learning rule and frozen protocol v7), the gate for level negatives (row 30).
+Rows 1 to 30 are approved.
+Implemented: rows 1 (`AGENTS.md` rule), 2 to 14, 16 to 18, 20, 23, 24, 28, 29. Rows 25 and 30 are done. Row 15 needs no code. Rows 26 and 27 were decided "no", so no code.
+Not yet implemented: row 19 (needs a timing run on real data), rows 21 and 22 (learning rule and frozen protocol v7).
 
 Known limits of what was built:
 - Row 4: the label gets the `no_declared_negatives` flag and still has violation 0.0. The score has no penalty for it, so it is not made neutral. A neutral value would need a number you have not chosen.
@@ -90,7 +90,7 @@ Known limits of what was built:
 - Row 9: negatives are still a union across mapped sources. Intersection of positives can make an exact mapping fail with `share no positive marker`.
 - Row 18: `compute_bottom_up_markers(methods=("wilcoxon",))` is the default and fits no logistic model. The corpus workflow passes both methods. The CPU receipt accepts Wilcoxon only; GPU lanes still need both. A fixture check against commit `69e1deb` (random counts, 3 groups, 60 genes) gives identical shared columns. No real-data benchmark rerun was done.
 - Row 20: a replaced record is kept as `<label_id>~<base revision>` with status `superseded` and `superseded_by` set. `corpus diff` lists it under `added`. A `dispute` decision also replaces a reviewed record, as before; the old one is now kept.
-- Rows 23, 24, 28, 29: `--source-kind scgate` imports a local clone at the named tag (default v0.16); nothing is shipped; models become unreviewed labels with the file hash kept; the dictionary gives a first-guess `cl_id`. Row 25 is half done: `GENE-` genes are negatives; level negatives are recorded as `scgate_excludes` but do not gate yet (row 30).
+- Rows 23, 24, 28, 29: `--source-kind scgate` imports a local clone at the named tag (default v0.16); nothing is shipped; models become unreviewed labels with the file hash kept; the dictionary gives a first-guess `cl_id`. Rows 25 and 30: `GENE-` genes are negatives; each excluded population with a signature in `master_table.tsv` becomes an `exclusions` entry, and `collect-level` fails the label with `excluded:<name>` when that signature passes the row 17 state rule in the cluster. Excluded names with no signature are listed in `scgate_excludes_without_signature` and do not gate.
 - Row 11: the one-vote rule is in `annotation.py` (members of a dependency group share one mean agreement). `reconcile_predictions` is still not called; it reports per-cluster composition and does not combine votes.
 - Row 16: reviewed labels now need `tissues`, and the dataset context needs `tissue`. Existing reviewed corpora without tissue will no longer load.
 
