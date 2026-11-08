@@ -1,0 +1,37 @@
+........................................................................ [ 10%]
+........................................................................ [ 21%]
+........................................................................ [ 32%]
+........................................................................ [ 42%]
+........................................................................ [ 53%]
+........................................................................ [ 64%]
+....sss................................................................. [ 75%]
+........................................................................ [ 85%]
+........................................................................ [ 96%]
+.......................                                                  [100%]
+=============================== warnings summary ===============================
+tests/test_data_parity.py: 8 warnings
+tests/test_input_and_audit.py: 8 warnings
+tests/test_multimodal_engine.py: 8 warnings
+  /exports/para-lipg-hpc/mdmanurung/cell-curator/.venv/lib/python3.11/site-packages/mudata/_core/mudata.py:1471: FutureWarning: From 0.4 .update() will not pull obs/var columns from individual modalities by default anymore. Set mudata.set_options(pull_on_update=False) to adopt the new behaviour, which will become the default. Use new pull_obs/pull_var and push_obs/push_var methods for more flexibility.
+    self._update_attr("var", axis=0, join_common=join_common)
+
+tests/test_data_parity.py: 8 warnings
+tests/test_input_and_audit.py: 8 warnings
+tests/test_multimodal_engine.py: 8 warnings
+  /exports/para-lipg-hpc/mdmanurung/cell-curator/.venv/lib/python3.11/site-packages/mudata/_core/mudata.py:1322: FutureWarning: From 0.4 .update() will not pull obs/var columns from individual modalities by default anymore. Set mudata.set_options(pull_on_update=False) to adopt the new behaviour, which will become the default. Use new pull_obs/pull_var and push_obs/push_var methods for more flexibility.
+    self._update_attr("obs", axis=1, join_common=join_common)
+
+tests/test_multimodal_engine.py::test_executable_multimodal_routes_emit_receipts_and_visible_disagreement
+tests/test_multimodal_engine.py::test_executable_multimodal_routes_emit_receipts_and_visible_disagreement
+tests/test_multimodal_engine.py::test_executable_multimodal_routes_emit_receipts_and_visible_disagreement
+tests/test_multimodal_engine.py::test_executable_multimodal_routes_emit_receipts_and_visible_disagreement
+tests/test_multimodal_engine.py::test_executable_multimodal_routes_emit_receipts_and_visible_disagreement
+tests/test_multimodal_engine.py::test_executable_multimodal_routes_emit_receipts_and_visible_disagreement
+tests/test_multimodal_engine.py::test_executable_multimodal_routes_emit_receipts_and_visible_disagreement
+  /exports/para-lipg-hpc/mdmanurung/cell-curator/.venv/lib/python3.11/site-packages/mudata/_core/mudata.py:613: UserWarning: Cannot join columns with the same name because var_names are intersecting.
+    self._update_attr_legacy(attr, axis, join_common, **kwargs)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [3] tests/test_gpu_hardware_lane.py:44: cupy is required for GPU hardware tests
+668 passed, 3 skipped, 55 warnings in 2055.06s (0:34:15)
