@@ -387,6 +387,9 @@ class AnnotationConfig(StrictModel):
     classifiers: list[ClassifierConfig] = Field(default_factory=list)
     min_classifier_agreement: float = Field(default=0.5, gt=0, le=1)
     min_state_fraction: float = Field(default=0.5, gt=0, le=1)
+    # Decision row 17: a cell supports a state when at least this share of the
+    # state's positive genes is detected in it and no negative gene is.
+    min_state_positive_fraction: float = Field(default=0.5, gt=0, le=1)
     seed: int = Field(default=0, ge=0)
 
 

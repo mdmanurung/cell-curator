@@ -252,6 +252,12 @@ def assign_parent_scoped_level(
         margin = (
             float(winner[rank] - runner[rank]) if runner is not None else float(winner[rank])
         )
+        if voted and "raw_vote_fraction" in cluster_scores.columns:
+            # Decision row 14: a runner-up that failed a gate keeps its measured vote,
+            # so a near-tie stays visible as a small margin.
+            others = cluster_scores[cluster_scores["label"] != winner["label"]]
+            if not others.empty:
+                margin = max(0.0, float(winner[rank] - others["raw_vote_fraction"].max()))
         specificity = float(winner.get("specificity", winner.get("de_overlap", 0.0)))
         agreement = float(winner.get("agreement", winner.get("crosscheck_agreement", 0.0)))
         coverage = float(winner.get("coverage", winner.get("positive_coverage", 0.0)))

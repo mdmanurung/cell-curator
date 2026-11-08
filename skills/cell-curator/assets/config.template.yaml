@@ -47,6 +47,7 @@ annotation:
   seed: 0
   min_classifier_agreement: 0.5
   min_state_fraction: 0.5
+  min_state_positive_fraction: 0.5
   classifiers: []
   # classifiers:
   #   - name: tissue-celltypist

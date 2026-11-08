@@ -72,6 +72,13 @@
           "title": "Min State Fraction",
           "type": "number"
         },
+        "min_state_positive_fraction": {
+          "default": 0.5,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Min State Positive Fraction",
+          "type": "number"
+        },
         "representation": {
           "default": "",
           "title": "Representation",

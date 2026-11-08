@@ -259,6 +259,22 @@ def _predictions(config: CellCuratorConfig, root: Path) -> tuple[dict[str, pd.Da
     return predictions, paths
 
 
+def _marker_family(frames: list[pd.DataFrame], adjusted_pvalue_max: float, top_n: int = 100) -> pd.DataFrame:
+    """Decision rows 7 and 8: one BH family per parent scope and method, then the top
+    genes by effect among the tests that pass it."""
+    from .evidence import benjamini_hochberg
+
+    frame = pd.concat(frames, ignore_index=True)
+    wilcoxon = frame["method"].eq("wilcoxon")
+    frame.loc[wilcoxon, "adjusted_pvalue"] = benjamini_hochberg(frame.loc[wilcoxon, "pvalue"].to_numpy())
+    frame = frame[~wilcoxon | frame["adjusted_pvalue"].le(adjusted_pvalue_max)]
+    keys = ["cluster_id", "comparator_role", "method"]
+    frame = frame.sort_values(keys + ["effect", "feature"], ascending=[True, True, True, False, True])
+    frame = frame.groupby(keys, sort=False).head(top_n).copy()
+    frame["rank"] = frame.groupby(keys, sort=False).cumcount() + 1
+    return frame.reset_index(drop=True)
+
+
 def _compatible(label: str, candidate: str, parents: dict[str, str]) -> bool:
     while label in parents:
         if label == candidate:
@@ -316,7 +332,8 @@ def collect_level(config_path: str | Path, level: str) -> dict[str, Any]:
         if not features.equals(detection_features):
             raise ContractError("detection and ranking feature orders differ")
         programs = [item for item in _programs(config) if item.feature_space == capability.feature_space]
-        score_frames, marker_frames = [], []
+        score_frames: list[pd.DataFrame] = []
+        marker_frames: list[pd.DataFrame] = []
         statuses: list[dict[str, Any]] = []
         marker_runtime = []
         for parent, block in scoped.groupby("parent_scope", sort=True):
@@ -346,9 +363,12 @@ def collect_level(config_path: str | Path, level: str) -> dict[str, Any]:
                 scores = pd.concat([scores, pd.DataFrame(absent)], ignore_index=True)
             clusters = sorted(set(scoped_groups))
             bottom = pd.DataFrame()
+            first_frame = len(marker_frames)
+            comparators_ran: set[tuple[str, str]] = set()
             if len(clusters) > 1:
-                bottom = compute_bottom_up_markers(matrix[mask], scoped_groups, features,
+                bottom = compute_bottom_up_markers(matrix[mask], scoped_groups, features, top_n=None,
                     detection=detection[mask], marker_config=config.markers.model_dump(mode="json"))
+                comparators_ran.update((cluster, "parent_remainder") for cluster in clusters)
                 marker_runtime.append({"parent": parent, "role": "parent_remainder", **bottom.attrs.get("runtime", {})})
                 bottom["comparator_role"] = "parent_remainder"
                 marker_frames.append(bottom.assign(level=level, parent_scope=parent))
@@ -356,25 +376,35 @@ def collect_level(config_path: str | Path, level: str) -> dict[str, Any]:
                 centroids = {cluster: embedding[scoped_groups.to_numpy() == cluster].mean(axis=0) for cluster in clusters}
                 provisional = scores.sort_values(["vote_fraction", "score", "label"], ascending=[False, False, True]).drop_duplicates("cluster_id").set_index("cluster_id")["label"].to_dict()
                 for cluster in clusters:
-                    competitors = [item for item in clusters if item != cluster and provisional[item] != provisional[cluster]]
+                    others = [item for item in clusters if item != cluster]
+                    # Decision row 5: prefer a cluster with a different provisional label;
+                    # when every cluster shares one, fall back to the nearest cluster.
+                    competitors = [item for item in others if provisional[item] != provisional[cluster]]
+                    selection = "nearest_cluster_with_different_provisional_marker_identity"
                     if not competitors:
-                        continue
+                        competitors, selection = others, "nearest_cluster_all_share_provisional_identity"
                     sibling = min(competitors,
                                   key=lambda item: (float(np.linalg.norm(centroids[cluster] - centroids[item])), item))
                     pair = scoped_groups.isin([cluster, sibling]).to_numpy()
                     pair_markers = compute_bottom_up_markers(matrix[mask][pair], scoped_groups.iloc[np.flatnonzero(pair)],
-                        features, detection=detection[mask][pair], marker_config=config.markers.model_dump(mode="json"))
+                        features, top_n=None, detection=detection[mask][pair],
+                        marker_config=config.markers.model_dump(mode="json"))
+                    comparators_ran.add((cluster, "closest_sibling"))
                     marker_runtime.append({"parent": parent, "cluster": cluster, "role": "closest_sibling",
                                            **pair_markers.attrs.get("runtime", {})})
                     pair_markers = pair_markers[pair_markers["cluster_id"].eq(cluster)].copy()
                     pair_markers["comparator_role"] = "closest_sibling"
                     pair_markers["reference_cluster"] = sibling
-                    pair_markers["comparator_selection"] = "nearest_cluster_with_different_provisional_marker_identity"
+                    pair_markers["comparator_selection"] = selection
                     marker_frames.append(pair_markers.assign(level=level, parent_scope=parent))
                 statuses.append({"parent": parent, "status": "complete", "marker_methods": ["wilcoxon", "logreg"]})
             else:
                 statuses.append({"parent": parent, "status": "unavailable_no_comparator", "marker_methods": []})
-            scope_markers = pd.concat([frame for frame in marker_frames if frame["parent_scope"].eq(parent).all()], ignore_index=True) if not bottom.empty else pd.DataFrame()
+            if len(marker_frames) > first_frame:
+                marker_frames[first_frame:] = [_marker_family(
+                    marker_frames[first_frame:], config.evidence.adjusted_pvalue_max)]
+            scope_markers = marker_frames[first_frame] if len(marker_frames) > first_frame else pd.DataFrame()
+            scores["raw_vote_fraction"] = scores["vote_fraction"]
             for index, row in scores.iterrows():
                 program = next(item for item in candidate_programs if item.label == row["label"])
                 failures = []
@@ -387,16 +417,22 @@ def collect_level(config_path: str | Path, level: str) -> dict[str, Any]:
                     flags.append("unmeasured_negatives")
                 elif row["negative_violation"] > config.evidence.max_negative_violation:
                     failures.append("negative_markers")
+                if not program.negative:
+                    flags.append("no_declared_negatives")  # decision row 4
+                # Decision row 6: at least 2 positive markers, or all if the label has 1.
+                needed = min(2, len(program.positive))
                 for role in ("parent_remainder", "closest_sibling"):
+                    if (str(row["cluster_id"]), role) not in comparators_ran:
+                        flags.append(f"comparator_unavailable:{role}")  # decision row 3
+                        continue
                     for method in ("wilcoxon", "logreg"):
-                        evidence = scope_markers if scope_markers.empty else scope_markers[
+                        evidence = scope_markers[
                             scope_markers["cluster_id"].eq(row["cluster_id"])
-                            & scope_markers["method"].eq(method) & scope_markers["comparator_role"].eq(role)]
-                        if not evidence.empty:
-                            evidence = evidence[evidence["effect"].gt(0)]
-                            if method == "wilcoxon":
-                                evidence = evidence[evidence["adjusted_pvalue"].le(config.evidence.adjusted_pvalue_max)]
-                        if evidence.empty or not set(evidence["feature"].astype(str).str.casefold()).intersection(gene.casefold() for gene in program.positive):
+                            & scope_markers["method"].eq(method) & scope_markers["comparator_role"].eq(role)
+                            & scope_markers["effect"].gt(0)]
+                        hits = set(evidence["feature"].astype(str).str.casefold()).intersection(
+                            gene.casefold() for gene in program.positive)
+                        if len(hits) < needed:
                             failures.append(f"{role}:{method}")
                 classifier_support = {}
                 for classifier in config.annotation.classifiers:
@@ -437,7 +473,9 @@ def collect_level(config_path: str | Path, level: str) -> dict[str, Any]:
                 positive = values[:, pos].toarray() if sparse.issparse(values) else np.asarray(values)[:, pos]
                 negative = values[:, neg].toarray() if sparse.issparse(values) else np.asarray(values)[:, neg]
                 measured = bool(pos) and coverage >= config.evidence.min_positive_coverage and negative_coverage >= config.evidence.min_positive_coverage
-                support = float(((positive > 0).all(axis=1) & ~(negative > 0).any(axis=1)).mean()) if measured else float("nan")
+                # Decision row 17: enough of the positive genes detected, and no negative gene.
+                cell_positive = (positive > 0).mean(axis=1) >= config.annotation.min_state_positive_fraction
+                support = float((cell_positive & ~(negative > 0).any(axis=1)).mean()) if measured else float("nan")
                 state_rows.append({"cluster_id": cluster, "state": program.label, "parent_scope": program.parent or "ROOT",
                     "fraction": support, "measured": measured, "coverage": coverage,
                     "passes": measured and support >= config.annotation.min_state_fraction})

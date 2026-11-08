@@ -125,7 +125,7 @@ def compute_bottom_up_markers(
     features: pd.Index,
     *,
     detection: Any | None,
-    top_n: int = 100,
+    top_n: int | None = 100,
     marker_config: dict[str, Any] | None = None,
 ) -> pd.DataFrame:
     """Compute Wilcoxon and balanced, L2 logistic one-vs-rest marker evidence.
@@ -137,7 +137,7 @@ def compute_bottom_up_markers(
 
     if matrix.ndim != 2 or matrix.shape[0] != len(groups) or matrix.shape[1] != len(features):
         raise ContractError("matrix, groups, and feature dimensions disagree")
-    if top_n < 1 or len(features) < 1:
+    if (top_n is not None and top_n < 1) or len(features) < 1:
         raise ContractError("marker evidence requires positive top_n and at least one feature")
     if groups.isna().any() or (groups.astype(str).str.strip() == "").any():
         raise ContractError("marker groups must not contain missing or blank labels")
