@@ -9,13 +9,13 @@ import re
 import urllib.request
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Literal, Protocol, cast
+from typing import Any, Literal, Protocol, cast
 
 import numpy as np
 import pandas as pd
 from scipy import sparse
 
-from .config import ProviderConfig
+from .config import CellCuratorConfig, ProviderConfig
 from .contracts import ContractError, sha256
 from .models import MarkerProgram
 from .net import OFFLINE, NetworkPolicy, urlopen
@@ -102,6 +102,72 @@ class LocalMarkerProvider:
             source=self.identity,
             source_version=self.version,
         )
+
+
+class CorpusProvider:
+    """Expose only context-matched, reviewed records from a pinned snapshot."""
+
+    def __init__(self, config: ProviderConfig, *, context: dict[str, str] | None = None,
+                 measurements: tuple[str, ...] = (), ontology: Any = None) -> None:
+        from .corpus import load_corpus
+
+        self.snapshot = load_corpus(config.path, expected_sha256=config.sha256)
+        if self.snapshot.revision != config.version:
+            raise ContractError("corpus revision differs from the configured version")
+        self.context = merge_corpus_context(context or {}, config.context)
+        self.measurements = measurements
+        self.ontology = ontology
+
+    @property
+    def identity(self) -> str:
+        return f"corpus:{self.snapshot.corpus_id}:{self.snapshot.revision}:{self.snapshot.digest}"
+
+    def programs(self) -> list[MarkerProgram]:
+        return self.snapshot.programs(context=self.context, ontology=self.ontology,
+                                      measurements=self.measurements or None)
+
+
+def corpus_context(config: CellCuratorConfig) -> dict[str, str]:
+    context = config.guidance.context
+    assay = config.input.assays.get(config.annotation.assay)
+    if assay is None and len(config.input.assays) == 1:
+        assay = next(iter(config.input.assays.values()))
+    return {"species": context.organism, "tissue": context.tissue,
+            "stage": context.developmental_stage, "condition": context.condition,
+            "study_id": config.annotation.study_id,
+            "assay": config.annotation.corpus_assay or (assay.kind if assay else context.technology)}
+
+
+def merge_corpus_context(context: dict[str, str], overrides: dict[str, str]) -> dict[str, str]:
+    """Provider scopes cannot replace or infer biological facts about a dataset."""
+    aliases = {"human": "homo sapiens", "9606": "homo sapiens", "ncbitaxon:9606": "homo sapiens",
+               "mouse": "mus musculus", "10090": "mus musculus", "ncbitaxon:10090": "mus musculus"}
+    for key, value in overrides.items():
+        known = context.get(key, "").strip().casefold()
+        proposed = value.strip().casefold()
+        if key == "species":
+            known, proposed = aliases.get(known, known), aliases.get(proposed, proposed)
+        if key in {"species", "tissue", "stage", "condition"} and known in {"", "unknown"} and proposed not in {"", "unknown"}:
+            raise ContractError(f"corpus provider cannot infer unknown dataset {key}")
+        if known and known != "unknown" and proposed != known:
+            raise ContractError(f"corpus provider context contradicts dataset {key}")
+    return {**context, **overrides}
+
+
+def run_providers(config: CellCuratorConfig) -> list[MarkerProvider]:
+    from .ontology import ontology_from_config
+
+    measurements = {"rna": "gene_expression", "protein": "protein_expression",
+                    "gene_activity": "gene_activity", "atac": "accessibility",
+                    "spatial": "gene_expression"}
+    assays = (config.input.assays[config.annotation.assay],) if config.annotation.enabled else tuple(config.input.assays.values())
+    return providers_from_config(
+        config.knowledge.providers, policy=config.knowledge.policy,
+        context=corpus_context(config),
+        measurements=tuple(sorted({measurements[assay.kind] for assay in assays
+                                   if assay.kind in measurements})),
+        ontology=ontology_from_config(config) if any(item.kind == "corpus" for item in config.knowledge.providers) else None,
+    )
 
 
 class CachedTableProvider(LocalMarkerProvider):
@@ -244,11 +310,17 @@ def providers_from_config(
     configs: Iterable[ProviderConfig],
     *,
     policy: NetworkPolicy = OFFLINE,
+    context: dict[str, str] | None = None,
+    measurements: tuple[str, ...] = (),
+    ontology: Any = None,
 ) -> list[MarkerProvider]:
     providers: list[MarkerProvider] = []
     for item in configs:
         if item.kind == "local_markers":
             providers.append(LocalMarkerProvider(item.path, version=item.version))
+        elif item.kind == "corpus":
+            providers.append(CorpusProvider(item, context=context, measurements=measurements,
+                                            ontology=ontology))
         elif item.kind == "cached_table":
             providers.append(CachedTableProvider(item.path, version=item.version))
         elif item.kind == "remote_table":
@@ -282,6 +354,7 @@ def collect_programs(providers: Iterable[MarkerProvider]) -> list[MarkerProgram]
     """Merge equivalent programs while keeping positive/negative provenance additive."""
 
     merged: dict[tuple[str, str, str, str | None, str | None], MarkerProgram] = {}
+    corpus_keys: set[tuple[str, str, str, str | None, str | None]] = set()
     for provider in providers:
         for program in provider.programs():
             key = (
@@ -291,6 +364,10 @@ def collect_programs(providers: Iterable[MarkerProvider]) -> list[MarkerProgram]
                 program.parent,
                 program.parent_cl_id,
             )
+            if key in merged and (isinstance(provider, CorpusProvider) or key in corpus_keys):
+                raise ContractError("colliding corpus definitions require an explicit exact mapping in one snapshot")
+            if isinstance(provider, CorpusProvider):
+                corpus_keys.add(key)
             if key not in merged:
                 merged[key] = program
                 continue

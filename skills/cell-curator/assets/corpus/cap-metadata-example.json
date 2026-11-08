@@ -1,0 +1,19 @@
+{
+  "context": {
+    "species": "Homo sapiens"
+  },
+  "labels": [
+    {
+      "canonical_marker_genes": [
+        "GNLY",
+        "NKG7"
+      ],
+      "cell_label": "Natural killer (NK) cells",
+      "id": "nk",
+      "limitations": [
+        "Documentation example, not an imported community annotation or independently validated marker panel."
+      ],
+      "rationale": "CAP documentation illustrates canonical-marker metadata using NK cells."
+    }
+  ]
+}

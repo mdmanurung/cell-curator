@@ -1,0 +1,226 @@
+{
+  "corpus_id": "multi-source-example",
+  "labels": [
+    {
+      "alternatives": [],
+      "assays": [],
+      "assertions": [],
+      "axis": "cell_type",
+      "cl_id": null,
+      "conditions": [],
+      "description": "CAP documentation illustrates canonical-marker metadata using NK cells.",
+      "experience": [],
+      "feature_space": "gene",
+      "full_name": "",
+      "label_id": "cap-metadata-example:nk",
+      "level": "L1",
+      "limitations": [
+        "Documentation example, not an imported community annotation or independently validated marker panel.",
+        "Imported cap record; source labels and levels require review before use."
+      ],
+      "measurement": "gene_expression",
+      "name": "Natural killer (NK) cells",
+      "negative": [],
+      "ontology_relation": "unresolved",
+      "parent_id": null,
+      "positive": [
+        "GNLY",
+        "NKG7"
+      ],
+      "rationale": "",
+      "reviewer": "",
+      "source_id": "cap-metadata-example",
+      "source_label": "Natural killer (NK) cells",
+      "source_level": "",
+      "source_parent_id": "",
+      "source_record_id": "nk",
+      "species": [
+        "Homo sapiens"
+      ],
+      "stages": [],
+      "status": "imported",
+      "study_id": "",
+      "synonyms": [],
+      "tissues": []
+    },
+    {
+      "alternatives": [],
+      "assays": [],
+      "assertions": [],
+      "axis": "cell_type",
+      "cl_id": null,
+      "conditions": [],
+      "description": "The source identifies its main naive CD8 population using naive-associated genes and absence of ITGB1.",
+      "experience": [],
+      "feature_space": "gene",
+      "full_name": "",
+      "label_id": "allen-cd8-example:core-naive-cd8",
+      "level": "L1",
+      "limitations": [
+        "Imported allen record; source labels and levels require review before use."
+      ],
+      "measurement": "gene_expression",
+      "name": "Core naive CD8 T cell",
+      "negative": [
+        "ITGB1"
+      ],
+      "ontology_relation": "unresolved",
+      "parent_id": null,
+      "positive": [
+        "CD27",
+        "CCR7",
+        "SELL",
+        "TCF7",
+        "LEF1"
+      ],
+      "rationale": "",
+      "reviewer": "",
+      "source_id": "allen-cd8-example",
+      "source_label": "Core naive CD8 T cell",
+      "source_level": "3",
+      "source_parent_id": "naive-cd8",
+      "source_record_id": "core-naive-cd8",
+      "species": [
+        "Homo sapiens"
+      ],
+      "stages": [],
+      "status": "imported",
+      "study_id": "",
+      "synonyms": [],
+      "tissues": [
+        "blood"
+      ]
+    },
+    {
+      "alternatives": [],
+      "assays": [],
+      "assertions": [],
+      "axis": "cell_type",
+      "cl_id": null,
+      "conditions": [],
+      "description": "The source describes an antigen-inexperienced CD8 population with naive-associated genes and low granzyme expression.",
+      "experience": [],
+      "feature_space": "gene",
+      "full_name": "",
+      "label_id": "allen-cd8-example:naive-cd8",
+      "level": "L1",
+      "limitations": [
+        "Imported allen record; source labels and levels require review before use."
+      ],
+      "measurement": "gene_expression",
+      "name": "Naive CD8 T cell",
+      "negative": [
+        "GZMA",
+        "GZMK",
+        "GZMB",
+        "ITGB1"
+      ],
+      "ontology_relation": "unresolved",
+      "parent_id": null,
+      "positive": [
+        "CD27",
+        "CCR7",
+        "SELL",
+        "TCF7",
+        "LEF1"
+      ],
+      "rationale": "",
+      "reviewer": "",
+      "source_id": "allen-cd8-example",
+      "source_label": "Naive CD8 T cell",
+      "source_level": "2",
+      "source_parent_id": "t",
+      "source_record_id": "naive-cd8",
+      "species": [
+        "Homo sapiens"
+      ],
+      "stages": [],
+      "status": "imported",
+      "study_id": "",
+      "synonyms": [],
+      "tissues": [
+        "blood"
+      ]
+    },
+    {
+      "alternatives": [],
+      "assays": [],
+      "assertions": [],
+      "axis": "cell_type",
+      "cl_id": null,
+      "conditions": [],
+      "description": "The source groups peripheral T identities by TCR-complex and CD3 expression.",
+      "experience": [],
+      "feature_space": "gene",
+      "full_name": "",
+      "label_id": "allen-cd8-example:t",
+      "level": "L1",
+      "limitations": [
+        "Marker combinations and branch-specific criteria need review; a gene list does not encode OR logic.",
+        "Imported allen record; source labels and levels require review before use."
+      ],
+      "measurement": "gene_expression",
+      "name": "T cell",
+      "negative": [],
+      "ontology_relation": "unresolved",
+      "parent_id": null,
+      "positive": [
+        "TRAC",
+        "TRDC",
+        "CD3D",
+        "CD3E",
+        "CD3G"
+      ],
+      "rationale": "",
+      "reviewer": "",
+      "source_id": "allen-cd8-example",
+      "source_label": "T cell",
+      "source_level": "1",
+      "source_parent_id": "",
+      "source_record_id": "t",
+      "species": [
+        "Homo sapiens"
+      ],
+      "stages": [],
+      "status": "imported",
+      "study_id": "",
+      "synonyms": [],
+      "tissues": [
+        "blood"
+      ]
+    }
+  ],
+  "mappings": [],
+  "parent_revision": null,
+  "review": null,
+  "revision": "example-v1",
+  "schema_version": 3,
+  "sources": [
+    {
+      "depends_on": [],
+      "license": "Not established; short attributed paraphrase only.",
+      "limitations": [
+        "Saved normalized excerpt; not a complete atlas or live API response."
+      ],
+      "name": "CAP metadata documentation example",
+      "retrieved_at": "2026-11-07",
+      "sha256": "13899f0a2df5030d2b74ba7cfb8d0035206e8c8f6af17a2096b1a87b5e50630d",
+      "source_id": "cap-metadata-example",
+      "url": "https://celltype.info/docs/cell-annotation-metadata-terms",
+      "version": "documentation-excerpt-2026-11-07"
+    },
+    {
+      "depends_on": [],
+      "license": "Not established; short attributed paraphrase only.",
+      "limitations": [
+        "Saved normalized excerpt; not a complete atlas or live API response."
+      ],
+      "name": "Allen CD8 documentation excerpt",
+      "retrieved_at": "2026-11-07",
+      "sha256": "5b2e00786765ae4ee17f14e242a82e71178266ec4ae0db06e7c26649a3f18e16",
+      "source_id": "allen-cd8-example",
+      "url": "https://apps.allenimmunology.org/aifi/resources/imm-health-atlas/cell-type-descriptions/cd8-t-cells-gdt-cells-and-mait-cells/",
+      "version": "documentation-excerpt-2026-11-07"
+    }
+  ]
+}

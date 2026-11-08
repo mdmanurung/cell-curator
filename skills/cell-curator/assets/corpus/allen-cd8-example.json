@@ -1,0 +1,61 @@
+{
+  "context": {
+    "species": "Homo sapiens",
+    "tissue": "blood"
+  },
+  "labels": [
+    {
+      "description": "The source groups peripheral T identities by TCR-complex and CD3 expression.",
+      "id": "t",
+      "level": "1",
+      "limitations": [
+        "Marker combinations and branch-specific criteria need review; a gene list does not encode OR logic."
+      ],
+      "markers": [
+        "TRAC",
+        "TRDC",
+        "CD3D",
+        "CD3E",
+        "CD3G"
+      ],
+      "name": "T cell"
+    },
+    {
+      "description": "The source describes an antigen-inexperienced CD8 population with naive-associated genes and low granzyme expression.",
+      "id": "naive-cd8",
+      "level": "2",
+      "markers": [
+        "CD27",
+        "CCR7",
+        "SELL",
+        "TCF7",
+        "LEF1"
+      ],
+      "name": "Naive CD8 T cell",
+      "negative": [
+        "GZMA",
+        "GZMK",
+        "GZMB",
+        "ITGB1"
+      ],
+      "parent_id": "t"
+    },
+    {
+      "description": "The source identifies its main naive CD8 population using naive-associated genes and absence of ITGB1.",
+      "id": "core-naive-cd8",
+      "level": "3",
+      "markers": [
+        "CD27",
+        "CCR7",
+        "SELL",
+        "TCF7",
+        "LEF1"
+      ],
+      "name": "Core naive CD8 T cell",
+      "negative": [
+        "ITGB1"
+      ],
+      "parent_id": "naive-cd8"
+    }
+  ]
+}
