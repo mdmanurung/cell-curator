@@ -34,7 +34,7 @@ down to one of them. `[user decides]` Q1.
 | Q | Decision |
 | --- | --- |
 | Q1 | Two runs. **v7a**: new engine plus the v6 vocabulary converted into a corpus. **v7b**: new engine plus the scGate PBMC corpus. A converter from `pbmc_markers.json` to corpus records is needed first. |
-| Q2 | Time the CPU methods on a Slurm node before declaring v7. Job 25978636, `benchmarks/scripts/time_marker_methods.py`, output `cc-v5-work/timing-row19-2026-11-08/timing.tsv`. Any gene prefilter becomes its own tracker row. |
+| Q2 | Time the CPU methods on a Slurm node before declaring v7. Done: job 25978636, result in `plans/annotation-corpus-validation/timing-row19.tsv`. No gene prefilter is needed to finish; the 28-cluster full run is extrapolated at about 1.5 to 2 hours per level on 4 cores, not measured. |
 | Q3 | The user reviews each of the 13 scGate PBMC records from a review packet, one OK each in chat. The reviewed corpus sha256 is then frozen here. |
 | Q4 | Accept the flat L1 hierarchy for v7b. Deeper truth types cannot be called; they score only through descendant and relaxed agreement. |
 | Q5 | Reuse the v6 comparator results unchanged, citing their result file hashes. |

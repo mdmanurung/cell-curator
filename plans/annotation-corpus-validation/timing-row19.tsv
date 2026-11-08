@@ -1,0 +1,7 @@
+clusters	methods	cells	genes	seconds	logreg_iterations
+2	wilcoxon	1687	61497	81.7	0
+2	both	1687	61497	86.2	124
+4	wilcoxon	2139	61497	166.1	0
+4	both	2139	61497	186.0	461
+8	wilcoxon	4727	61497	423.9	0
+8	both	4727	61497	523.3	1031
