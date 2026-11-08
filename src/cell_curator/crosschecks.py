@@ -15,6 +15,8 @@ import math
 import multiprocessing
 import os
 import queue
+import shutil
+import tempfile
 import urllib.request
 from collections.abc import Iterable
 from pathlib import Path
@@ -665,6 +667,8 @@ def celltypist_hypothesis(
         )
     if cluster_column and cluster_column not in adata.obs:
         raise ContractError(f"CellTypist cluster column is absent: {cluster_column}")
+    if not adata.obs_names.is_unique:
+        raise ContractError("CellTypist query barcodes must be unique")
     try:
         import celltypist
         from celltypist import models
@@ -709,27 +713,38 @@ def celltypist_hypothesis(
             over_clustering=cluster_column or None,
         )
         frame = result.predicted_labels.copy()
-        label_column = next(
-            (column for column in ("majority_voting", "predicted_labels") if column in frame),
-            str(frame.columns[0]),
-        )
+        label_column = "predicted_labels"
+        if label_column not in frame or not frame.index.is_unique:
+            raise ContractError("CellTypist must return raw predictions with unique barcodes")
+        if set(frame.index.astype(str)) != set(adata.obs_names.astype(str)):
+            raise ContractError("CellTypist prediction barcodes differ from the query")
+        frame.index = frame.index.astype(str)
+        frame = frame.reindex(adata.obs_names.astype(str))
+        if frame[label_column].isna().any() or frame[label_column].astype(str).str.strip().eq("").any():
+            raise ContractError("CellTypist returned missing raw labels")
+        confidence = result.to_adata(
+            insert_labels=False, insert_conf=True, insert_conf_by=label_column
+        ).obs["conf_score"]
+        if not confidence.index.is_unique or set(confidence.index.astype(str)) != set(frame.index):
+            raise ContractError("CellTypist confidence barcodes differ from the query")
+        confidence.index = confidence.index.astype(str)
+        if not np.isfinite(confidence.astype(float)).all() or not confidence.astype(float).between(0, 1).all():
+            raise ContractError("CellTypist confidence must be finite and between zero and one")
         cells = pd.DataFrame(
             {
                 "barcode": adata.obs_names.astype(str),
                 "predicted_label": frame[label_column].astype(str).to_numpy(),
                 # CellTypist keeps confidence out of predicted_labels; to_adata adds it,
                 # scored for the label actually reported.
-                "uncertainty": 1.0
-                - result.to_adata(
-                    insert_labels=False, insert_conf=True, insert_conf_by=label_column
-                )
-                .obs["conf_score"]
-                .astype(float)
-                .to_numpy(),
+                "uncertainty": 1.0 - confidence.reindex(frame.index).astype(float).to_numpy(),
                 "provider": "celltypist",
                 "role": "hypothesis_not_verdict",
             }
         )
+        if cluster_column:
+            cells["cluster_id"] = adata.obs[cluster_column].astype(str).to_numpy()
+        if "majority_voting" in frame:
+            cells["majority_voting_label"] = frame["majority_voting"].astype(str).to_numpy()
     except Exception as exc:
         value = _status(
             "celltypist",
@@ -782,6 +797,208 @@ def predict_celltypist_file(
         cluster_column=cluster_column,
         output_dir=output_dir,
     )
+
+
+_POPV_CPU_METHODS = {
+    "CELLTYPIST": ("celltypist.pkl", "popv_celltypist_prediction"),
+    "Support_Vector": ("svm_classifier.joblib", "popv_svm_prediction"),
+    "XGboost": ("xgboost_classifier.model", "popv_xgboost_prediction"),
+}
+
+
+def _popv_counts(adata: Any, layer: str) -> None:
+    matrix = _matrix(adata, layer)
+    values = matrix.data if sparse.issparse(matrix) else np.asarray(matrix)
+    if not np.isfinite(values).all() or np.any(values < 0) or np.any(values != np.floor(values)):
+        raise ContractError("popV requires finite nonnegative integer counts")
+    if not adata.obs_names.is_unique or not adata.var_names.is_unique or adata.n_obs == 0:
+        raise ContractError("popV requires nonempty cells and unique cell and feature identifiers")
+
+
+def popv_hypothesis(
+    query: Any,
+    reference: Any,
+    *,
+    model_dir: str | Path,
+    reference_label: str,
+    methods: Iterable[str] = ("CELLTYPIST", "Support_Vector", "XGboost"),
+    query_counts_layer: str = "counts",
+    reference_counts_layer: str = "counts",
+    cluster_column: str = "",
+    output_dir: str | Path | None = None,
+    seed: int = 0,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Run explicit CPU fast inference with a complete, locally prepared popV bundle.
+
+    Uses Process_Query and annotate_data from YosefLab/PopV. No retraining,
+    ontology downloads, or GPU methods are requested. Inputs and models are copied
+    because Process_Query mutates both, even during pretrained inference.
+    """
+    root = Path(output_dir) if output_dir is not None else None
+    selected = tuple(methods)
+    if not selected or len(set(selected)) != len(selected) or set(selected) - set(_POPV_CPU_METHODS):
+        raise ContractError(
+            "popV fast CPU methods must be a nonempty unique selection of "
+            "CELLTYPIST, Support_Vector, XGboost; GPU and retraining modes need a separate execution contract"
+        )
+    if not isinstance(seed, int) or isinstance(seed, bool) or seed < 0:
+        raise ContractError("popV seed must be a nonnegative integer")
+    if cluster_column and cluster_column not in query.obs:
+        raise ContractError(f"popV cluster column is absent: {cluster_column}")
+    if reference_label not in reference.obs:
+        raise ContractError(f"popV reference label column is absent: {reference_label}")
+    if importlib.util.find_spec("popv") is None:
+        return pd.DataFrame(), _missing_dependency("popv", "popv", "popv", root)
+    model_root = Path(model_dir)
+    required = ["preprocessing.json", "scvi/model.pt", *[_POPV_CPU_METHODS[m][0] for m in selected]]
+    missing = [name for name in required if not (model_root / name).is_file()]
+    if missing:
+        return pd.DataFrame(), _publish_status(
+            root,
+            _status("popv", "unavailable", reason=f"popV local pretrained bundle misses: {missing}",
+                    remediation="Prepare a complete popV reference and trained bundle explicitly; automatic download and retraining are disabled."),
+        )
+    _popv_counts(query, query_counts_layer)
+    # A minified popV reference has zero X and precomputed scaling/PCA metadata.
+    reference_minified = float(reference.X.sum()) == 0.0
+    if not reference_minified:
+        _popv_counts(reference, reference_counts_layer)
+    if not reference.obs_names.is_unique or not reference.var_names.is_unique:
+        raise ContractError("popV reference identifiers must be unique")
+    try:
+        setup = json.loads((model_root / "preprocessing.json").read_text())
+        genes = setup["gene_names"]
+        if not isinstance(genes, list) or not genes or len(set(genes)) != len(genes):
+            raise ContractError("popV preprocessing gene_names must be nonempty and unique")
+        if set(genes) - set(query.var_names) or set(genes) - set(reference.var_names):
+            raise ContractError("popV query or reference misses trained features; zero-padding is prohibited")
+        model_hashes = {
+            str(p.relative_to(model_root)): sha256(p)
+            for p in sorted(model_root.rglob("*")) if p.is_file()
+        }
+        import popv
+        from popv.annotation import annotate_data
+        from popv.preprocessing import Process_Query
+
+        settings = popv.settings
+        setting_names = ("seed", "cuml", "accelerator", "compute_umap_embedding", "return_probabilities")
+        previous = {name: getattr(settings, name) for name in setting_names}
+        try:
+            settings.seed = seed
+            settings.cuml = False
+            settings.accelerator = "cpu"
+            settings.compute_umap_embedding = False
+            settings.return_probabilities = True
+            with tempfile.TemporaryDirectory(prefix="cell-curator-popv-") as temporary:
+                copied_models = Path(temporary) / "models"
+                shutil.copytree(model_root, copied_models)
+                copied_hashes = {
+                    str(p.relative_to(copied_models)): sha256(p)
+                    for p in sorted(copied_models.rglob("*")) if p.is_file()
+                }
+                if model_hashes != copied_hashes:
+                    raise ContractError("popV model bundle changed while its working copy was prepared")
+                prepared = Process_Query(
+                    query_adata=query.copy(), ref_adata=reference.copy(),
+                    ref_labels_key=reference_label, ref_batch_key=None,
+                    cl_obo_folder=False, query_layer_key=query_counts_layer or None,
+                    ref_layer_key=reference_counts_layer or None,
+                    prediction_mode="fast", save_path_trained_models=str(copied_models),
+                    hvg=None, n_samples_per_label=None,
+                ).adata
+                annotate_data(prepared, methods=list(selected))
+        finally:
+            for name, value in previous.items():
+                setattr(settings, name, value)
+        observed = prepared.obs.copy()
+        if "_dataset" in observed:
+            observed = observed.loc[observed["_dataset"].astype(str).eq("query")]
+        observed.index = observed.index.astype(str)
+        barcodes = query.obs_names.astype(str)
+        if not observed.index.is_unique or set(observed.index) - set(barcodes):
+            raise ContractError("popV returned duplicate or unexpected query barcodes")
+        keys = [_POPV_CPU_METHODS[m][1] for m in selected]
+        if set(keys + ["popv_prediction", "popv_prediction_score"]) - set(observed):
+            raise ContractError("popV result is missing a requested constituent prediction")
+        if observed[keys + ["popv_prediction"]].isna().any().any():
+            raise ContractError("popV returned missing labels for retained cells")
+        aligned = observed.reindex(barcodes)
+        cells = pd.DataFrame({
+            "barcode": barcodes,
+            "predicted_label": aligned["popv_prediction"].fillna("Unknown").astype(str).to_numpy(),
+            "agreement_count": pd.to_numeric(aligned["popv_prediction_score"], errors="raise").fillna(0).to_numpy(),
+            "method_count": len(selected), "provider": "popv", "role": "hypothesis_not_verdict",
+            "abstention_reason": np.where(barcodes.isin(observed.index), "", "filtered_by_popv"),
+        })
+        cells["agreement_fraction"] = cells["agreement_count"] / len(selected)
+        if not cells["agreement_fraction"].between(0, 1).all():
+            raise ContractError("popV agreement count is outside the number of methods")
+        for key in keys:
+            cells[key] = aligned[key].fillna("Unknown").astype(str).to_numpy()
+        if cluster_column:
+            cells["cluster_id"] = query.obs[cluster_column].astype(str).to_numpy()
+    except Exception as exc:
+        return pd.DataFrame(), _publish_status(root, _status(
+            "popv", "failed", reason=f"popV local fast inference failed: {exc}",
+            remediation="Check the local pretrained bundle, feature coverage, count layers, reference preprocessing, and installed popV API; no fallback was used.",
+        ))
+    artifacts: dict[str, str] = {}
+    if root is not None:
+        cell_path = root / "cell_predictions.tsv"
+        atomic_publish(cell_path, cells.to_csv(sep="\t", index=False).encode())
+        artifacts["cells"] = str(cell_path)
+        if cluster_column:
+            summary = (cells.groupby(["cluster_id", "predicted_label"], observed=True, sort=True)
+                       .size().rename("n_cells").reset_index())
+            summary["fraction"] = summary["n_cells"] / summary.groupby("cluster_id")["n_cells"].transform("sum")
+            cluster_path = root / "cluster_predictions.tsv"
+            atomic_publish(cluster_path, summary.to_csv(sep="\t", index=False).encode())
+            artifacts["clusters"] = str(cluster_path)
+    value = _status("popv", "complete", artifacts=artifacts)
+    value.update({
+        "popv_version": str(getattr(popv, "__version__", "unknown")),
+        "prediction_mode": "fast", "methods": list(selected), "seed": seed,
+        "model_dir": str(model_root.resolve()), "model_sha256": model_hashes,
+        "query_counts_layer": query_counts_layer, "reference_counts_layer": reference_counts_layer,
+        "reference_minified": reference_minified, "downloads_requested": False,
+        "trained": False, "filtered_cells": int(cells["abstention_reason"].ne("").sum()),
+        "agreement_semantics": "method vote count; not a calibrated probability or independent evidence count",
+        "dependent_methods": ["celltypist"] if "CELLTYPIST" in selected else [],
+        "limitations": ["CPU fast subset only; no ontology aggregation", "No cross-method or cross-reference independence is assumed"],
+    })
+    return cells, _publish_status(root, value)
+
+
+def predict_popv_file(
+    *, input_path: str | Path, reference_path: str | Path,
+    model_dir: str | Path, reference_label: str,
+    methods: Iterable[str] = ("CELLTYPIST", "Support_Vector", "XGboost"),
+    query_counts_layer: str = "counts", reference_counts_layer: str = "counts",
+    cluster_column: str = "", modality: str = "", reference_modality: str = "",
+    output_dir: str | Path | None = None, seed: int = 0,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Read local query/reference inputs and retain their hashes in the receipt."""
+    cells, status = popv_hypothesis(
+        _read_object(input_path, modality=modality),
+        _read_object(reference_path, modality=reference_modality),
+        model_dir=model_dir, reference_label=reference_label, methods=methods,
+        query_counts_layer=query_counts_layer, reference_counts_layer=reference_counts_layer,
+        cluster_column=cluster_column, seed=seed,
+    )
+    status.update({"input_sha256": sha256(Path(input_path)), "reference_sha256": sha256(Path(reference_path))})
+    # Publish once, after the file identities have joined the provider receipt.
+    root = Path(output_dir) if output_dir is not None else None
+    if root is not None and not cells.empty:
+        path = root / "cell_predictions.tsv"
+        atomic_publish(path, cells.to_csv(sep="\t", index=False).encode())
+        status["artifacts"]["cells"] = str(path)
+        if cluster_column:
+            summary = cells.groupby(["cluster_id", "predicted_label"], observed=True, sort=True).size().rename("n_cells").reset_index()
+            summary["fraction"] = summary["n_cells"] / summary.groupby("cluster_id")["n_cells"].transform("sum")
+            path = root / "cluster_predictions.tsv"
+            atomic_publish(path, summary.to_csv(sep="\t", index=False).encode())
+            status["artifacts"]["clusters"] = str(path)
+    return cells, _publish_status(root, status)
 
 
 def _gpu_optional_status(
@@ -1479,6 +1696,8 @@ __all__ = [
     "map_scarches_query",
     "map_scimilarity_file",
     "predict_celltypist_file",
+    "popv_hypothesis",
+    "predict_popv_file",
     "read_single_cell_object",
     "reference_knn_hypothesis",
     "scimilarity_hypothesis",
