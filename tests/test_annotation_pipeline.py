@@ -37,6 +37,7 @@ def annotation_fixture(
     unavailable: bool = False,
     approved: bool = True,
     collapse_lineage: bool = False,
+    required: bool = True,
 ) -> tuple[Path, Path, dict[str, list[str]]]:
     """Eight terminal clusters share their broad markers with sibling clusters."""
     features = [
@@ -186,7 +187,7 @@ def annotation_fixture(
                 "name": "celltypist",
                 "method": "celltypist",
                 "model": str(model_path),
-                "required": True,
+                "required": required,
                 "label_map": {f"raw-{i}": expected[str(i)][-1] for i in range(8)},
             }
         ]
@@ -397,3 +398,23 @@ def test_snakemake_executes_all_annotation_stages_and_resumes_without_work(
     assert second.returncode == 0, second.stdout + second.stderr
     assert "nothing to be done" in (second.stdout + second.stderr).lower()
     assert sha256(manifest) == digest
+
+
+def test_advisory_classifier_conflict_is_a_flag_not_a_veto(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Decision row 10: a classifier that is not `required` cannot block a marker-supported call.
+    config_path, root, _ = annotation_fixture(
+        tmp_path, monkeypatch, classifier=True, conflict=True, required=False
+    )
+    run_classifier(config_path, "celltypist")
+    collect_level(config_path, "L1")
+    scores = pd.read_csv(
+        root / "annotation" / "levels" / "L1" / "scores.tsv", sep="\t", keep_default_na=False
+    )
+    supported = scores[
+        scores["label"].eq("Lineage A") & scores["cluster_id"].astype(str).eq("0")
+    ].iloc[0]
+    assert "classifier:celltypist" not in supported["gate_failures"]
+    assert "classifier_disagreement:celltypist" in supported["gate_flags"]

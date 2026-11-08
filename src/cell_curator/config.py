@@ -364,7 +364,7 @@ class ClassifierConfig(StrictModel):
     counts_layer: str = "counts"
     reference_counts_layer: str = "counts"
     methods: list[str] = Field(default_factory=lambda: ["CELLTYPIST", "Support_Vector", "XGboost"])
-    required: bool = True
+    required: bool = False  # decision row 10: advisory unless the user sets it
     label_map: dict[str, str] = Field(default_factory=dict)
 
     @model_validator(mode="after")

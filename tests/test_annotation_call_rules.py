@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cell_curator.annotation import _marker_family
+from cell_curator.annotation import _classifier_counts, _marker_family
 from cell_curator.evidence import benjamini_hochberg
 from cell_curator.hierarchy import assign_parent_scoped_level
 
@@ -52,3 +52,12 @@ def test_margin_keeps_the_failed_runner_up_vote() -> None:
     )
     labels = assign_parent_scoped_level(scores, vocabulary[vocabulary["label"] != "ROOT"], level="L1", parent_scope="ROOT")
     assert labels.iloc[0]["margin"] == pytest.approx(0.05)
+
+
+def test_coarser_classifier_label_abstains_and_unmapped_label_is_dropped() -> None:
+    # Decision rows 12 and 13.
+    parents = {"CD8 T": "T", "T": "ROOT", "B": "ROOT"}
+    canonical = {"CD8 T", "T", "B"}
+    raw = pd.Series(["CD8 T", "T", "B", "raw-x", "raw-y"])
+    counts = _classifier_counts(raw, {"raw-y": "B"}, canonical, parents, "CD8 T")
+    assert counts == {"agree": 1, "disagree": 2, "coarser": 1, "unmapped": 1}

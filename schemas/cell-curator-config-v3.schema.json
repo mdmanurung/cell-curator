@@ -416,7 +416,7 @@
           "type": "string"
         },
         "required": {
-          "default": true,
+          "default": false,
           "title": "Required",
           "type": "boolean"
         }

@@ -240,8 +240,11 @@ def run_classifier(config_path: str | Path, name: str) -> dict[str, Any]:
     return status
 
 
-def _predictions(config: CellCuratorConfig, root: Path) -> tuple[dict[str, pd.DataFrame], list[Path]]:
+def _predictions(
+    config: CellCuratorConfig, root: Path
+) -> tuple[dict[str, pd.DataFrame], list[Path], dict[str, set[str]]]:
     predictions, paths = {}, []
+    dependent: dict[str, set[str]] = {}
     for classifier in config.annotation.classifiers:
         directory = root / "annotation" / "classifiers" / classifier.name
         status_path, cells_path = directory / "status.json", directory / "cell_predictions.tsv"
@@ -256,7 +259,8 @@ def _predictions(config: CellCuratorConfig, root: Path) -> tuple[dict[str, pd.Da
                 raise ContractError(f"required classifier is unavailable: {classifier.name}")
             continue
         predictions[classifier.name] = pd.read_csv(cells_path, sep="\t", keep_default_na=False, dtype={"cluster_id": str, "barcode": str})
-    return predictions, paths
+        dependent[classifier.name] = {str(item).casefold() for item in status.get("dependent_methods", [])}
+    return predictions, paths, dependent
 
 
 def _marker_family(frames: list[pd.DataFrame], adjusted_pvalue_max: float, top_n: int = 100) -> pd.DataFrame:
@@ -273,6 +277,32 @@ def _marker_family(frames: list[pd.DataFrame], adjusted_pvalue_max: float, top_n
     frame = frame.groupby(keys, sort=False).head(top_n).copy()
     frame["rank"] = frame.groupby(keys, sort=False).cumcount() + 1
     return frame.reset_index(drop=True)
+
+
+def _is_coarser(label: str, candidate: str, parents: dict[str, str]) -> bool:
+    """True when ``label`` is a strict ancestor of ``candidate``."""
+    while candidate in parents:
+        candidate = parents[candidate]
+        if candidate == label:
+            return True
+    return False
+
+
+def _classifier_counts(raw: pd.Series, label_map: dict[str, str], canonical: set[str],
+                       parents: dict[str, str], candidate: str) -> dict[str, int]:
+    """Decision rows 12 and 13: a coarser label abstains, an unmapped label is dropped."""
+    counts = {"agree": 0, "disagree": 0, "coarser": 0, "unmapped": 0}
+    for value in raw:
+        label = value if value in canonical else label_map.get(value)
+        if label is None:
+            counts["unmapped"] += 1
+        elif _compatible(label, candidate, parents):
+            counts["agree"] += 1
+        elif _is_coarser(label, candidate, parents):
+            counts["coarser"] += 1
+        else:
+            counts["disagree"] += 1
+    return counts
 
 
 def _compatible(label: str, candidate: str, parents: dict[str, str]) -> bool:
@@ -308,7 +338,7 @@ def collect_level(config_path: str | Path, level: str) -> dict[str, Any]:
         prior = pd.read_csv(previous_dir / "labels.tsv", sep="\t", keep_default_na=False, dtype={"cluster_id": str, "barcode": str})
         previous = dict(zip(prior["cluster_id"].astype(str), prior["label"].astype(str), strict=True))
         inputs.append(previous_dir / "decision.manifest.json")
-    predictions, classifier_paths = _predictions(config, root)
+    predictions, classifier_paths, dependent = _predictions(config, root)
     inputs.extend(classifier_paths)
     loaded = _input(config, root)
     try:
@@ -434,7 +464,9 @@ def collect_level(config_path: str | Path, level: str) -> dict[str, Any]:
                             gene.casefold() for gene in program.positive)
                         if len(hits) < needed:
                             failures.append(f"{role}:{method}")
-                classifier_support = {}
+                classifier_counts: dict[str, dict[str, int]] = {}
+                agreement_by_name: dict[str, float] = {}
+                parents = dict(zip(identities["label"], identities["parent_scope"], strict=True))
                 for classifier in config.annotation.classifiers:
                     if classifier.name not in predictions:
                         continue
@@ -443,17 +475,37 @@ def collect_level(config_path: str | Path, level: str) -> dict[str, Any]:
                     if cells["barcode"].duplicated().any() or set(cells["barcode"].astype(str)) != set(groups.index):
                         raise ContractError("classifier barcodes differ from the annotation input")
                     raw = cells[cells["barcode"].astype(str).isin(expected)]["predicted_label"].astype(str)
-                    mapped = raw.map(classifier.label_map).fillna("Unknown")
-                    # Exact canonical names are also allowed; aliases need explicit mappings.
-                    mapped = mapped.where(~raw.isin(set(identities["label"])), raw)
-                    parents = dict(zip(identities["label"], identities["parent_scope"], strict=True))
-                    agreement = float(np.mean([_compatible(label, program.label, parents) for label in mapped])) if len(mapped) else 0.
-                    classifier_support[classifier.name] = agreement
-                    if classifier.required and agreement < config.annotation.min_classifier_agreement:
-                        failures.append(f"classifier:{classifier.name}")
+                    counts = _classifier_counts(raw, classifier.label_map, set(identities["label"]), parents, program.label)
+                    classifier_counts[classifier.name] = counts
+                    judged = counts["agree"] + counts["disagree"]
+                    agreement_by_name[classifier.name] = counts["agree"] / judged if judged else float("nan")
+                # Decision row 11: a classifier that runs another one inside it counts as one vote with it.
+                classifier_support: dict[str, float] = {}
+                for classifier in config.annotation.classifiers:
+                    if classifier.name not in agreement_by_name:
+                        continue
+                    inside = dependent.get(classifier.name, set())
+                    members = sorted({classifier.name} | {other.name for other in config.annotation.classifiers
+                                                          if other.name in agreement_by_name and other.method in inside}
+                                     | {other.name for other in config.annotation.classifiers
+                                        if other.name in agreement_by_name and classifier.method in dependent.get(other.name, set())})
+                    key = "+".join(members)
+                    if key in classifier_support:
+                        continue
+                    values = [agreement_by_name[name] for name in members if np.isfinite(agreement_by_name[name])]
+                    if not values:
+                        continue
+                    classifier_support[key] = float(np.mean(values))
+                    if classifier_support[key] < config.annotation.min_classifier_agreement:
+                        # Decision row 10: advisory by default; `required` makes it a gate again.
+                        if any(item.required for item in config.annotation.classifiers if item.name in members):
+                            failures.append(f"classifier:{key}")
+                        else:
+                            flags.append(f"classifier_disagreement:{key}")
                 scores.at[index, "gate_failures"] = "|".join(failures)
                 scores.at[index, "gate_flags"] = "|".join(flags)
                 scores.at[index, "classifier_support"] = json.dumps(classifier_support, sort_keys=True)
+                scores.at[index, "classifier_counts"] = json.dumps(classifier_counts, sort_keys=True)
                 if failures:
                     scores.at[index, "vote_fraction"] = 0.
             scores["level"], scores["parent_scope"] = level, parent
