@@ -68,7 +68,7 @@ def annotation_fixture(
                     "description": f"Synthetic definition for {name}; no biological claim.",
                     "source_id": "synthetic",
                     "source_label": name,
-                    "species": ["Homo sapiens"],
+                    "species": ["Homo sapiens"], "tissues": ["blood"],
                     "positive": [positive],
                     "negative": [negative] if negative else [],
                     "level": level,
@@ -170,6 +170,7 @@ def annotation_fixture(
         5 if collapse_lineage else 8
     )
     value["guidance"]["hierarchy_levels"] = ["L1", "L2", "L3"]
+    value["guidance"]["context"]["tissue"] = "blood"  # decision row 16: corpus labels are tissue-scoped
     value["annotation"] = {
         "enabled": True,
         "assay": "transcriptome",

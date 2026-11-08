@@ -31,7 +31,7 @@ def source(source_id: str = "study-a", **updates) -> CorpusSource:
 def label(label_id: str = "T", **updates) -> CorpusLabel:
     return CorpusLabel.model_validate({
         "label_id": label_id, "name": "T cell", "description": "Measured T cell identity.",
-        "source_id": "study-a", "source_label": "T cells", "species": ["Homo sapiens"],
+        "source_id": "study-a", "source_label": "T cells", "species": ["Homo sapiens"], "tissues": ["blood"],
         "positive": ["CD3D", "TRAC"], "negative": ["MS4A1"],
         "status": "reviewed", "reviewer": "curator", "rationale": "Reviewed source criteria.",
         **updates,
@@ -101,25 +101,25 @@ def test_duplicate_unknown_and_cyclic_references() -> None:
 
 
 def test_context_scope_and_ancestor_review_are_required() -> None:
-    child = label("CD8", name="CD8 T cell", parent_id="T", level="L2", tissues=["blood"])
+    child = label("CD8", name="CD8 T cell", parent_id="T", level="L2", assays=["rna"])
     base = snapshot(label(), child)
     assert base.select() == []
-    assert [item.label_id for item in base.select({"species": "human"})] == ["T"]
-    assert len(base.select({"species": "NCBITaxon:9606", "tissue": "blood"})) == 2
+    assert [item.label_id for item in base.select({"species": "human", "tissue": "blood"})] == ["T"]
+    assert len(base.select({"species": "NCBITaxon:9606", "tissue": "blood", "assay": "rna"})) == 2
     assert base.select({"species": "mouse", "tissue": "blood"}) == []
     imported_parent = label(status="imported", reviewer="", rationale="")
     assert snapshot(imported_parent, child).select({"species": "human", "tissue": "blood"}) == []
-    assert len(base.select({"species": "human"}, callable_only=False)) == 1
+    assert len(base.select({"species": "human", "tissue": "blood"}, callable_only=False)) == 1
     with pytest.raises(ContractError, match="unreviewed"):
-        base.programs({"species": "human"}, callable_only=False)
+        base.programs({"species": "human", "tissue": "blood"}, callable_only=False)
 
 
 def test_deterministic_export_preserves_parent_and_source_ids() -> None:
     child = label("CD8", name="CD8 T cell", parent_id="T", level="L2", positive=["CD8B"])
     a, b = snapshot(label(), child), snapshot(child, label())
     assert a.digest == b.digest
-    assert a.programs({"species": "human"}) == b.programs({"species": "human"})
-    programs = {item.label: item for item in a.programs({"species": "human"})}
+    assert a.programs({"species": "human", "tissue": "blood"}) == b.programs({"species": "human", "tissue": "blood"})
+    programs = {item.label: item for item in a.programs({"species": "human", "tissue": "blood"})}
     assert programs["CD8 T cell"].parent == "T cell"
     assert programs["T cell"].positive == ("CD3D", "TRAC")
     assert programs["T cell"].source == f"corpus:example:{a.digest}:T"
@@ -128,14 +128,14 @@ def test_deterministic_export_preserves_parent_and_source_ids() -> None:
 def test_exact_ontology_export_is_checked_and_broader_mapping_stays_rich() -> None:
     ontology = CellOntology({"CL:0000084": OntologyTerm("CL:0000084", "T cell")}, source="fixture")
     exact = snapshot(label(cl_id="CL:0000084", ontology_relation="exact"))
-    assert exact.programs({"species": "human"}, ontology=ontology)[0].cl_id == "CL:0000084"
-    assert exact.programs({"species": "human"})[0].cl_id is None
+    assert exact.programs({"species": "human", "tissue": "blood"}, ontology=ontology)[0].cl_id == "CL:0000084"
+    assert exact.programs({"species": "human", "tissue": "blood"})[0].cl_id is None
     wrong = snapshot(label(name="B cell", cl_id="CL:0000084", ontology_relation="exact"))
     with pytest.raises(ContractError, match="inconsistent"):
-        wrong.programs({"species": "human"}, ontology=ontology)
+        wrong.programs({"species": "human", "tissue": "blood"}, ontology=ontology)
     broader = snapshot(label(cl_id="CL:0000084", ontology_relation="broader"))
     assert broader.labels[0].cl_id == "CL:0000084"
-    assert broader.programs({"species": "human"}, ontology=ontology)[0].cl_id is None
+    assert broader.programs({"species": "human", "tissue": "blood"}, ontology=ontology)[0].cl_id is None
 
 
 def test_ontology_parent_must_be_semantically_nested() -> None:
@@ -146,37 +146,37 @@ def test_ontology_parent_must_be_semantically_nested() -> None:
         "CL:0000236": OntologyTerm("CL:0000236", "B cell"),
     }, source="fixture")
     with pytest.raises(ContractError, match="contradicts its parent"):
-        snapshot(parent, child).programs({"species": "human"}, ontology=ontology)
+        snapshot(parent, child).programs({"species": "human", "tissue": "blood"}, ontology=ontology)
 
 
 def test_exact_mapping_is_explicit_and_retains_all_provenance() -> None:
-    other = label("other:T", source_id="study-b", positive=["CD3G"])
+    other = label("other:T", source_id="study-b", positive=["CD3D", "CD3G"])
     mapping = CorpusMapping(source_label_id="other:T", target_label_id="T", relation="exact", rationale="Same criteria.", reviewer="expert")
     base = snapshot(label(), other, sources=[source(), source("study-b")], mappings=[mapping])
-    programs = base.programs({"species": "human"})
+    programs = base.programs({"species": "human", "tissue": "blood"})
     assert len(programs) == 1
-    assert programs[0].positive == ("CD3D", "CD3G", "TRAC")
+    assert programs[0].positive == ("CD3D",)  # decision row 9: only the positives both sources list
     assert len(base.labels) == 2
     assert len(base.sources) == 2
     with pytest.raises(ContractError, match="explicit exact mapping"):
-        snapshot(label(), other, sources=base.sources).programs({"species": "human"})
+        snapshot(label(), other, sources=base.sources).programs({"species": "human", "tissue": "blood"})
     with pytest.raises(ValueError, match="reviewer"):
         snapshot(label(), other, sources=base.sources, mappings=[mapping.model_copy(update={"reviewer": ""})])
 
 
-def test_conflicting_exact_mapping_cannot_overrule_negative_evidence() -> None:
+def test_exact_mapping_with_no_shared_positive_marker_is_refused() -> None:
     other = label("other:T", source_id="study-b", positive=["MS4A1"], negative=[])
     mapping = CorpusMapping(source_label_id="other:T", target_label_id="T", relation="exact", rationale="Test conflict.", reviewer="expert")
     base = snapshot(label(), other, sources=[source(), source("study-b")], mappings=[mapping])
-    with pytest.raises(ContractError, match="conflicting reviewed"):
-        base.programs({"species": "human"})
+    with pytest.raises(ContractError, match="share no positive marker"):
+        base.programs({"species": "human", "tissue": "blood"})
 
 
 def test_study_extension_and_measurement_are_explicit() -> None:
     state = label("local:state", name="PD1+TIGIT+", parent_id="T", level="L4", axis="cell_state", study_id="s1", positive=["PD1", "TIGIT"], negative=[], measurement="protein_expression", feature_space="protein")
     base = snapshot(label(), state)
-    assert len(base.select({"species": "human"})) == 1
-    context = {"species": "human", "study_id": "s1"}
+    assert len(base.select({"species": "human", "tissue": "blood"})) == 1
+    context = {"species": "human", "tissue": "blood", "study_id": "s1"}
     programs = base.programs(context, measurements=["gene_expression", "protein_expression"])
     assert programs[0].axis == "cell_type"
     assert programs[1].axis == "cell_state"
@@ -184,7 +184,7 @@ def test_study_extension_and_measurement_are_explicit() -> None:
         base.programs(context, measurements=["gene_expression"])
     isoform = label(measurement="transcript_isoform", feature_space="transcript")
     with pytest.raises(ContractError, match="no executable marker backend"):
-        snapshot(isoform).programs({"species": "human"})
+        snapshot(isoform).programs({"species": "human", "tissue": "blood"})
 
 
 def test_observed_marker_and_threshold_cannot_masquerade_as_known_marker() -> None:
@@ -203,11 +203,11 @@ def test_proposal_never_changes_base_and_requires_explicit_review(tmp_path: Path
     proposal = propose_corpus(base, proposal_path, labels=[label("CD8", name="CD8 T cell", parent_id="T", level="L2")], proposer="analyst", reason="Independent source supplied.")
     assert proposal.labels[0].status == "proposed"
     assert base.read_bytes() == original
-    assert len(load_corpus(base).programs({"species": "human"})) == 1
+    assert len(load_corpus(base).programs({"species": "human", "tissue": "blood"})) == 1
     output = tmp_path / "v2.json"
     receipt = review_corpus(base, proposal_path, output, reviewer="human", rationale="Reviewed source and measurements.", decision="accept", revision="v2")
     revised = load_corpus(output)
-    assert len(revised.programs({"species": "human"})) == 2
+    assert len(revised.programs({"species": "human", "tissue": "blood"})) == 2
     assert revised.parent_revision == "v1"
     assert revised.review and revised.review.reviewer == "human"
     assert base.read_bytes() == original
@@ -227,7 +227,7 @@ def test_rejected_and_disputed_proposals_do_not_enter_callable_vocabulary(tmp_pa
     review_corpus(base, proposal_path, output, reviewer="human", rationale="Evidence does not resolve it.", decision=decision, revision="v2")
     revised = load_corpus(output)
     assert len(revised.labels) == count
-    assert len(revised.programs({"species": "human"})) == 1
+    assert len(revised.programs({"species": "human", "tissue": "blood"})) == 1
     if decision == "dispute":
         assert next(item for item in revised.labels if item.label_id == "B").status == status
 
@@ -249,10 +249,10 @@ def test_stale_proposal_and_input_overwrite_fail_closed(tmp_path: Path) -> None:
 
 def test_alias_and_scope_conflicts_cannot_be_silently_normalized() -> None:
     with pytest.raises(ContractError, match="ambiguous corpus alias"):
-        snapshot(label(), label("B", name="B cell", synonyms=["T cell"])).programs({"species": "human"})
+        snapshot(label(), label("B", name="B cell", synonyms=["T cell"])).programs({"species": "human", "tissue": "blood"})
     mapping = CorpusMapping(source_label_id="mouse:T", target_label_id="T", relation="exact", rationale="Test incompatible scope.", reviewer="expert")
     with pytest.raises(ValueError, match="incompatible biological scope"):
-        snapshot(label(), label("mouse:T", species=["Mus musculus"]), mappings=[mapping])
+        snapshot(label(), label("mouse:T", species=["Mus musculus"], tissues=["blood"]), mappings=[mapping])
 
 
 def test_proposal_cannot_overwrite_base_or_repeat_changes(tmp_path: Path) -> None:
@@ -272,3 +272,9 @@ def test_reviewed_identity_levels_cannot_drift_from_exported_parent_depth() -> N
     assert len(snapshot(label(), state).labels) == 2
     imported = label("source-level", level="L8", status="imported", reviewer="", rationale="")
     assert snapshot(imported).labels[0].level == "L8"
+
+
+def test_reviewed_label_requires_a_tissue_scope() -> None:
+    # Decision row 16: species and tissue are required; assay and condition stay optional.
+    with pytest.raises(ValueError, match="explicit tissue scope"):
+        label(tissues=[])

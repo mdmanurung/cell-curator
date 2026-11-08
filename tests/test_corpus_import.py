@@ -61,7 +61,7 @@ def test_import_source_levels_do_not_imply_canonical_hierarchy(empty_corpus: Pat
     source.write_text(json.dumps({"labels": [
         {"id": "t", "name": "T cell", "level": "1", "description": "Source lineage.", "markers": ["TRAC"]},
         {"id": "cd8", "name": "Naive CD8 T cell", "level": "2", "parent_id": "t", "description": "Source child.", "markers": ["CCR7"]},
-    ], "context": {"species": "human"}}))
+    ], "context": {"species": "human", "tissue": "blood"}}))
     output = tmp_path / "v1.json"
     receipt = import_corpus_records(empty_corpus, source, output, source_kind="allen", source_id="allen-example", name="Example", url="https://example.org/allen", version="1", retrieved_at="2026-11-07")
     child = next(item for item in load_corpus(output).labels if item.name == "Naive CD8 T cell")

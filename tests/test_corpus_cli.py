@@ -14,7 +14,7 @@ from cell_curator.provenance import publish_json
 @pytest.fixture
 def corpus_path(tmp_path: Path) -> Path:
     source = CorpusSource(source_id="fixture", name="Synthetic test source", url="https://example.org", version="1", sha256="a" * 64, retrieved_at="2026-11-07")
-    label = CorpusLabel(label_id="a", name="Type A", description="Synthetic identity.", source_id="fixture", source_label="source A", species=["human"], positive=["A1"], negative=["B1"], status="reviewed", reviewer="fixture-human", rationale="Synthetic test fixture.")
+    label = CorpusLabel(label_id="a", name="Type A", description="Synthetic identity.", source_id="fixture", source_label="source A", species=["human"], tissues=["blood"], positive=["A1"], negative=["B1"], status="reviewed", reviewer="fixture-human", rationale="Synthetic test fixture.")
     snapshot = CorpusSnapshot(corpus_id="test", revision="v1", sources=[source], labels=[label])
     path = tmp_path / "corpus.json"
     publish_json(path, snapshot.model_dump(mode="json"))
@@ -35,7 +35,7 @@ def test_corpus_cli_validate_and_export(monkeypatch, capsys, corpus_path: Path, 
     assert result["reviewed"] == result["labels"] == 1
     assert result["content_digest"] == load_corpus(corpus_path).digest
     context = tmp_path / "context.json"
-    context.write_text('{"species":"Homo sapiens"}')
+    context.write_text('{"species": "Homo sapiens", "tissue": "blood"}')
     output = tmp_path / "markers.json"
     exported = run_cli(monkeypatch, capsys, "corpus", "export", "--input", corpus_path, "--context", context, "--measurement", "gene_expression", "--output", output)
     assert exported["programs"] == 1
@@ -67,7 +67,7 @@ def test_corpus_cli_propose_review_diff_preserve_base(monkeypatch, capsys, corpu
 
 def test_corpus_cli_import_is_local_and_unreviewed(monkeypatch, capsys, corpus_path: Path, tmp_path: Path) -> None:
     records = tmp_path / "saved-cap.json"
-    records.write_text(json.dumps({"context": {"species": "human"}, "labels": [{"id": "b", "cell_label": "Type B", "rationale": "Synthetic source definition.", "canonical_marker_genes": ["B1"]}]}))
+    records.write_text(json.dumps({"context": {"species": "human", "tissue": "blood"}, "labels": [{"id": "b", "cell_label": "Type B", "rationale": "Synthetic source definition.", "canonical_marker_genes": ["B1"]}]}))
     output = tmp_path / "imported.json"
     result = run_cli(monkeypatch, capsys, "corpus", "import", "--input", corpus_path, "--records", records, "--output", output, "--source-kind", "cap", "--source-id", "second", "--name", "Second synthetic source", "--url", "https://example.org/second", "--source-version", "1", "--retrieved-at", "2026-11-07")
     assert result["imported_count"] == 1
@@ -76,7 +76,7 @@ def test_corpus_cli_import_is_local_and_unreviewed(monkeypatch, capsys, corpus_p
     snapshot = load_corpus(output)
     assert len(snapshot.labels) == 2
     assert next(item for item in snapshot.labels if item.source_id == "second").status == "imported"
-    assert len(snapshot.programs({"species": "human"})) == 1
+    assert len(snapshot.programs({"species": "human", "tissue": "blood"})) == 1
 
 
 @pytest.mark.parametrize("kind", ["bad-changes", "bad-context"])

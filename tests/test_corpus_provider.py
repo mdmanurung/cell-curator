@@ -21,18 +21,18 @@ def provider(tmp_path: Path, identifier: str, *, name: str = "Type A", positive:
     snapshot = CorpusSnapshot(
         corpus_id=identifier, revision="v1",
         sources=[CorpusSource(source_id=identifier, name="Synthetic source", url="https://example.org", version="v1", sha256="a" * 64, retrieved_at="2026-11-07")],
-        labels=[CorpusLabel(label_id=f"{identifier}:a", name=name, description="Synthetic definition.", source_id=identifier, source_label=name, species=["Homo sapiens"], positive=[positive], status="reviewed", reviewer="fixture-curator", rationale="Synthetic fixture.")],
+        labels=[CorpusLabel(label_id=f"{identifier}:a", name=name, description="Synthetic definition.", source_id=identifier, source_label=name, species=["Homo sapiens"], tissues=["blood"], positive=[positive], status="reviewed", reviewer="fixture-curator", rationale="Synthetic fixture.")],
     )
     path = tmp_path / (identifier + ".json")
     publish_json(path, snapshot.model_dump(mode="json"))
     config = ProviderConfig(kind="corpus", path=str(path), sha256=sha256(path), version="v1", context=context or {})
-    return CorpusProvider(config, context={"species": "human"})
+    return CorpusProvider(config, context={"species": "human", "tissue": "blood"})
 
 
 def test_corpus_provider_cannot_override_dataset_biology(tmp_path: Path) -> None:
     with pytest.raises(ContractError, match="contradicts dataset species"):
-        provider(tmp_path, "a", context={"species": "mouse"})
-    assert len(provider(tmp_path, "b", context={"species": "Homo sapiens"}).programs()) == 1
+        provider(tmp_path, "a", context={"species": "mouse", "tissue": "blood"})
+    assert len(provider(tmp_path, "b", context={"species": "Homo sapiens", "tissue": "blood"}).programs()) == 1
     for key, before, after in (("tissue", "blood", "lung"), ("stage", "adult", "embryonic"), ("condition", "healthy", "tumor"), ("study_id", "study-a", "study-b")):
         with pytest.raises(ContractError, match="contradicts dataset"):
             merge_corpus_context({key: before}, {key: after})
@@ -63,7 +63,7 @@ def test_annotation_plan_uses_the_same_context_guard(config: dict, tmp_path: Pat
     path = tmp_path / "a.json"
     value = CellCuratorConfig.model_validate(config)
     value.guidance.context.organism = "mouse"
-    value.knowledge.providers = [ProviderConfig(kind="corpus", path=str(path), sha256=sha256(path), version=corpus.snapshot.revision, context={"species": "human"})]
+    value.knowledge.providers = [ProviderConfig(kind="corpus", path=str(path), sha256=sha256(path), version=corpus.snapshot.revision, context={"species": "human", "tissue": "blood"})]
     with pytest.raises(ContractError, match="contradicts dataset species"):
         annotation_contract(value)
 

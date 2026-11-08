@@ -124,6 +124,8 @@ class CorpusLabel(_CorpusModel):
             raise ValueError("reviewed corpus labels require reviewer and rationale")
         if self.status == "reviewed" and not self.species:
             raise ValueError("reviewed corpus labels require an explicit species scope")
+        if self.status == "reviewed" and not self.tissues:
+            raise ValueError("reviewed corpus labels require an explicit tissue scope")
         overlap = {value.casefold() for value in self.positive}.intersection(
             value.casefold() for value in self.negative
         )
@@ -370,7 +372,12 @@ class CorpusSnapshot(_CorpusModel):
                 ontology.validate_term(parent_accession, expected_name=parent.full_name or parent.name)
                 if not ontology.is_descendant(accession, parent_accession):
                     raise ContractError("corpus ontology mapping contradicts its parent")
-            positive = {gene for item in records for gene in item.positive}
+            # Decision row 9: sources mapped to one label share only the positives they all
+            # list. Each record keeps its own list, so the source's view stays inspectable.
+            shared = set.intersection(*({gene.casefold() for gene in item.positive} for item in records))
+            positive = {gene for item in records for gene in item.positive if gene.casefold() in shared}
+            if not positive:
+                raise ContractError(f"exact corpus mappings share no positive marker: {target}")
             negative = {gene for item in records for gene in item.negative}
             if {gene.casefold() for gene in positive}.intersection(gene.casefold() for gene in negative):
                 raise ContractError(f"conflicting reviewed corpus definitions: {target}")
