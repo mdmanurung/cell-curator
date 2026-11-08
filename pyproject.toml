@@ -39,6 +39,7 @@ Changelog = "https://github.com/mdmanurung/cell-curator/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 celltypist = ["celltypist>=1.6"]
+popv = ["popv>=0.6.1,<0.7; python_version < '3.13'"]
 reference-models = ["scvi-tools>=1.2"]
 census = ["cellxgene-census>=1.16"]
 scimilarity = ["scimilarity>=0.4"]
@@ -88,8 +89,9 @@ cell_curator = ["py.typed"]
   "skills/cell-curator/assets/*.tsv",
 ]
 "share/cell-curator/assets/markers" = ["skills/cell-curator/assets/markers/*.json"]
+"share/cell-curator/assets/corpus" = ["skills/cell-curator/assets/corpus/*.json"]
 "share/cell-curator/references" = ["skills/cell-curator/references/*.md"]
-"share/cell-curator/workflow" = ["workflow/Snakefile"]
+"share/cell-curator/workflow" = ["workflow/Snakefile", "workflow/annotation.smk"]
 "share/cell-curator/workflow/config" = ["workflow/config/*.yaml"]
 "share/cell-curator/workflow/profiles/slurm" = ["workflow/profiles/slurm/config.yaml"]
 "share/cell-curator/workflow/scripts" = ["workflow/scripts/*.py"]
@@ -98,6 +100,14 @@ cell_curator = ["py.typed"]
 "share/cell-curator/benchmarks/fixtures" = ["benchmarks/fixtures/*.tsv"]
 "share/cell-curator/benchmarks/results" = ["benchmarks/results/*.json"]
 "share/cell-curator/schemas" = ["schemas/*.json"]
+
+[tool.uv]
+# popV pins TensorFlow/numpy versions incompatible with the current Slurm extra.
+# Its classifier stage can use a separate Python 3.11/3.12 interpreter.
+conflicts = [
+    [{ extra = "popv" }, { extra = "workflow" }],
+    [{ extra = "popv" }, { extra = "dev" }],
+]
 
 [tool.pytest.ini_options]
 addopts = "-ra"
