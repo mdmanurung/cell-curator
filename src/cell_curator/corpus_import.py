@@ -108,7 +108,7 @@ def import_corpus_records(
     input_path: str | Path,
     output_path: str | Path,
     *,
-    source_kind: Literal["cap", "allen", "generic"],
+    source_kind: Literal["cap", "allen", "generic", "scgate"],
     source_id: str,
     name: str,
     url: str,
@@ -117,9 +117,10 @@ def import_corpus_records(
     license: str = "",
     max_records: int = 10000,
     max_bytes: int = 10 * 1024 * 1024,
+    scgate: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Import a saved source into a new immutable snapshot with an omission receipt."""
-    if source_kind not in {"cap", "allen", "generic"}:
+    if source_kind not in {"cap", "allen", "generic", "scgate"}:
         raise ContractError(f"unsupported corpus source kind: {source_kind}")
     if max_bytes < 1 or max_records < 1:
         raise ContractError("corpus import limits must be positive")
@@ -130,10 +131,19 @@ def import_corpus_records(
            for path in (output_path, source_output, receipt_output)):
         raise ContractError("corpus import cannot overwrite its base or source")
     base = load_corpus(base_path)
-    if input_path.stat().st_size > max_bytes:
-        raise ContractError("saved corpus source exceeds max_bytes")
-    with input_path.open("rb") as handle:
-        raw = handle.read(max_bytes + 1)
+    if source_kind == "scgate":
+        # `input_path` is a local scGate_models clone; the converted records are the retained source.
+        from .corpus_scgate import scgate_payload
+
+        options = dict(scgate or {})
+        raw = scgate_payload(input_path, list(options.get("collections", [])),
+                             species=str(options.get("species", "")), tissue=str(options.get("tissue", "")),
+                             tag=str(options.get("tag", "")))
+    else:
+        if input_path.stat().st_size > max_bytes:
+            raise ContractError("saved corpus source exceeds max_bytes")
+        with input_path.open("rb") as handle:
+            raw = handle.read(max_bytes + 1)
     if len(raw) > max_bytes:
         raise ContractError("saved corpus source exceeds max_bytes")
     try:
@@ -149,7 +159,12 @@ def import_corpus_records(
     source = CorpusSource(
         source_id=source_id, name=name, url=url, version=version,
         sha256=hashlib.sha256(raw).hexdigest(), retrieved_at=retrieved_at, license=license,
-        limitations=("Saved normalized excerpt; not a complete atlas or live API response.",),
+        limitations=(
+            ("Converted from a local scGate_models clone; the repository has no licence file, so nothing "
+             "from it is shipped with this package.",)
+            if source_kind == "scgate"
+            else ("Saved normalized excerpt; not a complete atlas or live API response.",)
+        ),
     )
     existing = {item.source_id: item for item in base.sources}
     if source_id in existing and existing[source_id] != source:

@@ -126,6 +126,29 @@ The `.import-receipt.json` records failed rows, omitted fields, digests, and the
 partial-import status. An imported row stays unreviewed even if its source JSON
 claims an approved status. Negative markers are never fabricated from positives.
 
+### scGate_models
+
+`--source-kind scgate` reads a local clone of `carmonalab/scGate_models`. The
+clone must sit exactly at `--scgate-tag` (default `v0.16`). Nothing is downloaded
+and nothing is shipped, because the repository has no licence file. `--records` is
+the clone folder.
+
+```bash
+cell-curator corpus import --input corpus-v1.json --records /path/to/scGate_models \
+  --output corpus-imported.json --source-kind scgate --scgate-collection PBMC \
+  --species human --tissue blood --source-id scgate-pbmc \
+  --name "scGate_models human PBMC" --url https://github.com/carmonalab/scGate_models \
+  --source-version v0.16 --retrieved-at YYYY-MM-DD
+```
+
+Each model file becomes one label. Its positive genes are the signature of the
+model's last level. A gene written `GENE-` is a negative gene. The gating path,
+the populations the model excludes (`scgate_excludes`) and the model file hash
+stay in the `.source.json` copy for the reviewer. They do not act as a gate yet.
+`CellOntology_dictionary.tsv` gives a first guess for `cl_id`; the ontology check
+still runs at review. Import one collection per source id: two collections that
+define the same label name need an explicit exact mapping.
+
 ## Review and release corpus knowledge
 
 Create `changes.json` with `labels`, `sources`, and/or `mappings`. Supply full

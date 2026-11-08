@@ -146,10 +146,15 @@ def build_parser() -> argparse.ArgumentParser:
             item.add_argument("--decision", choices=("accept", "reject", "dispute"), required=True)
         if action == "import":
             item.add_argument("--records", required=True, type=Path)
-            item.add_argument("--source-kind", choices=("cap", "allen", "generic"), required=True)
+            item.add_argument("--source-kind", choices=("cap", "allen", "generic", "scgate"), required=True)
             for field in ("source-id", "name", "url", "source-version", "retrieved-at"):
                 item.add_argument(f"--{field}", required=True)
             item.add_argument("--license", default="")
+            item.add_argument("--scgate-collection", action="append", default=[],
+                              help="scgate source: collection folder to import (repeat); --records is the local clone")
+            item.add_argument("--scgate-tag", default="v0.16", help="scgate source: tag the clone must be at")
+            item.add_argument("--species", default="human", help="scgate source")
+            item.add_argument("--tissue", default="", help="scgate source: tissue scope of the imported labels")
         if action == "diff":
             item.add_argument("--other", required=True, type=Path)
 
@@ -629,7 +634,9 @@ def dispatch(args: argparse.Namespace) -> Any:
 
             return import_corpus_records(args.input, args.records, args.output,
                 source_kind=args.source_kind, source_id=args.source_id, name=args.name, url=args.url,
-                version=args.source_version, retrieved_at=args.retrieved_at, license=args.license)
+                version=args.source_version, retrieved_at=args.retrieved_at, license=args.license,
+                scgate={"collections": args.scgate_collection, "tag": args.scgate_tag,
+                        "species": args.species, "tissue": args.tissue})
         other = load_corpus(args.other)
         before = {item.label_id: item.model_dump(mode="json") for item in snapshot.labels}
         after = {item.label_id: item.model_dump(mode="json") for item in other.labels}
