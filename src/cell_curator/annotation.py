@@ -381,7 +381,11 @@ def collect_level(config_path: str | Path, level: str) -> dict[str, Any]:
                 for field in ("program_coverage", "positive_coverage"):
                     if not np.isfinite(row[field]) or row[field] < config.evidence.min_positive_coverage:
                         failures.append(field)
-                if not np.isfinite(row["negative_violation"]) or row["negative_violation"] > config.evidence.max_negative_violation:
+                # Decision row 2: unmeasured negatives are not contradicted; flag, do not fail.
+                flags = []
+                if not np.isfinite(row["negative_violation"]):
+                    flags.append("unmeasured_negatives")
+                elif row["negative_violation"] > config.evidence.max_negative_violation:
                     failures.append("negative_markers")
                 for role in ("parent_remainder", "closest_sibling"):
                     for method in ("wilcoxon", "logreg"):
@@ -412,6 +416,7 @@ def collect_level(config_path: str | Path, level: str) -> dict[str, Any]:
                     if classifier.required and agreement < config.annotation.min_classifier_agreement:
                         failures.append(f"classifier:{classifier.name}")
                 scores.at[index, "gate_failures"] = "|".join(failures)
+                scores.at[index, "gate_flags"] = "|".join(flags)
                 scores.at[index, "classifier_support"] = json.dumps(classifier_support, sort_keys=True)
                 if failures:
                     scores.at[index, "vote_fraction"] = 0.
