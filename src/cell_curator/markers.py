@@ -28,7 +28,7 @@ from .knowledge import (
     LocalMarkerProvider,
     MarkerProvider,
     collect_programs,
-    providers_from_config,
+    run_providers,
 )
 from .models import MarkerProgram
 from .provenance import atomic_publish, publish_json
@@ -286,10 +286,7 @@ def assemble_marker_programs_from_config(
     config = load_config(config_path)
     programs = assemble_marker_programs(
         [
-            *providers_from_config(
-                config.knowledge.providers,
-                policy=config.knowledge.policy,
-            ),
+            *run_providers(config),
             *source,
         ],
         parent_scope=parent_scope,
@@ -898,6 +895,7 @@ def compute_de_marker_overlap(
     top_n: int = 100,
     adjusted_pvalue_max: float = 0.05,
     min_effect: float = 0.0,
+    marker_config: dict[str, Any] | None = None,
 ) -> DifferentialMarkerOverlap:
     """Compare label programs to one-cluster-vs-remainder markers, not condition-level DE."""
 
@@ -911,6 +909,7 @@ def compute_de_marker_overlap(
         features,
         detection=detection,
         top_n=top_n,
+        marker_config=marker_config,
     )
     measured = set(features.astype(str))
     rows: list[dict[str, Any]] = []
@@ -1102,6 +1101,7 @@ def run_marker_analysis(
     de_top_n: int = 100,
     adjusted_pvalue_max: float = 0.05,
     min_de_effect: float = 0.0,
+    marker_config: dict[str, Any] | None = None,
 ) -> MarkerAnalysis:
     """Run all marker routes once from shared matrices and a shared signed vocabulary."""
 
@@ -1144,6 +1144,7 @@ def run_marker_analysis(
         top_n=de_top_n,
         adjusted_pvalue_max=adjusted_pvalue_max,
         min_effect=min_de_effect,
+        marker_config=marker_config,
     )
     crosschecks = consolidate_marker_crosschecks(
         profile,
@@ -1335,6 +1336,8 @@ def write_marker_artifacts(
             "run_id": run_id,
             "n_programs": len(analysis.programs),
             "n_crosschecks": len(analysis.crosschecks),
+            "marker_methods": sorted(analysis.differential.bottom_up["method"].unique()),
+            "marker_runtime": analysis.differential.bottom_up.attrs.get("runtime", {}),
             "artifacts": {
                 name: {"path": str(path), "sha256": sha256(path)}
                 for name, path in sorted(paths.items())
@@ -1389,12 +1392,7 @@ def run_marker_analysis_from_config(
         raise ContractError(
             f"marker representation is not configured: {assay}/{representation}"
         )
-    providers: list[MarkerSource] = list(
-        providers_from_config(
-            model.knowledge.providers,
-            policy=model.knowledge.policy,
-        )
-    )
+    providers: list[MarkerSource] = list(run_providers(model))
     providers.extend(additional_sources)
     programs = assemble_marker_programs(
         providers,
@@ -1455,6 +1453,7 @@ def run_marker_analysis_from_config(
             min_measured_positive=min_measured_positive,
             min_positive_fraction=min_positive_fraction,
             adjusted_pvalue_max=adjusted_pvalue_max,
+            marker_config=model.markers.model_dump(mode="json"),
         )
     finally:
         close_input(loaded)

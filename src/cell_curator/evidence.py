@@ -14,8 +14,9 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from scipy import sparse, stats
+from scipy import optimize, sparse, stats
 from scipy.spatial import cKDTree
+from scipy.special import expit
 
 from .capabilities import build_capability_registry
 from .config import CellCuratorConfig
@@ -49,18 +50,34 @@ class LaneResult:
 
 LOG = logging.getLogger(__name__)
 
+CPU_MARKER_COLUMNS = [
+    "cluster_id", "method", "feature", "rank", "target_mean", "reference_mean",
+    "effect", "effect_semantics", "pvalue", "adjusted_pvalue",
+    "target_fraction_detected", "reference_fraction_detected", "method_concordant",
+]
+
 
 def validate_backend_receipt(receipt: Any, capability: Capability) -> None:
     """Enforce the common no-fallback contract and strict RAPIDS method receipt."""
 
     if receipt.fallback_used or receipt.cpu_fallback_available or receipt.cpu_fallback_used:
         raise ContractError("backend receipt records a prohibited CPU fallback")
-    if not capability.requires_gpu:
+    if not capability.requires_gpu and receipt.runtime.get("marker_status") == "unavailable_no_comparator":
+        if (
+            receipt.runtime.get("n_groups") != 1
+            or receipt.marker_methods
+            or receipt.convergence_validated is not None
+            or receipt.runtime.get("ranking_group_coverage") != {"wilcoxon": [], "logreg": []}
+        ):
+            raise ContractError("CPU no-comparator receipt cannot claim executed marker methods")
         return
     if set(receipt.marker_methods) != {"wilcoxon", "logreg"}:
-        raise ContractError("RAPIDS receipt must record native Wilcoxon and balanced logreg")
+        backend = "RAPIDS" if capability.requires_gpu else "CPU"
+        raise ContractError(f"{backend} receipt must record Wilcoxon and balanced logreg")
     if receipt.convergence_validated is not True:
-        raise ContractError("RAPIDS receipt lacks successful logreg convergence validation")
+        raise ContractError("marker receipt lacks successful logreg convergence validation")
+    if not capability.requires_gpu:
+        return
     required_runtime = {
         "device_count",
         "device_name",
@@ -109,14 +126,64 @@ def compute_bottom_up_markers(
     *,
     detection: Any | None,
     top_n: int = 100,
+    marker_config: dict[str, Any] | None = None,
 ) -> pd.DataFrame:
-    """Compute one-vs-remainder Mann-Whitney evidence with deterministic BH correction."""
+    """Compute Wilcoxon and balanced, L2 logistic one-vs-rest marker evidence.
 
-    if matrix.shape[0] != len(groups) or matrix.shape[1] != len(features):
+    The rank-sum test uses scipy's equivalent Mann-Whitney U test. Logistic
+    coefficients come from a multivariate model with an unpenalized intercept;
+    they carry no P values. Every observed group gets its own binary fit.
+    """
+
+    if matrix.ndim != 2 or matrix.shape[0] != len(groups) or matrix.shape[1] != len(features):
         raise ContractError("matrix, groups, and feature dimensions disagree")
+    if top_n < 1 or len(features) < 1:
+        raise ContractError("marker evidence requires positive top_n and at least one feature")
+    if groups.isna().any() or (groups.astype(str).str.strip() == "").any():
+        raise ContractError("marker groups must not contain missing or blank labels")
+    feature_positions(features)
+    values = matrix.data if sparse.issparse(matrix) else np.asarray(matrix)
+    if not np.isfinite(values).all():
+        raise ContractError("marker matrix must contain finite values")
+    if detection is not None:
+        detected = detection.data if sparse.issparse(detection) else np.asarray(detection)
+        if detection.shape != matrix.shape or not np.isfinite(detected).all():
+            raise ContractError("detection matrix must be finite and match marker dimensions")
+        if (detected < 0).any():
+            raise ContractError("detection matrix must be nonnegative")
+    config = marker_config or {}
+    wilcoxon = config.get("wilcoxon", {})
+    logreg = config.get("logreg", {})
+    if logreg.get("class_weight", "balanced") != "balanced":
+        raise ContractError("CPU logistic marker evidence requires balanced class weights")
+    if logreg.get("penalty", "l2") != "l2":
+        raise ContractError("CPU logistic marker evidence requires an L2 penalty")
+    regularization = float(logreg.get("C", 1.0))
+    tolerance = float(logreg.get("tol", 0.0001))
+    max_iter = int(logreg.get("max_iter", 1000))
+    retry_max_iter = int(logreg.get("retry_max_iter", 5000))
+    if not np.isfinite(regularization) or regularization <= 0:
+        raise ContractError("CPU logistic C must be finite and positive")
+    if (
+        not np.isfinite(tolerance)
+        or tolerance <= 0
+        or max_iter < 1
+        or retry_max_iter < max_iter
+    ):
+        raise ContractError("CPU logistic tolerance and iteration limits are invalid")
+    if wilcoxon.get("correction", "benjamini-hochberg") != "benjamini-hochberg":
+        raise ContractError("CPU Wilcoxon requires benjamini-hochberg correction")
+    if wilcoxon.get("tie_correct", True) is not True:
+        raise ContractError(
+            "CPU Mann-Whitney uses tie correction; tie_correct=false is unsupported"
+        )
     rows: list[dict[str, Any]] = []
     group_values = groups.astype(str).to_numpy()
-    for cluster_id in sorted(pd.unique(group_values)):
+    categories = sorted(pd.unique(group_values))
+    if len(categories) < 2:
+        raise ContractError("CPU marker evidence requires at least two observed groups")
+    fit_diagnostics: dict[str, dict[str, Any]] = {}
+    for cluster_id in categories:
         target_mask = group_values == cluster_id
         reference_mask = ~target_mask
         if not target_mask.any() or not reference_mask.any():
@@ -134,59 +201,149 @@ def compute_bottom_up_markers(
                     reference[:, column],
                     alternative="two-sided",
                     method="asymptotic",
+                    use_continuity=bool(wilcoxon.get("continuity_correct", True)),
                 ).pvalue
             except ValueError:
                 pvalue = 1.0
             pvalues.append(float(pvalue))
         adjusted = benjamini_hochberg(np.asarray(pvalues))
-        order = np.lexsort((features.astype(str).to_numpy(), -effect))
-        selected = order[: min(top_n, len(order))]
+        coefficients, diagnostics = _cpu_logistic_markers(
+            matrix,
+            target_mask,
+            C=regularization,
+            tolerance=tolerance,
+            max_iter=max_iter,
+            retry_max_iter=retry_max_iter,
+        )
+        fit_diagnostics[str(cluster_id)] = diagnostics
         if detection is not None:
-            target_detect = (_matrix_rows(detection, target_mask)[:, selected] > 0).mean(axis=0)
-            reference_detect = (_matrix_rows(detection, reference_mask)[:, selected] > 0).mean(
-                axis=0
-            )
+            target_detect = (_matrix_rows(detection, target_mask) > 0).mean(axis=0)
+            reference_detect = (_matrix_rows(detection, reference_mask) > 0).mean(axis=0)
         else:
-            target_detect = np.full(len(selected), np.nan)
-            reference_detect = np.full(len(selected), np.nan)
-        for rank, (column, pvalue, padj, target_fraction, reference_fraction) in enumerate(
-            zip(
-                selected,
-                np.asarray(pvalues)[selected],
-                adjusted[selected],
-                target_detect,
-                reference_detect,
-                strict=True,
-            ),
-            1,
-        ):
-            rows.append(
-                {
-                    "cluster_id": cluster_id,
-                    "feature": str(features[column]),
-                    "rank": rank,
-                    "target_mean": float(target_mean[column]),
-                    "reference_mean": float(reference_mean[column]),
-                    "effect": float(effect[column]),
-                    "pvalue": pvalue,
-                    "adjusted_pvalue": float(padj),
-                    "target_fraction_detected": float(target_fraction),
-                    "reference_fraction_detected": float(reference_fraction),
-                }
-            )
-    columns = [
-        "cluster_id",
-        "feature",
-        "rank",
-        "target_mean",
-        "reference_mean",
-        "effect",
-        "pvalue",
-        "adjusted_pvalue",
-        "target_fraction_detected",
-        "reference_fraction_detected",
+            target_detect = np.full(len(features), np.nan)
+            reference_detect = np.full(len(features), np.nan)
+        for method, scores in (("wilcoxon", effect), ("logreg", coefficients)):
+            order = np.lexsort((features.astype(str).to_numpy(), -scores))[:top_n]
+            for rank, column in enumerate(order, 1):
+                rows.append(
+                    {
+                        "cluster_id": cluster_id,
+                        "method": method,
+                        "feature": str(features[column]),
+                        "rank": rank,
+                        "target_mean": float(target_mean[column]),
+                        "reference_mean": float(reference_mean[column]),
+                        "effect": float(scores[column]),
+                        "effect_semantics": (
+                            "mean_difference"
+                            if method == "wilcoxon"
+                            else "logistic_coefficient"
+                        ),
+                        "pvalue": float(pvalues[column]) if method == "wilcoxon" else np.nan,
+                        "adjusted_pvalue": (
+                            float(adjusted[column]) if method == "wilcoxon" else np.nan
+                        ),
+                        "target_fraction_detected": float(target_detect[column]),
+                        "reference_fraction_detected": float(reference_detect[column]),
+                    }
+                )
+    result = pd.DataFrame(rows)
+    positive = {
+        (str(row.cluster_id), str(row.feature), str(row.method))
+        for row in result.itertuples(index=False)
+        if float(row.effect) > 0
+    }
+    result["method_concordant"] = [
+        all(
+            (str(row.cluster_id), str(row.feature), method) in positive
+            for method in ("wilcoxon", "logreg")
+        )
+        for row in result.itertuples(index=False)
     ]
-    return pd.DataFrame(rows, columns=columns)
+    import scipy
+
+    result.attrs["ranking_group_coverage"] = {
+        method: list(categories) for method in ("wilcoxon", "logreg")
+    }
+    result.attrs["runtime"] = {
+        "scipy": scipy.__version__,
+        "native_api": ["scipy.stats.mannwhitneyu", "scipy.optimize.minimize"],
+        "ranking_group_coverage": result.attrs["ranking_group_coverage"],
+        "logreg": {
+            "solver": "L-BFGS-B",
+            "class_weight": "balanced",
+            "penalty": "l2",
+            "C": regularization,
+            "tol": tolerance,
+            "max_iter": max_iter,
+            "retry_max_iter": retry_max_iter,
+            "fit_intercept": True,
+            "objective": "balanced_weighted_sum_log_loss_plus_l2_over_2C",
+            "fits": fit_diagnostics,
+        },
+        "wilcoxon": {
+            "tie_correct": True,
+            "continuity_correct": bool(wilcoxon.get("continuity_correct", True)),
+            "correction": "benjamini-hochberg",
+            "alternative": "two-sided",
+        },
+    }
+    return result
+
+
+def _cpu_logistic_markers(
+    matrix: Any,
+    target: np.ndarray,
+    *,
+    C: float,
+    tolerance: float,
+    max_iter: int,
+    retry_max_iter: int,
+) -> tuple[np.ndarray, dict[str, Any]]:
+    """Fit the convex balanced logistic objective without penalizing the intercept."""
+
+    labels = target.astype(float)
+    sample_weight = np.where(
+        target, len(target) / (2 * target.sum()), len(target) / (2 * (~target).sum())
+    )
+
+    def objective(parameters: np.ndarray) -> tuple[float, np.ndarray]:
+        coefficients = parameters[:-1]
+        linear = np.asarray(matrix @ coefficients).ravel() + parameters[-1]
+        residual = sample_weight * (expit(linear) - labels)
+        loss = float(np.sum(sample_weight * (np.logaddexp(0, linear) - labels * linear)))
+        loss += float(coefficients @ coefficients) / (2 * C)
+        gradient = np.r_[
+            np.asarray(matrix.T @ residual).ravel() + coefficients / C, residual.sum()
+        ]
+        return loss, gradient
+
+    fitted = optimize.minimize(
+        objective,
+        np.zeros(matrix.shape[1] + 1),
+        jac=True,
+        method="L-BFGS-B",
+        options={"maxiter": max_iter, "gtol": tolerance, "ftol": np.finfo(float).eps},
+    )
+    retried = False
+    if not fitted.success and retry_max_iter > max_iter:
+        retried = True
+        fitted = optimize.minimize(
+            objective,
+            fitted.x,
+            jac=True,
+            method="L-BFGS-B",
+            options={"maxiter": retry_max_iter, "gtol": tolerance, "ftol": np.finfo(float).eps},
+        )
+    if not fitted.success or not np.isfinite(fitted.x).all() or not np.isfinite(fitted.fun):
+        raise ContractError(f"CPU logistic regression did not converge: {fitted.message}")
+    return np.asarray(fitted.x[:-1]), {
+        "converged": True,
+        "iterations": int(fitted.nit),
+        "retried": retried,
+        "intercept": float(fitted.x[-1]),
+        "termination": str(fitted.message),
+    }
 
 
 def compute_gpu_bottom_up_markers(
@@ -1272,13 +1429,13 @@ def run_lane(
         assay_id,
         representation_name,
     )
-    gpu_runtime: dict[str, Any] | None = None
+    backend_runtime: dict[str, Any] | None = None
     gpu_rsc: Any | None = None
     if capability.requires_gpu:
         # Validate hardware/software before opening the potentially large input.
         from .rank_markers_gpu import inspect_runtime
 
-        _, gpu_rsc, gpu_runtime = inspect_runtime(config.model_dump(mode="json"))
+        _, gpu_rsc, backend_runtime = inspect_runtime(config.model_dump(mode="json"))
     loaded = load_input(config, backed=False)
     try:
         matrix, detection, features, assay, _ = _lane_materials(
@@ -1294,17 +1451,28 @@ def run_lane(
                 rsc=gpu_rsc,
                 marker_config=config.markers.model_dump(mode="json"),
             )
-            if gpu_runtime is not None:
-                gpu_runtime["ranking_group_coverage"] = bottom_up.attrs.get(
+            if backend_runtime is not None:
+                backend_runtime["ranking_group_coverage"] = bottom_up.attrs.get(
                     "ranking_group_coverage", {}
                 )
+        elif groups.nunique() == 1:
+            # Refinement can start from one canonical parent. Its later binary
+            # candidate lanes supply the comparisons; this lane must not invent any.
+            bottom_up = pd.DataFrame(columns=CPU_MARKER_COLUMNS)
+            backend_runtime = {
+                "marker_status": "unavailable_no_comparator",
+                "n_groups": int(groups.nunique()),
+                "ranking_group_coverage": {"wilcoxon": [], "logreg": []},
+            }
         else:
             bottom_up = compute_bottom_up_markers(
                 matrix,
                 groups,
                 features,
                 detection=detection,
+                marker_config=config.markers.model_dump(mode="json"),
             )
+            backend_runtime = bottom_up.attrs["runtime"]
         evidence = score_marker_programs(
             matrix,
             groups,
@@ -1344,10 +1512,13 @@ def run_lane(
             },
             feature_ids=list(map(str, features)),
             groups=list(groups.astype(str)),
-            limitations=capability.reasons,
-            runtime=gpu_runtime,
-            marker_methods=("wilcoxon", "logreg") if capability.requires_gpu else (),
-            convergence_validated=True if capability.requires_gpu else None,
+            limitations=capability.reasons + (
+                ("marker tests unavailable: only one observed canonical group",)
+                if bottom_up.empty else ()
+            ),
+            runtime=backend_runtime,
+            marker_methods=("wilcoxon", "logreg") if not bottom_up.empty else (),
+            convergence_validated=True if not bottom_up.empty else None,
         )
         publish_json(receipt_path, receipt.model_dump(mode="json"))
         LOG.info("evidence lane complete: key=%s n_rows=%d", key, len(evidence))
@@ -1428,12 +1599,12 @@ def run_candidate_lane(
         raise ContractError(
             f"candidate lane is partially materialized and cannot resume: {comparison_lane_id}"
         )
-    gpu_runtime: dict[str, Any] | None = None
+    backend_runtime: dict[str, Any] | None = None
     gpu_rsc: Any | None = None
     if capability.requires_gpu:
         from .rank_markers_gpu import inspect_runtime
 
-        _, gpu_rsc, gpu_runtime = inspect_runtime(config.model_dump(mode="json"))
+        _, gpu_rsc, backend_runtime = inspect_runtime(config.model_dump(mode="json"))
     groups_path = Path(str(row["groups_path"]))
     groups_frame = pd.read_csv(groups_path, sep="\t", keep_default_na=False)
     if groups_frame["barcode"].astype(str).duplicated().any():
@@ -1484,12 +1655,16 @@ def run_candidate_lane(
                 rsc=gpu_rsc,
                 marker_config=config.markers.model_dump(mode="json"),
             )
-            if gpu_runtime is not None:
-                gpu_runtime["ranking_group_coverage"] = bottom_up.attrs.get(
+            if backend_runtime is not None:
+                backend_runtime["ranking_group_coverage"] = bottom_up.attrs.get(
                     "ranking_group_coverage", {}
                 )
         else:
-            bottom_up = compute_bottom_up_markers(matrix, groups, features, detection=detection)
+            bottom_up = compute_bottom_up_markers(
+                matrix, groups, features, detection=detection,
+                marker_config=config.markers.model_dump(mode="json"),
+            )
+            backend_runtime = bottom_up.attrs["runtime"]
         evidence = score_marker_programs(
             matrix,
             groups,
@@ -1552,9 +1727,9 @@ def run_candidate_lane(
             feature_ids=list(map(str, features)),
             groups=list(groups),
             limitations=capability.reasons,
-            runtime=gpu_runtime,
-            marker_methods=("wilcoxon", "logreg") if capability.requires_gpu else (),
-            convergence_validated=True if capability.requires_gpu else None,
+            runtime=backend_runtime,
+            marker_methods=("wilcoxon", "logreg"),
+            convergence_validated=True,
         )
         publish_json(receipt_path, receipt.model_dump(mode="json"))
         return LaneResult(comparison_lane_id, evidence, bottom_up, receipt_path)
