@@ -707,6 +707,26 @@ No cell has been scored.
    with the atlas or Sound Life; the IDs follow different schemes, so this is weak
    evidence of independence.
 
+### Protocol v8, amendment 3 (declared 2026-11-09, before any v8 scoring)
+
+After three independent Opus researcher critiques (`plans/v8-researcher-critique.md`;
+sources checked by PubMed metadata only). The user chose each item. No cell is scored.
+
+1. **Highly variable genes.** `seurat_v3` on raw counts, 2000 genes, per dataset. This
+   fills the method left open by Q17.
+2. **Scaling.** Scale to unit variance and clip at 10 before the PCA. This changes the
+   Q16 recipe as written (log1p of counts per 10,000, then PCA, with no scaling), so
+   novel-set clusters are not made by the v6 recipe.
+3. **Second development set.** The 50 iterations also score on AIDA split A, because the
+   AIFI dev donors are blood, 10x 3' v3 only and cannot show tissue or 5' shift. AIDA is
+   not novel (v5 and v6 used it), so using it for development costs no novelty. Its
+   chemistry is not yet checked. Split B stays a final-report set only.
+4. **Report-only strata.** For each novel set the scoring also reports cells whose truth
+   equals a corpus term, cells whose truth is a coarser parent, and unrelated cells. No
+   new threshold; the pass bar stays the v6 rules on the pooled score.
+5. **Diagnostics added to corpus learning, no decision needed.** Per-donor support of
+   each marker.
+
 ## Why the pre-declared evidence bar is not met, measured rather than guessed
 
 Two runs, differing only in measured panel width. Both label one cluster of 28.
