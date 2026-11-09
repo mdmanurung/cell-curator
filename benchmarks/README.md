@@ -735,6 +735,26 @@ dev donors are clustered by the same recipe as the novel sets
 (`prepare_novel_v8.py aifi_dev`). Benchmark card:
 `/exports/para-lipg-hpc/mdmanurung/tusoskill/cc-v8/benchmark/benchmark_card.md`.
 
+### Protocol v8, amendment 5 (declared 2026-11-09, before iteration 1)
+
+User choices after the first corpus proposal was inspected (job 25986180; that proposal is
+superseded and was not reviewed) and after the parallel build agents reported.
+
+1. **Strata.** A fourth report-only stratum, finer child (truth descends from a corpus
+   term), so every cell has one stratum. The scorer `benchmarks/scripts/score_v8.py`
+   reproduces the recorded v6 v14 full-slice metrics exactly.
+2. **AIDA split A re-clustered** with the v8 recipe (`prepare_novel_v8.py aida_split_a`):
+   23 clusters from 8,847 cells, so both dev sets share one recipe. AIDA is 10x 5' v2
+   (Census 2025-11-08 `obs.assay`, dataset `c838aec3-…`).
+3. **Corpus markers.** Ribosomal (RPL, RPS) and mitochondrial (MT-) genes are barred from
+   positives and negatives. A negative must be detected in under 20% of the label's own
+   cells. A label alone in its AIFI_L1 group (erythrocyte, ILC, platelet) takes its two
+   nearest labels from any group as siblings.
+4. **Researcher comparator mapping.** A valid, current stated CL id is used; otherwise the
+   free text maps by exact name or synonym in the pinned Cell Ontology.
+5. **Environment.** `envs/cc-v8` pins scipy 1.16.3, scikit-learn 1.6.1 and pynndescent
+   0.5.13; pynndescent 0.7.0 returns sparse arrays that scanpy 1.11.5 cannot read.
+
 ## Why the pre-declared evidence bar is not met, measured rather than guessed
 
 Two runs, differing only in measured panel width. Both label one cluster of 28.
