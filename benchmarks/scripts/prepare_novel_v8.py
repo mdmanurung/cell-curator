@@ -23,7 +23,11 @@ FILES = {  # dataset_id from acquire_v8's downloads.tsv
     "ts": "c5d88abe-f23a-45fa-a534-788985e93dad.h5ad",
     "indonesia": "ca7d95ac-53aa-4a94-8c76-300c608ce6a0.h5ad",
     "cross_tissue": "1b9d8702-5af8-4142-85ed-020eb06ec4f6.h5ad",
+    "aifi_dev": "e522d2cd-7927-4e59-a4ed-064009569279.h5ad",  # dev donors only
 }
+DEV_SPLIT = (
+    Path(__file__).resolve().parents[2] / "benchmarks/data/aifi-hiha-dev-split/donor_split.tsv"
+)
 TS_TISSUES = ["blood", "spleen", "lymph node", "inguinal lymph node", "mesenteric lymph node"]
 TS_ASSAYS = ["10x 3' v3", "10x 5' v2"]  # protocol v8, Q3
 N_HVG = 2000  # Q17; seurat_v3 on raw counts, amendment 3
@@ -40,8 +44,22 @@ def main():
     (run_dir / "scoring").mkdir()
 
     # Raw counts, restricted as the protocol declares -----------------------------------
-    atlas = ad.read_h5ad(DOWNLOADS / FILES[dataset])
-    data = ad.AnnData(X=atlas.raw.X.copy(), obs=atlas.obs.copy(), var=atlas.raw.var.copy())
+    if dataset == "aifi_dev":
+        # backed read, then only the dev donors' rows; corpus donors are never loaded
+        atlas = ad.read_h5ad(DOWNLOADS / FILES[dataset], backed="r")
+        split = pd.read_csv(DEV_SPLIT, sep="\t")
+        dev = set(split.loc[split["split"] == "dev", "donor_id"])
+        rows = np.flatnonzero(atlas.obs["donor_id"].astype(str).isin(dev).to_numpy())
+        data = ad.AnnData(
+            X=atlas.raw.X[rows], obs=atlas.obs.iloc[rows].copy(), var=atlas.raw.var.copy()
+        )
+    else:
+        atlas = ad.read_h5ad(DOWNLOADS / FILES[dataset])
+        data = ad.AnnData(X=atlas.raw.X.copy(), obs=atlas.obs.copy(), var=atlas.raw.var.copy())
+    # raw.var may lack symbols; take them from var by gene ID (fails as NaN if absent)
+    data.var["feature_name"] = atlas.var["feature_name"].reindex(data.var_names).to_numpy()
+    if data.var["feature_name"].isna().any():
+        raise ValueError(f"{data.var['feature_name'].isna().sum()} genes have no symbol")
     if dataset == "ts":
         data = data[
             data.obs["tissue"].isin(TS_TISSUES) & data.obs["assay"].isin(TS_ASSAYS)
