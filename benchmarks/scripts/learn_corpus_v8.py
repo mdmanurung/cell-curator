@@ -2,7 +2,13 @@
 #          cell-level Wilcoxon on a donor-capped sample, top positives and sibling-based
 #          negatives per Cell Ontology term. The output is a proposal; no record is
 #          reviewed or callable until the user reviews it in chat (AGENTS.md, gate 3).
-# Run:     sbatch benchmarks/scripts/learn_corpus_v8.sbatch RUN_DIR   (RUN_DIR must not exist)
+# Run:     sbatch benchmarks/scripts/learn_corpus_v8.sbatch RUN_DIR [--candidate CAND.json]
+#              [--reuse-ranked PREVIOUS_RUN_DIR]          (RUN_DIR must not exist)
+#          With neither option the output is the frozen learn-2026-11-09c selection.
+#          --reuse-ranked skips the Wilcoxon and reads PREVIOUS_RUN_DIR/ranked.tsv.gz; it needs
+#          the same sample (checked against PREVIOUS_RUN_DIR/sampled_cells.tsv).
+#          --candidate CAND.json sets selection parameters for a development candidate; keys in
+#          SELECTION_KEYS below. A candidate corpus is never the frozen corpus.
 # Inputs:  the atlas h5ad            from acquire_v8.py (dataset e522d2cd-...)
 #          donor_split.tsv           benchmarks/data/aifi-hiha-dev-split/
 # Outputs: RUN_DIR/sampled_cells.tsv   one row per sampled cell: barcode, donor, label
@@ -13,9 +19,11 @@
 #          RUN_DIR/corpus_records.json records for `cell-curator corpus import --source-kind generic`
 #          RUN_DIR/corpus_donors.txt   the corpus donors, for derived_from
 #          RUN_DIR/versions.txt
+#          RUN_DIR/params.json         the selection parameters this run used
+#          RUN_DIR/ranked_vs_siblings.tsv.gz   only when ranking_contrast is vs_siblings
 
+import argparse
 import json
-import sys
 from pathlib import Path
 
 import anndata as ad
@@ -55,6 +63,20 @@ STATE_RECORDS = {
     ),  # AIFI L3 ISG+ memory CD8 T cell
 }
 MAX_OWN_DETECTION = 0.2  # a negative is detected in under 20% of the label, amendment 5
+# Selection parameters a candidate JSON may set. The defaults are the frozen v8 values above.
+SELECTION_KEYS = {
+    "n_positive": N_POSITIVE,
+    "n_negative": N_NEGATIVE,
+    "fdr": FDR,
+    "max_own_detection": MAX_OWN_DETECTION,
+    "n_siblings": N_SIBLINGS,
+    "barred_add": [],  # extra genes barred from positives and negatives
+    "barred_pattern_add": "",  # extra regex, joined to BARRED_GENES with |
+    "min_logfc": 0.0,  # positives need a log fold change above this (0 is the frozen rule)
+    "min_pct_in": 0.0,  # positives are detected in at least this share of the label's cells
+    "ranking_contrast": "one_vs_rest",  # or "vs_siblings": positives ranked against siblings
+    "negative_source": "sibling_positives",  # or "sibling_contrast" (needs vs_siblings)
+}
 CONTEXT = {
     "species": "human",
     "tissue": "blood",
@@ -63,8 +85,37 @@ CONTEXT = {
 
 
 def main():
-    run_dir = Path(sys.argv[1])
+    parser = argparse.ArgumentParser()
+    parser.add_argument("run_dir", type=Path)
+    parser.add_argument("--candidate", type=Path)
+    parser.add_argument("--reuse-ranked", type=Path)
+    args = parser.parse_args()
+    run_dir = args.run_dir
     run_dir.mkdir(parents=True, exist_ok=False)  # a run dir is never overwritten
+
+    # Selection parameters: the frozen defaults, then the candidate's changes ---------------
+    candidate = json.loads(args.candidate.read_text()) if args.candidate else {}
+    if set(candidate) - set(SELECTION_KEYS) - {"name", "note", "engine"}:
+        raise ValueError(f"unknown candidate keys: {set(candidate) - set(SELECTION_KEYS)}")
+    params = {**SELECTION_KEYS, **candidate}
+    if params["ranking_contrast"] not in {"one_vs_rest", "vs_siblings"}:
+        raise ValueError("ranking_contrast is one_vs_rest or vs_siblings")
+    if params["negative_source"] not in {"sibling_positives", "sibling_contrast"}:
+        raise ValueError("negative_source is sibling_positives or sibling_contrast")
+    if (
+        params["negative_source"] == "sibling_contrast"
+        and params["ranking_contrast"] != "vs_siblings"
+    ):
+        raise ValueError("sibling_contrast negatives need ranking_contrast vs_siblings")
+    n_positive, n_negative, fdr = params["n_positive"], params["n_negative"], params["fdr"]
+    min_logfc, min_pct_in = params["min_logfc"], params["min_pct_in"]
+    max_own, n_siblings = params["max_own_detection"], params["n_siblings"]
+    barred_pattern = "|".join(
+        [BARRED_GENES]
+        + ([f"(?:{params['barred_pattern_add']})"] if params["barred_pattern_add"] else [])
+    )
+    barred_list = BARRED_LIST + list(params["barred_add"])
+    (run_dir / "params.json").write_text(json.dumps(params, indent=2, sort_keys=True))
 
     # Corpus donors only: the dev donors are never read --------------------------------
     split = pd.read_csv(DONOR_SPLIT, sep="\t")
@@ -111,42 +162,60 @@ def main():
     sc.pp.normalize_total(data, target_sum=1e4)
     sc.pp.log1p(data)
 
-    # Wilcoxon one-versus-rest per label (BH inside each label) -----------------------
-    sc.tl.rank_genes_groups(data, "cell_type", method="wilcoxon", pts=True, n_genes=data.n_vars)
+    # Wilcoxon one-versus-rest per label (BH inside each label), or the saved table -------
     labels = sorted(data.obs["cell_type"].unique())
-    ranked = pd.concat(
-        [
-            sc.get.rank_genes_groups_df(data, group=label).assign(cell_type=label)
-            for label in labels
+    if args.reuse_ranked:
+        previous = pd.read_csv(args.reuse_ranked / "sampled_cells.tsv", sep="\t", dtype=str)
+        if previous["barcode"].tolist() != sampled["barcode"].tolist():
+            raise ValueError("the sample differs from the one behind --reuse-ranked")
+        ranked = pd.read_csv(
+            args.reuse_ranked / "ranked.tsv.gz",
+            sep="\t",
+            keep_default_na=False,
+            na_values=[""],
+            float_precision="round_trip",
+        )
+        (run_dir / "ranked_from.txt").write_text(f"{args.reuse_ranked}\n")
+    else:
+        sc.tl.rank_genes_groups(
+            data, "cell_type", method="wilcoxon", pts=True, n_genes=data.n_vars
+        )
+        ranked = pd.concat(
+            [
+                sc.get.rank_genes_groups_df(data, group=label).assign(cell_type=label)
+                for label in labels
+            ]
+        ).rename(columns={"names": "gene"})
+        pts_in = data.uns["rank_genes_groups"]["pts"]
+        pts_out = data.uns["rank_genes_groups"]["pts_rest"]
+        ranked["pct_in"] = [
+            pts_in.loc[g, c] for g, c in zip(ranked["gene"], ranked["cell_type"], strict=True)
         ]
-    ).rename(columns={"names": "gene"})
-    pts_in = data.uns["rank_genes_groups"]["pts"]
-    pts_out = data.uns["rank_genes_groups"]["pts_rest"]
-    ranked["pct_in"] = [
-        pts_in.loc[g, c] for g, c in zip(ranked["gene"], ranked["cell_type"], strict=True)
-    ]
-    ranked["pct_out"] = [
-        pts_out.loc[g, c] for g, c in zip(ranked["gene"], ranked["cell_type"], strict=True)
-    ]
-
-    ranked.to_csv(run_dir / "ranked.tsv.gz", sep="\t", index=False)
-
-    # Positives: top scores that are enriched and significant, barred genes excluded -------
-    positives = {
-        label: ranked[
-            (ranked["cell_type"] == label)
-            & (ranked["pvals_adj"] < FDR)
-            & (ranked["logfoldchanges"] > 0)
-            & ~ranked["gene"].str.match(BARRED_GENES)
-            & ~ranked["gene"].isin(BARRED_LIST)
+        ranked["pct_out"] = [
+            pts_out.loc[g, c] for g, c in zip(ranked["gene"], ranked["cell_type"], strict=True)
         ]
-        .sort_values("scores", ascending=False)["gene"]
-        .head(N_POSITIVE)
-        .tolist()
-        for label in labels
-    }
+        ranked.to_csv(run_dir / "ranked.tsv.gz", sep="\t", index=False)
+    pts_in = ranked.pivot(index="gene", columns="cell_type", values="pct_in")
 
-    # Siblings: same AIFI_L1 group, the two with the most similar mean profile --------------
+    # Positives (one-versus-rest): top scores that are enriched and significant ------------
+    def pick_positives(table, label):
+        return (
+            table[
+                (table["pvals_adj"] < fdr)
+                & (table["logfoldchanges"] > min_logfc)
+                & (pts_in.loc[table["gene"], label].to_numpy() >= min_pct_in)
+                & ~table["gene"].str.match(barred_pattern)
+                & ~table["gene"].isin(barred_list)
+            ]
+            .sort_values("scores", ascending=False)["gene"]
+            .head(n_positive)
+            .tolist()
+        )
+
+    by_label = {label: rows for label, rows in ranked.groupby("cell_type")}
+    positives = {label: pick_positives(by_label[label], label) for label in labels}
+
+    # Siblings: same AIFI_L1 group, the nearest by mean profile over the positives ----------
     union = sorted({g for genes in positives.values() for g in genes})
     means = pd.DataFrame(
         {
@@ -157,28 +226,66 @@ def main():
     )
     similarity = means.corr()
     group = sampled.groupby("cell_type")["AIFI_L1"].agg(lambda s: s.value_counts().index[0])
-    sibling_rows, negatives = [], {}
+    nearest = {}
     for label in labels:
         peers = [p for p in labels if p != label and group[p] == group[label]]
         # a label alone in its group takes the nearest labels anywhere (amendment 5)
         peers = peers or [p for p in labels if p != label]
-        nearest = (
+        nearest[label] = (
             similarity.loc[label, peers]
             .sort_values(ascending=False)
-            .head(N_SIBLINGS)
+            .head(n_siblings)
             .index.tolist()
         )
-        # sibling positives, once each, absent from the label, rare inside the label
-        candidates = dict.fromkeys(g for sib in nearest for g in positives[sib])
+    pd.DataFrame(
+        [(label, group[label], ";".join(nearest[label])) for label in labels],
+        columns=["cell_type", "aifi_l1", "nearest_siblings"],
+    ).to_csv(run_dir / "siblings.tsv", sep="\t", index=False)
+
+    # Candidate contrast: positives ranked against the nearest siblings only ----------------
+    contrast = {}
+    if params["ranking_contrast"] == "vs_siblings":
+        for label in labels:
+            sub = data[data.obs["cell_type"].isin([label, *nearest[label]])].copy()
+            sub.obs["arm"] = np.where(sub.obs["cell_type"] == label, "label", "siblings")
+            sc.tl.rank_genes_groups(
+                sub,
+                "arm",
+                groups=["label"],
+                reference="siblings",
+                method="wilcoxon",
+                n_genes=sub.n_vars,
+            )
+            contrast[label] = sc.get.rank_genes_groups_df(sub, group="label").rename(
+                columns={"names": "gene"}
+            )
+        pd.concat([t.assign(cell_type=label) for label, t in contrast.items()]).to_csv(
+            run_dir / "ranked_vs_siblings.tsv.gz", sep="\t", index=False
+        )
+        positives = {label: pick_positives(contrast[label], label) for label in labels}
+
+    # Negatives: absent from the label, rare inside it, at most n_negative -----------------
+    negatives = {}
+    for label in labels:
+        if params["negative_source"] == "sibling_contrast":
+            # genes the siblings express above the label, strongest first
+            table = contrast[label]
+            candidates = table[
+                (table["pvals_adj"] < fdr)
+                & (table["logfoldchanges"] < 0)
+                & ~table["gene"].str.match(barred_pattern)
+                & ~table["gene"].isin(barred_list)
+            ].sort_values("scores")["gene"]
+        else:
+            # sibling positives, once each
+            candidates = pd.Series(
+                list(dict.fromkeys(g for sib in nearest[label] for g in positives[sib]))
+            )
         negatives[label] = [
             g
             for g in candidates
-            if g not in positives[label] and pts_in.loc[g, label] < MAX_OWN_DETECTION
-        ][:N_NEGATIVE]
-        sibling_rows.append((label, group[label], ";".join(nearest)))
-    pd.DataFrame(sibling_rows, columns=["cell_type", "aifi_l1", "nearest_siblings"]).to_csv(
-        run_dir / "siblings.tsv", sep="\t", index=False
-    )
+            if g not in positives[label] and pts_in.loc[g, label] < max_own
+        ][:n_negative]
 
     # Tables and records --------------------------------------------------------------
     roles = pd.concat(
@@ -201,7 +308,7 @@ def main():
             .groupby(level=0)
             .mean()
         )
-        agrees = per_donor > out if role == "positive" else per_donor < MAX_OWN_DETECTION
+        agrees = per_donor > out if role == "positive" else per_donor < max_own
         support.append(agrees.mean())
     roles["donor_support"] = support
     roles.to_csv(run_dir / "markers.tsv", sep="\t", index=False)
@@ -209,16 +316,22 @@ def main():
     counts = sampled.groupby("cell_type").agg(
         cells=("donor_id", "size"), donors=("donor_id", "nunique")
     )
+    contrast_text = " against the nearest siblings" if contrast else ""
+    negative_text = (
+        "genes the nearest siblings express above this label"
+        if params["negative_source"] == "sibling_contrast"
+        else "positives of the nearest siblings"
+    )
     records = [
         {
             "source_record_id": ids[name].replace(":", "_"),
             "name": STATE_RECORDS.get(name, (name,))[0],
             "source_label": name,
             "description": (
-                f"Human Immune Health Atlas cell type {name} ({ids[name]}). Positives: top {N_POSITIVE} "
-                f"genes by Wilcoxon score at FDR {FDR} from {counts.loc[name, 'cells']} cells of "
-                f"{counts.loc[name, 'donors']} corpus donors. Negatives: positives of the nearest "
-                f"siblings in {group[name]} that are not this label's positives."
+                f"Human Immune Health Atlas cell type {name} ({ids[name]}). Positives: top {n_positive} "
+                f"genes by Wilcoxon score{contrast_text} at FDR {fdr} from {counts.loc[name, 'cells']} "
+                f"cells of {counts.loc[name, 'donors']} corpus donors. Negatives: {negative_text} "
+                f"in {group[name]} that are not this label's positives."
             ),
             "positive": positives[name],
             "negative": negatives[name],

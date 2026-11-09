@@ -1,7 +1,7 @@
 #!/bin/bash
 # Protocol v8: learn the corpus proposal from the Human Immune Health Atlas.
 #
-# Run:     sbatch benchmarks/scripts/learn_corpus_v8.sbatch RUN_DIR   (RUN_DIR must not exist)
+# Run:     sbatch benchmarks/scripts/learn_corpus_v8.sbatch RUN_DIR [learn_corpus_v8.py options]
 # Inputs:  see learn_corpus_v8.py
 # Outputs: RUN_DIR/ (see learn_corpus_v8.py)
 #
@@ -14,4 +14,4 @@
 
 set -euo pipefail
 cd /exports/para-lipg-hpc/mdmanurung/cell-curator
-.venv/bin/python benchmarks/scripts/learn_corpus_v8.py "$1"
+.venv/bin/python benchmarks/scripts/learn_corpus_v8.py "$@"
