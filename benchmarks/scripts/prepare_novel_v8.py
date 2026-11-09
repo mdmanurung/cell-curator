@@ -79,6 +79,7 @@ def main():
 
     # HVG on raw counts, then log1p CP10k over all genes, scale the HVGs, PCA -----------
     sc.pp.highly_variable_genes(data, flavor="seurat_v3", n_top_genes=N_HVG)
+    data.layers["counts"] = data.X.copy()  # the package's detection reads counts, as v6
     sc.pp.normalize_total(data, target_sum=1e4)
     sc.pp.log1p(data)
     hvg = data[:, data.var["highly_variable"]].copy()
@@ -95,9 +96,14 @@ def main():
     data.obs[["cell_type", "cell_type_ontology_term_id"]].rename_axis(
         "barcode"
     ).reset_index().to_csv(run_dir / "scoring" / "truth.tsv", sep="\t", index=False)
-    keep = [c for c in ("donor_id", "tissue", "assay", "bench_cluster") if c in data.obs]
+    data.obs["annotation_scope"] = "ROOT"  # one scope; the package config needs the key
+    keep = ["donor_id", "sex", "tissue", "assay", "bench_cluster", "annotation_scope"]
     out = ad.AnnData(
-        X=data.X, obs=data.obs[keep].copy(), var=data.var[["gene"]], obsm=data.obsm
+        X=data.X,
+        obs=data.obs[keep].copy(),
+        var=data.var[["gene"]],
+        obsm=data.obsm,
+        layers={"counts": data.layers["counts"]},
     )
     out.write_h5ad(run_dir / "input.h5ad")
     (
