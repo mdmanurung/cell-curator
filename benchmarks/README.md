@@ -601,6 +601,61 @@ Artifacts: `results/aida-pbmc-v14.cell-curator[.split-B].json`, the strict and
 descendant sweeps beside them, and `results/predictions.aida-pbmc-v14[.split-B].tsv`
 with its receipt.
 
+## Protocol v8: an AIFI corpus, tested on Tabula Sapiens immune cells
+
+**Declared 2026-11-09, before any v8 run.** Every row below was chosen by the user on
+2026-11-09; the working record is `plans/benchmark-protocol-v8-draft.md`. v8 is
+separate from the v7 draft. It changes the knowledge source, the test data and the
+comparator training at once, so a difference from v6 cannot be put down to one change.
+
+**Data.** Corpus source: Allen Institute Sound Life atlas, CELLxGENE collection
+`e9360edf-b0b7-4e01-bce8-e596814f13e7` (8 datasets, 13,789,548 cells, blood, 38 Cell
+Ontology terms used as shipped; doi 10.1038/s41586-025-09686-5). Query: Tabula Sapiens
+- Immune, dataset `c5d88abe-f23a-45fa-a534-788985e93dad` (592,317 cells, 24 donors),
+kept to blood, spleen and lymph node, 10x assays only. Truth is `cell_ontology_class`.
+Counts come from the CELLxGENE API on 2026-11-09, not from the files.
+
+**Corpus learning.** Cell-level Wilcoxon on a capped sample: 100 cells per donor per
+label, seed 1. Each label gets its top 10 positive and 5 negative markers at FDR 0.05.
+Records are reviewed one by one by the user in chat (`AGENTS.md`, gate 3) before the
+run; the reviewed corpus sha256 is added here before any v8 run.
+
+**Query preparation.** Preprocessing as v6: log1p of counts per 10,000 over all genes,
+then PCA (inherited, user confirmed). 2000 highly variable genes, 50 PCs, 15
+neighbours, no batch correction, one Leiden run at resolution 1.0, seed 0.
+
+**Isolation.** `check_test_isolation` stays a hard failure on named donors. A
+study-level comparison of AIFI and Tabula Sapiens donors runs before the run and
+only warns.
+
+**Comparators.** CellTypist, SingleR, scANVI and popV, retrained on the same AIFI
+corpus and donors. Pretrained models are not part of the primary comparison.
+
+**Scoring and stop rules.** As v6: exact, relaxed and descendant agreement through the
+Cell Ontology, risk-coverage, and the four stop rules (harness invalid, not
+comparable below descendant 0.60, dominated, blocked). Truth labels outside the 38
+corpus terms form a separate stratum; abstention scores correct there. If a
+comparator cannot abstain, that stratum is reported for cell-curator alone.
+
+**Setting.** `knowledge.network: offline`, LLM evidence off. Gate A stays the user's.
+
+**Development split.** Method changes made during the tusoskill iterations (50, no
+early stop) are scored only on AIFI donors held out from the corpus: 20% of donors,
+whole donors, stratified by age group, sex and CMV status. Tabula Sapiens is read once,
+after the freeze commit and the final method lock. Any change found on the dev split is
+a new row the user approves.
+
+**Predicted effect, stated before measuring.** None. The result is reported either
+way. v6 failed two stop rules, and nothing here predicts v8 will pass them.
+
+**Values with no source checked.** The 100-cell cap, the 10 and 5 marker counts,
+resolution 1.0, and the 2000, 50 and 15 clustering values are conventions the user
+chose, not measured optima.
+
+**Open until recorded here, before any run.** Reviewed corpus sha256; dev split file
+sha256; donors per label; the AIFI and Tabula Sapiens overlap result; Slurm node and
+wall-clock cap; whether each comparator can abstain.
+
 ## Why the pre-declared evidence bar is not met, measured rather than guessed
 
 Two runs, differing only in measured panel width. Both label one cluster of 28.
