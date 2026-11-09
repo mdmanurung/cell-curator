@@ -1,16 +1,17 @@
-# Purpose: fetch the protocol v8 data and write the pre-run tables (donor overlap,
-#          donors per label, Tabula Sapiens subset counts). No corpus is learned here.
-# Run:     sbatch benchmarks/scripts/acquire_v8.sbatch   (writes to a new RUN_DIR)
-# Inputs:  CELLxGENE curation API, collections e9360edf-... (AIFI) and e5f58829-... (TS)
-# Outputs: RUN_DIR/downloads/*.h5ad            the 8 AIFI files and the TS Immune file
-#          RUN_DIR/downloads.tsv               dataset_id, file, bytes, sha256
-#          RUN_DIR/aifi_donors_per_label.tsv   donors and cells per CL term
-#          RUN_DIR/aifi_donor_attributes.tsv   one row per donor: age group, sex, CMV
-#          RUN_DIR/ts_subset_counts.tsv        cells and donors per tissue and assay
-#          RUN_DIR/donor_overlap.tsv           AIFI vs TS donor IDs shared
+# Purpose: fetch the protocol v8 data (amendment 1) and write the pre-run tables:
+#          one long obs summary per source and the donor overlap between sources.
+#          No corpus is learned here.
+# Run:     sbatch benchmarks/scripts/acquire_v8.sbatch RUN_DIR   (RUN_DIR must not exist)
+# Inputs:  CELLxGENE curation API, collections named in SOURCES below
+# Outputs: RUN_DIR/downloads/<dataset_id>.h5ad   every dataset in SOURCES
+#          RUN_DIR/downloads.tsv                 source, dataset_id, file, bytes, sha256
+#          RUN_DIR/obs_summary_<source>.tsv      cells per donor, cell type, tissue, assay,
+#                                                sex, development stage, disease
+#          RUN_DIR/donor_overlap.tsv             donor IDs shared by each pair of sources
 #          RUN_DIR/versions.txt
 
 import hashlib
+import itertools
 import json
 import subprocess
 import sys
@@ -21,12 +22,37 @@ import anndata as ad
 import pandas as pd
 
 # Parameters -----------------------------------------------------------------------
-AIFI_COLLECTION = "e9360edf-b0b7-4e01-bce8-e596814f13e7"  # protocol v8, Q2
-TS_COLLECTION = "e5f58829-1a66-40b5-a624-9046778e74f5"
-TS_DATASET = "c5d88abe-f23a-45fa-a534-788985e93dad"  # TS Immune, protocol v8, Q3
-TS_TISSUES = ["blood", "spleen", "lymph node", "inguinal lymph node", "mesenteric lymph node"]
-TS_ASSAYS = ["10x 3' v3", "10x 5' v2"]  # 10x only, protocol v8, Q3
 API = "https://api.cellxgene.cziscience.com/curation/v1/collections/"
+# source -> (collection id, which of its datasets), protocol v8 and amendment 1
+SOURCES = {
+    "sound_life": ("e9360edf-b0b7-4e01-bce8-e596814f13e7", lambda d: True),
+    "hiha": (
+        "77f9d7e9-5675-49c3-abed-ce02f39eef1b",
+        lambda d: d["title"] == "Human Immune Health Atlas",
+    ),
+    "ts": (
+        "e5f58829-1a66-40b5-a624-9046778e74f5",
+        lambda d: d["dataset_id"] == "c5d88abe-f23a-45fa-a534-788985e93dad",
+    ),
+    "indonesia": (
+        "d1e0e64d-6d2a-4a3e-b7f4-43ed909a9d9c",
+        lambda d: d["title"].startswith("All cells"),
+    ),
+    "cross_tissue": (
+        "62ef75e4-cbea-454e-a0ce-998ec40223d3",
+        lambda d: d["title"] == "Global",
+    ),
+}
+EXPECTED_DATASETS = {"sound_life": 8, "hiha": 1, "ts": 1, "indonesia": 1, "cross_tissue": 1}
+OBS_COLUMNS = [
+    "donor_id",
+    "cell_type",
+    "tissue",
+    "assay",
+    "sex",
+    "development_stage",
+    "disease",
+]
 
 
 # Helpers (called 3+ times) --------------------------------------------------------
@@ -43,75 +69,63 @@ def main():
     run_dir.mkdir(parents=True, exist_ok=False)  # a run dir is never overwritten
     (run_dir / "downloads").mkdir()
 
-    # Asset URLs --------------------------------------------------------------------
-    aifi = json.load(urllib.request.urlopen(API + AIFI_COLLECTION, timeout=60))["datasets"]
-    ts = json.load(urllib.request.urlopen(API + TS_COLLECTION, timeout=60))["datasets"]
-    wanted = aifi + [d for d in ts if d["dataset_id"] == TS_DATASET]
-    if len(wanted) != 9:
-        raise ValueError(f"expected 8 AIFI + 1 TS datasets, found {len(wanted)}")
+    # Pick the datasets and check how many each source gives -------------------------
+    chosen = {}
+    for source, (collection, keep) in SOURCES.items():
+        datasets = json.load(urllib.request.urlopen(API + collection, timeout=60))["datasets"]
+        chosen[source] = [d for d in datasets if keep(d)]
+        if len(chosen[source]) != EXPECTED_DATASETS[source]:
+            raise ValueError(f"{source}: expected {EXPECTED_DATASETS[source]} datasets")
 
-    # Download (resumable) and hash -------------------------------------------------
+    # Download (resumable), check size, hash ------------------------------------------
     rows = []
-    for dataset in wanted:
-        asset = next(a for a in dataset["assets"] if a["filetype"] == "H5AD")
-        path = run_dir / "downloads" / f"{dataset['dataset_id']}.h5ad"
-        subprocess.run(["curl", "-fL", "-C", "-", "-o", str(path), asset["url"]], check=True)
-        if path.stat().st_size != asset["filesize"]:
-            raise ValueError(f"{path.name}: size {path.stat().st_size} != {asset['filesize']}")
-        rows.append((dataset["dataset_id"], path.name, path.stat().st_size, sha256(path)))
-    pd.DataFrame(rows, columns=["dataset_id", "file", "bytes", "sha256"]).to_csv(
+    for source, datasets in chosen.items():
+        for dataset in datasets:
+            asset = next(a for a in dataset["assets"] if a["filetype"] == "H5AD")
+            path = run_dir / "downloads" / f"{dataset['dataset_id']}.h5ad"
+            subprocess.run(
+                ["curl", "-fL", "-C", "-", "-o", str(path), asset["url"]], check=True
+            )
+            if path.stat().st_size != asset["filesize"]:
+                raise ValueError(
+                    f"{path.name}: size {path.stat().st_size} != {asset['filesize']}"
+                )
+            rows.append(
+                (source, dataset["dataset_id"], path.name, path.stat().st_size, sha256(path))
+            )
+    pd.DataFrame(rows, columns=["source", "dataset_id", "file", "bytes", "sha256"]).to_csv(
         run_dir / "downloads.tsv", sep="\t", index=False
     )
 
-    # Read obs only (backed) --------------------------------------------------------
-    aifi_obs = pd.concat(
-        [
-            ad.read_h5ad(
-                run_dir / "downloads" / f"{d['dataset_id']}.h5ad", backed="r"
-            ).obs.assign(dataset_id=d["dataset_id"])
-            for d in aifi
-        ]
-    )
-    ts_obs = ad.read_h5ad(run_dir / "downloads" / f"{TS_DATASET}.h5ad", backed="r").obs
-
-    # AIFI donors per CL term (decides whether Q7 and Q11 leave enough donors) ------
-    (
-        aifi_obs.groupby("cell_type", observed=True)
-        .agg(donors=("donor_id", "nunique"), cells=("donor_id", "size"))
-        .reset_index()
-        .to_csv(run_dir / "aifi_donors_per_label.tsv", sep="\t", index=False)
-    )
-
-    # One row per AIFI donor: the strata for the 20% dev split (protocol v8, Q21) ----
-    (
-        aifi_obs.groupby("donor_id", observed=True)
-        .agg(
-            dataset_id=("dataset_id", "first"),
-            sex=("sex", "first"),
-            development_stage=("development_stage", "first"),
-            disease=("disease", "first"),
-            cells=("donor_id", "size"),
+    # One long obs summary per source, read from obs only (backed) --------------------
+    donors = {}
+    for source, datasets in chosen.items():
+        # sex and age labels differ between studies, so keep them as stored
+        summary = pd.concat(
+            [
+                ad.read_h5ad(run_dir / "downloads" / f"{d['dataset_id']}.h5ad", backed="r")
+                .obs[OBS_COLUMNS]
+                .astype(str)
+                .value_counts()
+                .rename("cells")
+                .reset_index()
+                .assign(dataset_id=d["dataset_id"])
+                for d in datasets
+            ]
         )
-        .reset_index()
-        .to_csv(run_dir / "aifi_donor_attributes.tsv", sep="\t", index=False)
-    )
+        summary.to_csv(run_dir / f"obs_summary_{source}.tsv", sep="\t", index=False)
+        donors[source] = set(summary["donor_id"])
 
-    # TS subset: what survives the tissue and assay filter ----------------------------
-    ts_kept = ts_obs[ts_obs["tissue"].isin(TS_TISSUES) & ts_obs["assay"].isin(TS_ASSAYS)]
-    (
-        ts_kept.groupby(["tissue", "assay"], observed=True)
-        .agg(cells=("donor_id", "size"), donors=("donor_id", "nunique"))
-        .reset_index()
-        .to_csv(run_dir / "ts_subset_counts.tsv", sep="\t", index=False)
-    )
+    # Donor overlap between every pair of sources (warns only for novel sets, Q5) -------
+    pd.DataFrame(
+        [
+            (a, b, len(donors[a] & donors[b]), ";".join(sorted(donors[a] & donors[b])[:20]))
+            for a, b in itertools.combinations(donors, 2)
+        ],
+        columns=["source_a", "source_b", "shared_donor_ids", "first_20_ids"],
+    ).to_csv(run_dir / "donor_overlap.tsv", sep="\t", index=False)
 
-    # Donor overlap: IDs shared between the two studies (warns only, protocol v8, Q5) --
-    shared = sorted(set(aifi_obs["donor_id"].astype(str)) & set(ts_obs["donor_id"].astype(str)))
-    pd.DataFrame({"shared_donor_id": shared}).to_csv(
-        run_dir / "donor_overlap.tsv", sep="\t", index=False
-    )
-
-    # Versions ----------------------------------------------------------------------
+    # Versions -----------------------------------------------------------------------
     (run_dir / "versions.txt").write_text(f"python {sys.version}\nanndata {ad.__version__}\n")
 
 
