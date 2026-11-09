@@ -6,6 +6,7 @@
 # Inputs:  the atlas h5ad            from acquire_v8.py (dataset e522d2cd-...)
 #          donor_split.tsv           benchmarks/data/aifi-hiha-dev-split/
 # Outputs: RUN_DIR/sampled_cells.tsv   one row per sampled cell: barcode, donor, label
+#          RUN_DIR/ranked.tsv.gz       the full Wilcoxon table, every label and gene
 #          RUN_DIR/markers.tsv         one row per label and gene: role, score, log fold
 #                                      change, FDR, detection inside and outside the label
 #          RUN_DIR/siblings.tsv        each label's AIFI_L1 group and its two nearest siblings
@@ -36,6 +37,8 @@ N_POSITIVE = 10  # protocol v8, Q12
 N_NEGATIVE = 5  # protocol v8, Q12
 FDR = 0.05  # BH over genes within each label, protocol v8, Q12 and the FDR-family row
 N_SIBLINGS = 2  # v5 rule: the two nearest siblings in the same broad group
+BARRED_GENES = r"^(RPL|RPS|MT-)"  # ribosomal and mitochondrial genes, amendment 5
+MAX_OWN_DETECTION = 0.2  # a negative is detected in under 20% of the label, amendment 5
 CONTEXT = {
     "species": "human",
     "tissue": "blood",
@@ -110,12 +113,15 @@ def main():
         pts_out.loc[g, c] for g, c in zip(ranked["gene"], ranked["cell_type"], strict=True)
     ]
 
-    # Positives: top scores that are enriched and significant -----------------------------
+    ranked.to_csv(run_dir / "ranked.tsv.gz", sep="\t", index=False)
+
+    # Positives: top scores that are enriched and significant, barred genes excluded -------
     positives = {
         label: ranked[
             (ranked["cell_type"] == label)
             & (ranked["pvals_adj"] < FDR)
             & (ranked["logfoldchanges"] > 0)
+            & ~ranked["gene"].str.match(BARRED_GENES)
         ]
         .sort_values("scores", ascending=False)["gene"]
         .head(N_POSITIVE)
@@ -137,14 +143,20 @@ def main():
     sibling_rows, negatives = [], {}
     for label in labels:
         peers = [p for p in labels if p != label and group[p] == group[label]]
+        # a label alone in its group takes the nearest labels anywhere (amendment 5)
+        peers = peers or [p for p in labels if p != label]
         nearest = (
             similarity.loc[label, peers]
             .sort_values(ascending=False)
             .head(N_SIBLINGS)
             .index.tolist()
         )
+        # sibling positives, once each, absent from the label, rare inside the label
+        candidates = dict.fromkeys(g for sib in nearest for g in positives[sib])
         negatives[label] = [
-            g for sib in nearest for g in positives[sib] if g not in positives[label]
+            g
+            for g in candidates
+            if g not in positives[label] and pts_in.loc[g, label] < MAX_OWN_DETECTION
         ][:N_NEGATIVE]
         sibling_rows.append((label, group[label], ";".join(nearest)))
     pd.DataFrame(sibling_rows, columns=["cell_type", "aifi_l1", "nearest_siblings"]).to_csv(
@@ -161,6 +173,20 @@ def main():
             for role, genes in (("positive", positives[label]), ("negative", negatives[label]))
         ]
     )
+    # per-donor support: share of donors whose label cells agree with the marker's role
+    support = []
+    for label, gene, role, out in roles[["cell_type", "gene", "role", "pct_out"]].itertuples(
+        index=False
+    ):
+        cells = data[data.obs["cell_type"] == label, gene]
+        per_donor = (
+            pd.Series(np.asarray(cells.X.toarray()).ravel() > 0, index=cells.obs["donor_id"])
+            .groupby(level=0)
+            .mean()
+        )
+        agrees = per_donor > out if role == "positive" else per_donor < MAX_OWN_DETECTION
+        support.append(agrees.mean())
+    roles["donor_support"] = support
     roles.to_csv(run_dir / "markers.tsv", sep="\t", index=False)
     ids = sampled.groupby("cell_type")["cell_type_ontology_term_id"].first()
     counts = sampled.groupby("cell_type").agg(
