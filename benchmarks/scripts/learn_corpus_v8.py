@@ -38,6 +38,22 @@ N_NEGATIVE = 5  # protocol v8, Q12
 FDR = 0.05  # BH over genes within each label, protocol v8, Q12 and the FDR-family row
 N_SIBLINGS = 2  # v5 rule: the two nearest siblings in the same broad group
 BARRED_GENES = r"^(RPL|RPS|MT-)"  # ribosomal and mitochondrial genes, amendment 5
+# housekeeping genes barred as markers (user, 2026-11-09, amendment 6)
+BARRED_LIST = [
+    "ACTB", "ACTG1", "B2M", "CFL1", "EEF1A1", "EEF1B2", "EEF1D", "EEF1G", "EEF2", "FTH1",
+    "FTL", "GAPDH", "H2AZ2", "H3-3A", "HMGB1", "HMGB2", "HMGN2", "HNRNPA1", "HSP90AB1",
+    "MYL6", "NPM1", "OAZ1", "PFN1", "PPIA", "RACK1", "TAGLN2", "TMSB10", "TMSB4X", "TPT1",
+    "UBA52", "UBB", "UBC",
+]  # fmt: skip
+# atlas CL terms that hold one AIFI L3 state; mapping approved by the user (amendment 6)
+STATE_RECORDS = {
+    "T cell": ("cycling T cell", "CL:4033069", "exact"),  # AIFI L3 Proliferating T cell
+    "CD8-positive, alpha-beta memory T cell": (
+        "ISG+ memory CD8 T cell",
+        "CL:0000909",
+        "narrower",
+    ),  # AIFI L3 ISG+ memory CD8 T cell
+}
 MAX_OWN_DETECTION = 0.2  # a negative is detected in under 20% of the label, amendment 5
 CONTEXT = {
     "species": "human",
@@ -122,6 +138,7 @@ def main():
             & (ranked["pvals_adj"] < FDR)
             & (ranked["logfoldchanges"] > 0)
             & ~ranked["gene"].str.match(BARRED_GENES)
+            & ~ranked["gene"].isin(BARRED_LIST)
         ]
         .sort_values("scores", ascending=False)["gene"]
         .head(N_POSITIVE)
@@ -195,7 +212,7 @@ def main():
     records = [
         {
             "source_record_id": ids[name].replace(":", "_"),
-            "name": name,
+            "name": STATE_RECORDS.get(name, (name,))[0],
             "source_label": name,
             "description": (
                 f"Human Immune Health Atlas cell type {name} ({ids[name]}). Positives: top {N_POSITIVE} "
@@ -205,8 +222,9 @@ def main():
             ),
             "positive": positives[name],
             "negative": negatives[name],
-            "cl_id": ids[name],
-            "ontology_relation": "exact",  # the ontology check runs at export
+            "cl_id": STATE_RECORDS[name][1] if name in STATE_RECORDS else ids[name],
+            # the ontology check runs at export
+            "ontology_relation": STATE_RECORDS[name][2] if name in STATE_RECORDS else "exact",
             "canonical_level": "L1",
             "source_level": "CL term",
         }
