@@ -780,6 +780,17 @@ memory B cell, CD8-positive alpha-beta regulatory T cell, memory regulatory T ce
 names its 88 corpus donors in `derived_from`; `cell-curator corpus check-isolation`
 against the dev split returns `isolated`.
 
+### Protocol v8: corpus revision v8-r3 (recorded 2026-11-09, before iteration 1)
+
+The package excluded every record from the AIDA run because each carried the assay scope
+`10x 3' v3`. The user chose an assay-invariant corpus and kept the blood tissue scope
+(OK in chat, reviewer Mikhael Manurung). The assay scope is dropped from the 34 accepted
+records, and the 3'-only training is written into each record's limitations. Markers are
+unchanged. Consequence, stated before any run: outside blood (Tabula Sapiens spleen and
+lymph node, most of Cross-tissue) the package selects no record and abstains.
+`benchmarks/data/v8-corpus/reviewed_v3.json`, sha256
+`fdb47c46c4dfdf38ef3e4e59030d4971647a30318a569e67ab6ff9b067f6cf6c`.
+
 ## Why the pre-declared evidence bar is not met, measured rather than guessed
 
 Two runs, differing only in measured panel width. Both label one cluster of 28.

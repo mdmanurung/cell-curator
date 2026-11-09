@@ -14,7 +14,7 @@
 schema_version: 3
 
 run:
-  run_id: v8-dev-aida-split-a-001
+  run_id: v8-dev-aida-split-a-002
   output_root: /exports/para-lipg-hpc/mdmanurung/cc-v8-work/runs
   mode: annotation
 
@@ -22,9 +22,9 @@ knowledge:
   providers:
     - kind: corpus
       # reviewed by Mikhael Manurung 2026-11-09: 34 accepted, 4 disputed (gate 3)
-      path: /exports/para-lipg-hpc/mdmanurung/cell-curator/benchmarks/data/v8-corpus/reviewed_v2.json
-      version: v8-r2
-      sha256: "d8f4e673766e44ec89b9b9d79887a2994108de6d0fc4fe34912b1c4f444a4ee5"
+      path: /exports/para-lipg-hpc/mdmanurung/cell-curator/benchmarks/data/v8-corpus/reviewed_v3.json
+      version: v8-r3
+      sha256: "fdb47c46c4dfdf38ef3e4e59030d4971647a30318a569e67ab6ff9b067f6cf6c"
     - kind: ontology
       path: /exports/para-lipg-hpc/mdmanurung/cell-curator/benchmarks/data/aida-phase1-v2-pbmc-hvg2000/cl.obo
       version: releases/2026-06-08
@@ -51,7 +51,7 @@ input:
       kind: rna
       feature_space: gene
       feature_id_column: ""  # var_names are the unique symbols
-      gene_mapping_path: ""
+      gene_mapping_path: /exports/para-lipg-hpc/mdmanurung/cc-v8-work/prep-aida_split_a-2026-11-09/gene_map.tsv
       capabilities:
         - identity
         - subtype
