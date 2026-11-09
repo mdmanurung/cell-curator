@@ -656,6 +656,31 @@ chose, not measured optima.
 sha256; donors per label; the AIFI and Tabula Sapiens overlap result; Slurm node and
 wall-clock cap; whether each comparator can abstain.
 
+### Protocol v8, amendment 1 (declared 2026-11-09, before any v8 run)
+
+Chosen by the user after the v8 declaration. No v8 data has been downloaded or scored.
+
+1. **Corpus source.** Both of: the Human Immune Health Atlas collection
+   `77f9d7e9-5675-49c3-abed-ce02f39eef1b` (main file: 1,821,725 cells, 108 donors, 38
+   Cell Ontology terms, 11.5 GB) and the Sound Life collection above. This replaces
+   "Sound Life only". The declaration named only Sound Life, although the atlas page the
+   user linked is the other collection. How the two share donors is not yet checked.
+2. **Extra novel datasets.** Indonesia PBMC `d1e0e64d-6d2a-4a3e-b7f4-43ed909a9d9c`
+   (462,034 cells, 199 donors, 10x 5' v2, 13 types) and Cross-tissue immune
+   `62ef75e4-cbea-454e-a0ce-998ec40223d3` (329,762 cells, 12 donors, 35 types), beside
+   Tabula Sapiens. Cross-tissue labels were made with CellTypist, which can favor that
+   comparator; it is reported with that note. Counts are from the CELLxGENE API, not
+   the files.
+3. **Pass bar.** The v6 stop rules, applied to every novel dataset: a method passes
+   only if descendant accuracy is at least 0.60 and no comparator dominates it on each
+   set. Consistent means it holds on all of them.
+4. **Loop end.** The 50 tusoskill iterations run on AIFI held-out donors only. Novel
+   datasets are scored once, after the method lock. A failure is reported, and the
+   method is not tuned on a novel dataset.
+5. **Overlap checks added.** Donors in the atlas and Sound Life collections; donors in
+   each novel dataset against both AIFI collections. Warn only for the novel sets
+   (decision Q5).
+
 ## Why the pre-declared evidence bar is not met, measured rather than guessed
 
 Two runs, differing only in measured panel width. Both label one cluster of 28.
