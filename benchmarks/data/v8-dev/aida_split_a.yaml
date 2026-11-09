@@ -1,0 +1,194 @@
+# Package run configuration for AIDA split A, the second protocol v8 development set.
+#
+# Declared in benchmarks/README.md ("Protocol v8", amendment 3 item 3 and amendment 4).
+# DRAFT for the user to review: the corpus path and sha256 are placeholders, and Gate A
+# (assumptions) is the user's. Every setting not named below is copied from the v6 config
+# (data/aida-pbmc-protocol-v6/config.yaml); see the "Open questions" in the hand-off.
+#
+# Changes from v6, each from the v8 protocol:
+#   - input: split A cells only, prepare_aida_dev_v8.py, symbols already unique;
+#   - knowledge: the reviewed AIFI corpus replaces the Azimuth marker file;
+#   - annotation block on (a corpus needs it), with donor isolation;
+#   - knowledge.network offline; no evidence.llm proposals.
+
+schema_version: 3
+
+run:
+  run_id: v8-dev-aida-split-a-001
+  output_root: /exports/para-lipg-hpc/mdmanurung/cc-v8-work/runs
+  mode: annotation
+
+knowledge:
+  providers:
+    - kind: corpus
+      # PLACEHOLDER: the reviewed AIFI corpus. Gate 3 (corpus review) is the user's.
+      path: /exports/para-lipg-hpc/mdmanurung/cc-v8-work/corpus/REVIEWED_CORPUS.json
+      version: PLACEHOLDER-reviewed-corpus
+      sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+    - kind: ontology
+      path: /exports/para-lipg-hpc/mdmanurung/cell-curator/benchmarks/data/aida-phase1-v2-pbmc-hvg2000/cl.obo
+      version: releases/2026-06-08
+  network: offline
+
+annotation:
+  enabled: true
+  assay: transcriptome
+  representation: lognorm
+  study_id: aida-split-a
+  seed: 0
+  isolation:
+    donor_split: /exports/para-lipg-hpc/mdmanurung/cell-curator/benchmarks/data/aida-pbmc-protocol-v5/donor_split.tsv
+    test_split: A
+    dataset_id: c838aec3-03ef-4398-b882-0e3912abfff0
+
+input:
+  kind: h5ad
+  path: /exports/para-lipg-hpc/mdmanurung/cc-v8-work/prep-aida_split_a-2026-11-09/input.h5ad
+  expected_sha256: ""  # fill after the final input is frozen
+  assays:
+    transcriptome:
+      modality: root
+      kind: rna
+      feature_space: gene
+      feature_id_column: ""  # var_names are the unique symbols
+      gene_mapping_path: ""
+      capabilities:
+        - identity
+        - subtype
+        - ontology_markers
+      graph_representations:
+        - source: obsm
+          key: X_pca
+      representations:
+        lognorm:
+          source: X
+          feature_space: gene
+          ranking_backend: scipy_mannwhitney
+          ontology_compatible: true
+          detection:
+            source: layer
+            key: counts
+            required: true
+            semantics: counts > 0
+  keys:
+    canonical_parent: bench_cluster
+    scope: annotation_scope
+    stored_resolutions: []
+    embedding: X_pca
+    spatial: ""
+    donor: donor_id
+    capture: ""
+    doublet_class: ""
+    doublet_score: ""
+    sex: sex
+    batch: ""
+  required_obs_keys: []
+  guide_columns: []
+  technical_metrics: {}
+
+canonical_partitions:
+  ROOT:
+    parent_key: bench_cluster
+    expected_parent_count: 23
+
+adaptive:
+  parent_local:
+    enabled: false
+  outcomes:
+    - ACCEPT SPLIT
+    - RETAIN PARENT
+    - DOUBLET/MIXED
+    - TECHNICAL/UNRESOLVED
+  eligibility:
+    min_cells: 50
+    min_donors: null
+    min_captures: null
+    rare_exceptions_require_approval: true
+  audit:
+    guide_entropy_min: 0.6
+    meaningful_minority_fraction: 0.1
+    doublet_fraction_max: null
+    donor_max_fraction: null
+    capture_max_fraction: null
+    technical_effect_size_max: 0.15
+    technical_metric_robust_z_max: 3.0
+    incompatible_program_fraction_min: 0.15
+    incompatible_program_columns: []
+  stored_candidates:
+    min_parent_purity: 0.9
+    min_parent_fraction: 0.03
+    max_parent_fraction: 0.95
+    adjacent_jaccard_min: 0.8
+    min_adjacent_matches: 1
+
+comparators:
+  roles:
+    - parent_remainder
+    - closest_sibling
+  closest_sibling_strategy: embedding_centroid
+
+review:
+  critic_passes:
+    - biological_coherence
+    - negative_markers_and_alternatives
+    - doublet_and_mixed
+    - technical_confounding
+    - ontology_hierarchy
+  require_reconciliation: true
+  require_explicit_human_approval: true
+  type_and_state_separate: true
+
+markers:
+  rapids_singlecell_version: "9.9.9"
+  rapids_distribution: rapids-singlecell-cu99
+  cuda_major: 99
+  allowed_gpu_contracts: []
+
+evidence:
+  lanes:
+    - assay: transcriptome
+      representation: lognorm
+      required_for_acceptance: true
+  adjusted_pvalue_max: 0.05
+  require_both_marker_methods: true
+  require_both_comparators: true
+  required_candidate_gates:
+    - stability_pass
+    - candidate_vs_parent_remainder_pass
+    - candidate_vs_closest_sibling_pass
+    - positive_program_pass
+    - expected_negative_program_pass
+    - cell_level_separation_pass
+    - source_corroboration_pass
+  min_positive_coverage: 0.5
+  # Protocol v2. See benchmarks/README.md for the derivation: the violation is the
+  # fraction of measured negative markers flagged, and a 0.636 clustering ceiling means
+  # contamination alone flags one marker in three. With three markers per program, 0.5
+  # separates one flag (contamination) from two (contradiction). v1 used 0.2.
+  max_negative_violation: 0.5
+  # Protocol v3: same numbers as v2, now in vote-share units. A call needs 60% of
+  # the cluster's cells to vote for it and a 20-point lead over the runner-up.
+  min_confidence: 0.6
+  min_margin: 0.2
+  max_normalized_entropy: 0.85
+
+guidance:
+  interactive: true
+  preauthorized: false
+  reviewer: ""
+  pause_after_each_level: true
+  assumptions: []  # Gate A: the user writes and approves these
+  hierarchy_levels:
+    - L1
+  context:
+    organism: human
+    tissue: blood
+    developmental_stage: adult
+    condition: healthy
+    technology: dissociated
+    experimental_context: AIDA Phase 1 Data Freeze v2 split A (10x 5' v2), CELLxGENE Census 2025-11-08
+    composition_covariates: []
+    vocabulary_contract: AIFI Human Immune Health Atlas corpus, 38 Cell Ontology terms
+    reference_contract: local_only
+    visualization_key: X_pca
+    writeback_prefix: aida_bench
