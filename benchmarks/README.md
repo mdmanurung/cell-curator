@@ -770,6 +770,16 @@ User choices after the second corpus proposal (`learn-2026-11-09b`, not reviewed
 3. **Negatives.** The under-20% detection rule stays. Records left without negatives are
    flagged by the package (`no_declared_negatives`), not filled.
 
+### Protocol v8: corpus frozen (recorded 2026-11-09, before iteration 1)
+
+Reviewed by Mikhael Manurung in chat on 2026-11-09 from `benchmarks/data/v8-corpus/review_packet_c.md`
+(learn run `learn-2026-11-09c`): 34 records accepted, 4 disputed and not callable (Be cell,
+memory B cell, CD8-positive alpha-beta regulatory T cell, memory regulatory T cell).
+`benchmarks/data/v8-corpus/reviewed_v2.json`, revision `v8-r2`, sha256
+`d8f4e673766e44ec89b9b9d79887a2994108de6d0fc4fe34912b1c4f444a4ee5`. Every accepted record
+names its 88 corpus donors in `derived_from`; `cell-curator corpus check-isolation`
+against the dev split returns `isolated`.
+
 ## Why the pre-declared evidence bar is not met, measured rather than guessed
 
 Two runs, differing only in measured panel width. Both label one cluster of 28.

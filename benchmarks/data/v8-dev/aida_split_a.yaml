@@ -21,10 +21,10 @@ run:
 knowledge:
   providers:
     - kind: corpus
-      # PLACEHOLDER: the reviewed AIFI corpus. Gate 3 (corpus review) is the user's.
-      path: /exports/para-lipg-hpc/mdmanurung/cc-v8-work/corpus/REVIEWED_CORPUS.json
-      version: PLACEHOLDER-reviewed-corpus
-      sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+      # reviewed by Mikhael Manurung 2026-11-09: 34 accepted, 4 disputed (gate 3)
+      path: /exports/para-lipg-hpc/mdmanurung/cell-curator/benchmarks/data/v8-corpus/reviewed_v2.json
+      version: v8-r2
+      sha256: "d8f4e673766e44ec89b9b9d79887a2994108de6d0fc4fe34912b1c4f444a4ee5"
     - kind: ontology
       path: /exports/para-lipg-hpc/mdmanurung/cell-curator/benchmarks/data/aida-phase1-v2-pbmc-hvg2000/cl.obo
       version: releases/2026-06-08
