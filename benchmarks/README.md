@@ -727,6 +727,14 @@ sources checked by PubMed metadata only). The user chose each item. No cell is s
 5. **Diagnostics added to corpus learning, no decision needed.** Per-donor support of
    each marker.
 
+### Protocol v8, amendment 4 (declared 2026-11-09, before iteration 1)
+
+The iteration metric is the mean, over the AIFI dev donors and AIDA split A, of the v6
+`descendant_accuracy` (user choice). Per-set values are recorded beside the mean. The AIFI
+dev donors are clustered by the same recipe as the novel sets
+(`prepare_novel_v8.py aifi_dev`). Benchmark card:
+`/exports/para-lipg-hpc/mdmanurung/tusoskill/cc-v8/benchmark/benchmark_card.md`.
+
 ## Why the pre-declared evidence bar is not met, measured rather than guessed
 
 Two runs, differing only in measured panel width. Both label one cluster of 28.
