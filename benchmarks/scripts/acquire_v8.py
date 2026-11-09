@@ -15,7 +15,6 @@ import itertools
 import json
 import subprocess
 import sys
-import urllib.request
 from pathlib import Path
 
 import anndata as ad
@@ -72,7 +71,14 @@ def main():
     # Pick the datasets and check how many each source gives -------------------------
     chosen = {}
     for source, (collection, keep) in SOURCES.items():
-        datasets = json.load(urllib.request.urlopen(API + collection, timeout=60))["datasets"]
+        # curl, because the uv Python on compute nodes has no CA bundle for urllib
+        reply = subprocess.run(
+            ["curl", "-fsSL", "--max-time", "60", API + collection],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+        datasets = json.loads(reply)["datasets"]
         chosen[source] = [d for d in datasets if keep(d)]
         if len(chosen[source]) != EXPECTED_DATASETS[source]:
             raise ValueError(f"{source}: expected {EXPECTED_DATASETS[source]} datasets")
