@@ -10,7 +10,8 @@ Inputs:
                  cell_type_ontology_term_id (100 cells per donor and label, seed 1)
 Outputs (TRAIN_DIR, must not exist):
     train.h5ad     X = log1p CP10k over all genes, layers["counts"], obs donor_id,
-                   cell_type, cell_type_ontology_term_id; var_names = unique gene symbols
+                   cell_type, cell_type_ontology_term_id (after the RELABEL swaps);
+                   var_names = unique gene symbols
     label_map.tsv  label, cl_id: every training label with its Cell Ontology id
 """
 
@@ -24,6 +25,12 @@ ATLAS_H5AD = Path(
     "e522d2cd-7927-4e59-a4ed-064009569279.h5ad"
 )
 TARGET_SUM = 1e4  # log1p CP10k, as the query inputs and v6 (CellTypist needs it too)
+# Amendment 6, item 2 (user-approved): the two atlas state terms get the names and ids
+# cell-curator's records use, so every method learns the same vocabulary.
+RELABEL = {  # atlas cell_type: (training label, Cell Ontology id)
+    "T cell": ("cycling T cell", "CL:4033069"),
+    "CD8-positive, alpha-beta memory T cell": ("ISG+ memory CD8 T cell", "CL:0000909"),
+}
 
 
 def main():
@@ -45,6 +52,12 @@ def main():
     obs = obs.astype(str)
     if not (obs["cell_type"].to_numpy() == sampled["cell_type"].to_numpy()).all():
         raise ValueError("atlas labels differ from sampled_cells.tsv")
+    if not set(RELABEL) <= set(obs["cell_type"]):
+        raise ValueError("a relabelled atlas term is absent from the sampled cells")
+    obs = obs.copy()
+    for old, (label, cl_id) in RELABEL.items():
+        hit = obs["cell_type"] == old
+        obs.loc[hit, ["cell_type", "cell_type_ontology_term_id"]] = [label, cl_id]
 
     # One symbol per gene: the gene with the most counts keeps a shared symbol ---------------
     counts = atlas.raw.X[rows]

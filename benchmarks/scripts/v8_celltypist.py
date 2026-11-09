@@ -16,6 +16,8 @@ Outputs (OUT_DIR, must not exist):
     majority/cell_predictions.tsv   same, predicted_label = majority-vote label
 """
 
+import os
+
 from v8_common import parse_args
 
 # Parameters -----------------------------------------------------------------------
@@ -27,8 +29,11 @@ FEATURE_SELECTION = True
 TOP_GENES = 300  # package default, top genes per label kept after the first pass
 BALANCE_CELL_TYPE = False  # package default; the sampling is already capped per donor and label
 EPOCHS = 10  # package default
-N_JOBS = 8  # speed only
+N_JOBS = 4  # speed only (8 on the 8-CPU sbatch; 4 in the 4-CPU allocation)
 SEED = 0  # as the other comparators
+# A model.pkl from an earlier run of this script on the same TRAIN_DIR; skips training.
+# The fit does not see the query, so the model is the same one.
+REUSE_MODEL = os.environ.get("REUSE_MODEL", "")
 CLUSTER_COLUMN = "bench_cluster"  # v6: majority vote over the benchmark clusters
 
 
@@ -39,23 +44,26 @@ def main():
     import anndata as ad
     import celltypist
 
-    train = ad.read_h5ad(args.train_dir / "train.h5ad")
     query = ad.read_h5ad(args.query_h5ad)
 
     # Train -------------------------------------------------------------------------------------
-    model = celltypist.train(
-        train.X,
-        labels=train.obs["cell_type"].to_numpy(),
-        genes=train.var_names.to_numpy(),
-        use_SGD=USE_SGD,
-        feature_selection=FEATURE_SELECTION,
-        top_genes=TOP_GENES,
-        balance_cell_type=BALANCE_CELL_TYPE,
-        epochs=EPOCHS,
-        n_jobs=N_JOBS,
-        random_state=SEED,
-    )
     args.out_dir.mkdir(parents=True)
+    if REUSE_MODEL:
+        model = celltypist.models.Model.load(REUSE_MODEL)
+    else:
+        train = ad.read_h5ad(args.train_dir / "train.h5ad")
+        model = celltypist.train(
+            train.X,
+            labels=train.obs["cell_type"].to_numpy(),
+            genes=train.var_names.to_numpy(),
+            use_SGD=USE_SGD,
+            feature_selection=FEATURE_SELECTION,
+            top_genes=TOP_GENES,
+            balance_cell_type=BALANCE_CELL_TYPE,
+            epochs=EPOCHS,
+            n_jobs=N_JOBS,
+            random_state=SEED,
+        )
     model.write(str(args.out_dir / "model.pkl"))
 
     # Annotate: one call gives the per-cell and the majority-vote labels ---------------------
