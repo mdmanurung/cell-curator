@@ -6,7 +6,7 @@ Inputs:
     QUERY_H5AD   input.h5ad [prepare_novel_v8.py]: log1p CP10k in X, symbols as
                  var_names, obs donor_id and bench_cluster
 Outputs:
-    OUT_H5AD     same cells and genes; layers["counts"] recovered from X
+    OUT_H5AD     same cells and genes; layers["counts"] as given, or recovered from X
                  (see v8_common.recover_counts)
 """
 
@@ -20,7 +20,9 @@ def main():
     query = ad.read_h5ad(args.query_h5ad)
     if not query.var_names.is_unique:
         raise ValueError("query gene symbols are not unique")
-    query.layers["counts"] = recover_counts(query.X)
+    # v8 inputs carry raw counts (prepare_novel_v8.py); recover only for older inputs
+    if "counts" not in query.layers:
+        query.layers["counts"] = recover_counts(query.X)
     query.write_h5ad(args.out_h5ad)
     print(f"{query.n_obs} cells, {query.n_vars} genes")
 
