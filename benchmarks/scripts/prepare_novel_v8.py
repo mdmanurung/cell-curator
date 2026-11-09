@@ -1,7 +1,7 @@
 # Purpose: turn one protocol v8 novel dataset into the clustered input the annotators see.
 #          Truth labels are written to a separate file that no annotator reads.
 # Run:     sbatch benchmarks/scripts/prepare_novel_v8.sbatch DATASET RUN_DIR
-#          DATASET is ts, indonesia or cross_tissue; RUN_DIR must not exist
+#          DATASET is ts, indonesia, cross_tissue, aifi_dev or aida_split_a; RUN_DIR must not exist
 # Inputs:  the dataset h5ad from acquire_v8.py (raw counts in raw.X)
 # Outputs: RUN_DIR/input.h5ad     all genes, log1p CP10k in X, X_pca, obs: donor, tissue,
 #                                 assay, bench_cluster; no truth label
@@ -25,9 +25,12 @@ FILES = {  # dataset_id from acquire_v8's downloads.tsv
     "cross_tissue": "1b9d8702-5af8-4142-85ed-020eb06ec4f6.h5ad",
     "aifi_dev": "e522d2cd-7927-4e59-a4ed-064009569279.h5ad",  # dev donors only
 }
-DEV_SPLIT = (
-    Path(__file__).resolve().parents[2] / "benchmarks/data/aifi-hiha-dev-split/donor_split.tsv"
-)
+ROOT = Path(__file__).resolve().parents[2]
+DEV_SPLIT = ROOT / "benchmarks/data/aifi-hiha-dev-split/donor_split.tsv"
+# AIDA split A, second dev set (amendment 3), re-clustered by this recipe (amendment 5)
+AIDA_V6 = ROOT / "benchmarks/data/aida-phase1-v2-pbmc-wholegenome"
+AIDA_SPLIT = ROOT / "benchmarks/data/aida-pbmc-protocol-v5/donor_split.tsv"
+AIDA_ASSAY = "10x 5' v2"  # Census 2025-11-08 obs.assay, dataset c838aec3-...
 TS_TISSUES = ["blood", "spleen", "lymph node", "inguinal lymph node", "mesenteric lymph node"]
 TS_ASSAYS = ["10x 3' v3", "10x 5' v2"]  # protocol v8, Q3
 N_HVG = 2000  # Q17; seurat_v3 on raw counts, amendment 3
@@ -53,11 +56,28 @@ def main():
         data = ad.AnnData(
             X=atlas.raw.X[rows], obs=atlas.obs.iloc[rows].copy(), var=atlas.raw.var.copy()
         )
+    elif dataset == "aida_split_a":
+        # counts of the split A donors from the v6 whole-transcriptome input
+        atlas = ad.read_h5ad(AIDA_V6 / "aida_pbmc_wholegenome_clustered.h5ad", backed="r")
+        split = pd.read_csv(AIDA_SPLIT, sep="\t")
+        donors_a = set(split.loc[split["split"] == "A", "donor_id"].astype(str))
+        cells = atlas[atlas.obs["donor_id"].astype(str).isin(donors_a).to_numpy()].to_memory()
+        data = ad.AnnData(
+            X=cells.layers["counts"],
+            obs=cells.obs.copy(),
+            var=pd.DataFrame(index=cells.var_names),
+        )
+        data.obs["tissue"] = "blood"
+        data.obs["assay"] = AIDA_ASSAY
     else:
         atlas = ad.read_h5ad(DOWNLOADS / FILES[dataset])
         data = ad.AnnData(X=atlas.raw.X.copy(), obs=atlas.obs.copy(), var=atlas.raw.var.copy())
-    # raw.var may lack symbols; take them from var by gene ID (fails as NaN if absent)
-    data.var["feature_name"] = atlas.var["feature_name"].reindex(data.var_names).to_numpy()
+    # symbols by gene ID: CELLxGENE var, or the v6 symbol table for AIDA (NaN fails below)
+    if dataset == "aida_split_a":
+        names = pd.read_csv(AIDA_V6 / "gene_symbols.tsv", sep="\t", index_col="feature_id")
+        data.var["feature_name"] = names["gene_symbol"].reindex(data.var_names).to_numpy()
+    else:
+        data.var["feature_name"] = atlas.var["feature_name"].reindex(data.var_names).to_numpy()
     if data.var["feature_name"].isna().any():
         raise ValueError(f"{data.var['feature_name'].isna().sum()} genes have no symbol")
     if dataset == "ts":
