@@ -681,6 +681,32 @@ Chosen by the user after the v8 declaration. No v8 data has been downloaded or s
    each novel dataset against both AIFI collections. Warn only for the novel sets
    (decision Q5).
 
+### Protocol v8, amendment 2 (declared 2026-11-09, before any v8 scoring)
+
+The acquire job (Slurm 25985122, run dir `cc-v8-work/acquire-2026-11-09`, file hashes in
+its `downloads.tsv`) showed two problems with the text above. The user chose the fixes.
+No cell has been scored.
+
+1. **Corpus donors.** The atlas collection has 108 donors and shares 92 donor IDs with
+   Sound Life's 96. The corpus is learned from the atlas collection only. Sound Life is
+   kept on disk and is not used. This replaces amendment 1, item 1.
+2. **Outside the corpus.** A truth label is outside the corpus only if it has no Cell
+   Ontology ancestor or descendant relation to any of the 38 terms. By name, only 15%
+   of the kept Tabula Sapiens cells, 36% of Indonesia and 53% of Cross-tissue match a
+   corpus term, because most carry a coarser parent such as `B cell`. Coarse parents
+   stay in-vocabulary and score by the v6 relaxed and descendant rules. Abstention
+   scores correct only for unrelated labels. This replaces the Q9 wording above.
+3. **Development split.** 20 of 108 atlas donors (18.5%) are held out, stratified by age
+   band (under 20, 20 to 44, 45 and over; the atlas has donors at 11-12, 25-36 and
+   55-65), sex and CMV status, seed 1, strata under 5 donors stay in the corpus
+   (`benchmarks/scripts/make_dev_split.py`). `benchmarks/data/aifi-hiha-dev-split/donor_split.tsv`
+   sha256 `929f4f78d170db1662eaabd7770f6dac1a52a4111a57eb7bb854d4105dc213f1`.
+4. **Measured before any run.** Every corpus label has at least 54 atlas donors. The
+   Tabula Sapiens subset after the tissue and assay filter is 274,890 cells from 9
+   blood donors (spleen 6, lymph node 6 by tissue). The novel datasets share no donor ID
+   with the atlas or Sound Life; the IDs follow different schemes, so this is weak
+   evidence of independence.
+
 ## Why the pre-declared evidence bar is not met, measured rather than guessed
 
 Two runs, differing only in measured panel width. Both label one cluster of 28.
