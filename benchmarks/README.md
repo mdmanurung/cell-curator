@@ -755,6 +755,21 @@ superseded and was not reviewed) and after the parallel build agents reported.
 5. **Environment.** `envs/cc-v8` pins scipy 1.16.3, scikit-learn 1.6.1 and pynndescent
    0.5.13; pynndescent 0.7.0 returns sparse arrays that scanpy 1.11.5 cannot read.
 
+### Protocol v8, amendment 6 (declared 2026-11-09, before iteration 1)
+
+User choices after the second corpus proposal (`learn-2026-11-09b`, not reviewed).
+
+1. **Housekeeping genes barred** from positives and negatives: a fixed list of 32 genes
+   (`BARRED_LIST` in `benchmarks/scripts/learn_corpus_v8.py`), beside RPL, RPS and MT-.
+2. **Two state records.** The atlas term `T cell` holds only AIFI L3 Proliferating T cell
+   (2,320 cells); its record becomes `cycling T cell` (CL:4033069, exact). The atlas term
+   `CD8-positive, alpha-beta memory T cell` holds only AIFI L3 ISG+ memory CD8 T cell
+   (1,283 cells); its record is named `ISG+ memory CD8 T cell` with CL:0000909 and
+   relation `narrower`. The corpus term list for the strata swaps CL:0000084 for
+   CL:4033069.
+3. **Negatives.** The under-20% detection rule stays. Records left without negatives are
+   flagged by the package (`no_declared_negatives`), not filled.
+
 ## Why the pre-declared evidence bar is not met, measured rather than guessed
 
 Two runs, differing only in measured panel width. Both label one cluster of 28.

@@ -1,7 +1,6 @@
 id	name
 CL:0000049	common myeloid progenitor
 CL:0000051	common lymphoid progenitor
-CL:0000084	T cell
 CL:0000232	erythrocyte
 CL:0000233	platelet
 CL:0000623	natural killer cell
@@ -37,3 +36,4 @@ CL:0002677	naive regulatory T cell
 CL:0002678	memory regulatory T cell
 CL:0009068	CD8aa(I) thymocyte
 CL:0017009	Axl+ dendritic cell, human
+CL:4033069	cycling T cell
