@@ -791,6 +791,22 @@ lymph node, most of Cross-tissue) the package selects no record and abstains.
 `benchmarks/data/v8-corpus/reviewed_v3.json`, sha256
 `fdb47c46c4dfdf38ef3e4e59030d4971647a30318a569e67ab6ff9b067f6cf6c`.
 
+### Protocol v8, amendment 7 (declared 2026-11-10, before any dev set is scored)
+
+Decided by the agent under the user's "stop asking me per choice" instruction (log:
+`plans/v8-agent-decisions.md`). No dev or novel set has been scored.
+
+1. **Ranking cap.** The bottom-up (de novo) marker ranking in the evidence step uses at
+   most 1,000 cells per cluster, seeded (seed 0, per cluster, over cells sorted by name).
+   Program scoring, labels and every other step use all cells. AIDA split A has 3 of 23
+   clusters above the cap; AIFI dev has 17 of 22. Applies to every v8 run.
+2. **Ranking cache.** The ranking is cached by a content hash of input, clusters,
+   features, detection, marker config and ranking code, so it is computed once per
+   dataset. A hit gives identical marker tables.
+3. **Pinned runs.** Every run executes from a git worktree at a stated commit. Run
+   `v8-dev-aida-split-a-002` failed after 4.7 h because `src/` changed during the run; it
+   produced no labels and is not scored.
+
 ## Why the pre-declared evidence bar is not met, measured rather than guessed
 
 Two runs, differing only in measured panel width. Both label one cluster of 28.
