@@ -88,7 +88,7 @@ def main():
     frame.loc[abstain, ["predicted_label", "predicted_cl_id"]] = [UNKNOWN, ""]
     # One unmeasured confidence makes the whole column absent, so no curve is faked.
     has_confidence = frame["confidence"].ne("").all()
-    frame["confidence"] = pd.to_numeric(frame["confidence"].replace("", "nan"))
+    frame["confidence"] = pd.to_numeric(frame["confidence"], errors="coerce")  # "" -> NaN
     frame = frame.rename(
         columns={"cell_type": "true_label", "cell_type_ontology_term_id": "true_cl_id"}
     )
