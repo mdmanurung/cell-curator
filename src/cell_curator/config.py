@@ -327,6 +327,12 @@ class MarkerConfig(StrictModel):
     allowed_gpu_contracts: list[GpuContractConfig] = Field(default_factory=list)
     wilcoxon: dict[str, Any] = Field(default_factory=dict)
     logreg: dict[str, Any] = Field(default_factory=dict)
+    # De novo ranking (parent_remainder and closest_sibling) uses at most this many
+    # seeded cells per cluster. Program scoring, labels and other steps keep all cells.
+    ranking_max_cells_per_cluster: int | None = Field(default=None, ge=1)
+    ranking_seed: int = 0
+    # Directory for cached ranking frames; empty means no cache.
+    ranking_cache_dir: str = ""
 
     @field_validator("cpu_fallback")
     @classmethod

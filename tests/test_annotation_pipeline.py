@@ -39,6 +39,7 @@ def annotation_fixture(
     collapse_lineage: bool = False,
     required: bool = True,
     exclusions: dict[str, list[dict]] | None = None,
+    markers: dict | None = None,
 ) -> tuple[Path, Path, dict[str, list[str]]]:
     """Eight terminal clusters share their broad markers with sibling clusters."""
     features = [
@@ -213,6 +214,7 @@ def annotation_fixture(
             ), {"status": "complete"}
 
         monkeypatch.setattr("cell_curator.crosschecks.celltypist_hypothesis", predictions)
+    value.setdefault("markers", {}).update(markers or {})
     config_path.write_text(yaml.safe_dump(value, sort_keys=False))
     prepare_scene(config_path)
     context_path = tmp_path / "context-confirmation.json"

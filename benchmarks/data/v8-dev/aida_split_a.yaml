@@ -14,7 +14,7 @@
 schema_version: 3
 
 run:
-  run_id: v8-dev-aida-split-a-002
+  run_id: v8-dev-aida-split-a-003
   output_root: /exports/para-lipg-hpc/mdmanurung/cc-v8-work/runs
   mode: annotation
 
@@ -143,6 +143,9 @@ markers:
   rapids_distribution: rapids-singlecell-cu99
   cuda_major: 99
   allowed_gpu_contracts: []
+  ranking_max_cells_per_cluster: 1000  # decision 2026-11-10: de novo ranking cap, scoring keeps all cells
+  ranking_seed: 0
+  ranking_cache_dir: /exports/para-lipg-hpc/mdmanurung/cc-v8-work/ranking-cache
 
 evidence:
   lanes:

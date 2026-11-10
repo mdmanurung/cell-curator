@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import pickle
 from html import escape
 from pathlib import Path
 from typing import Any
@@ -142,6 +144,68 @@ def _input(config: CellCuratorConfig, root: Path) -> Any:
     frozen = config.model_copy(update={"input": config.input.model_copy(
         update={"path": manifest["canonical_path"]})})
     return load_input(frozen)
+
+
+
+def _ranking_positions(groups: pd.Series, cap: int | None, seed: int) -> np.ndarray:
+    """Positions of the cells the de novo ranking sees: at most `cap` per cluster.
+
+    Cells are sorted by name before each cluster's draw, and each cluster has its own
+    generator, so a cluster's subset does not depend on the other clusters in the call.
+    """
+
+    if cap is None:
+        return np.arange(len(groups))
+    names, labels = groups.index.astype(str).to_numpy(), groups.astype(str).to_numpy()
+    keep = []
+    for cluster in sorted(set(labels)):
+        members = np.flatnonzero(labels == cluster)
+        members = members[np.argsort(names[members], kind="stable")]
+        if len(members) > cap:
+            seed_words = [seed, int(hashlib.sha256(cluster.encode()).hexdigest()[:8], 16)]
+            members = members[np.sort(np.random.default_rng(seed_words).choice(len(members), cap, replace=False))]
+        keep.append(members)
+    return np.sort(np.concatenate(keep))
+
+
+def _ranked_markers(matrix: Any, groups: pd.Series, features: pd.Index, detection: Any, config: CellCuratorConfig,
+                    context: dict[str, Any], role: str) -> pd.DataFrame:
+    """compute_bottom_up_markers on the capped cells, read from or written to the ranking cache."""
+
+    from . import __version__
+    from . import evidence as evidence_module
+    from .evidence import compute_bottom_up_markers
+
+    settings = config.markers
+    marker_config = settings.model_dump(mode="json")
+    positions = _ranking_positions(groups, settings.ranking_max_cells_per_cluster, settings.ranking_seed)
+    ranked = groups.iloc[positions]
+    counts = {str(k): int(v) for k, v in ranked.astype(str).value_counts().sort_index().items()}
+    key = hashlib.sha256(json.dumps({
+        "input_sha256": context["input_sha256"], "role": role, "version": __version__,
+        "ranking_code_sha256": sha256(Path(evidence_module.__file__)), "marker_config": marker_config,
+        "detection": context["detection"], "features": [str(item) for item in features],
+        "cells": [[str(name), str(cluster)] for name, cluster in zip(ranked.index, ranked, strict=True)],
+    }, sort_keys=True).encode()).hexdigest()
+    cache = Path(settings.ranking_cache_dir) / f"{key}.pkl" if settings.ranking_cache_dir else None
+    frame, status = None, "off" if cache is None else "miss"
+    if cache is not None and cache.is_file():
+        with cache.open("rb") as handle:
+            stored = pickle.load(handle)
+        if stored["key"] == key:
+            frame, status = stored["frame"], "hit"
+    if frame is None:
+        frame = compute_bottom_up_markers(matrix[positions], ranked, features, top_n=None, methods=("wilcoxon", "logreg"),
+            detection=detection[positions], marker_config=marker_config)
+        if cache is not None:
+            cache.parent.mkdir(parents=True, exist_ok=True)
+            partial = cache.with_name(f".{cache.name}.partial.{os.getpid()}")
+            partial.write_bytes(pickle.dumps({"key": key, "frame": frame}, protocol=4))
+            os.replace(partial, cache)
+    frame.attrs["runtime"] = {**frame.attrs.get("runtime", {}), "ranking_cache": status, "ranking_cache_key": key,
+        "ranking_max_cells_per_cluster": settings.ranking_max_cells_per_cluster,
+        "ranking_seed": settings.ranking_seed, "ranked_cells_per_cluster": counts}
+    return frame
 
 
 def _frame(path: Path, frame: pd.DataFrame) -> None:
@@ -375,7 +439,7 @@ def _compatible(label: str, candidate: str, parents: dict[str, str]) -> bool:
 def collect_level(config_path: str | Path, level: str) -> dict[str, Any]:
     from .capabilities import build_capability_registry
     from .data import close_input, feature_ids_for, matrix_for
-    from .evidence import compute_bottom_up_markers, score_marker_programs
+    from .evidence import score_marker_programs
     from .guided import require_label_gate
     from .markers import marker_dotplot_svg, profile_marker_panel
     from .pipeline import _programs
@@ -428,6 +492,8 @@ def collect_level(config_path: str | Path, level: str) -> dict[str, Any]:
         marker_frames: list[pd.DataFrame] = []
         statuses: list[dict[str, Any]] = []
         marker_runtime = []
+        ranking_context = {"input_sha256": sha256(Path(json.loads((root / "input_contract.manifest.json").read_text())["canonical_path"])),
+                           "detection": declaration.detection.model_dump(mode="json") if declaration.detection else None}
         for parent, block in scoped.groupby("parent_scope", sort=True):
             parent = str(parent)
             allowed = set(groups) if position == 0 else {cluster for cluster, label in previous.items() if label == parent}
@@ -458,8 +524,8 @@ def collect_level(config_path: str | Path, level: str) -> dict[str, Any]:
             first_frame = len(marker_frames)
             comparators_ran: set[tuple[str, str]] = set()
             if len(clusters) > 1:
-                bottom = compute_bottom_up_markers(matrix[mask], scoped_groups, features, top_n=None, methods=("wilcoxon", "logreg"),
-                    detection=detection[mask], marker_config=config.markers.model_dump(mode="json"))
+                bottom = _ranked_markers(matrix[mask], scoped_groups, features, detection[mask], config,
+                                         ranking_context, "parent_remainder")
                 comparators_ran.update((cluster, "parent_remainder") for cluster in clusters)
                 marker_runtime.append({"parent": parent, "role": "parent_remainder", **bottom.attrs.get("runtime", {})})
                 bottom["comparator_role"] = "parent_remainder"
@@ -478,9 +544,8 @@ def collect_level(config_path: str | Path, level: str) -> dict[str, Any]:
                     sibling = min(competitors,
                                   key=lambda item: (float(np.linalg.norm(centroids[cluster] - centroids[item])), item))
                     pair = scoped_groups.isin([cluster, sibling]).to_numpy()
-                    pair_markers = compute_bottom_up_markers(matrix[mask][pair], scoped_groups.iloc[np.flatnonzero(pair)],
-                        features, top_n=None, methods=("wilcoxon", "logreg"), detection=detection[mask][pair],
-                        marker_config=config.markers.model_dump(mode="json"))
+                    pair_markers = _ranked_markers(matrix[mask][pair], scoped_groups.iloc[np.flatnonzero(pair)],
+                        features, detection[mask][pair], config, ranking_context, "closest_sibling")
                     comparators_ran.add((cluster, "closest_sibling"))
                     marker_runtime.append({"parent": parent, "cluster": cluster, "role": "closest_sibling",
                                            **pair_markers.attrs.get("runtime", {})})
@@ -605,7 +670,10 @@ def collect_level(config_path: str | Path, level: str) -> dict[str, Any]:
         close_input(loaded)
     return _receipt(target / "evidence.manifest.json", artifacts=[target / name for name in ("scores.tsv", "markers.tsv", "states.tsv", "marker_evidence.svg")],
                     inputs=inputs, artifact_kind="cell_curator_corpus_level_evidence", level=level,
-                    scopes=statuses, marker_runtime=marker_runtime, unit_of_inference="descriptive_cluster_markers")
+                    scopes=statuses, marker_runtime=marker_runtime,
+                    ranking={"max_cells_per_cluster": config.markers.ranking_max_cells_per_cluster,
+                             "seed": config.markers.ranking_seed, "cache_dir": config.markers.ranking_cache_dir},
+                    unit_of_inference="descriptive_cluster_markers")
 
 
 def resolve_level(config_path: str | Path, level: str) -> dict[str, Any]:

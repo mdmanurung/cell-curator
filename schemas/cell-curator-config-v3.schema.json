@@ -1020,6 +1020,29 @@
           "title": "Logreg",
           "type": "object"
         },
+        "ranking_cache_dir": {
+          "default": "",
+          "title": "Ranking Cache Dir",
+          "type": "string"
+        },
+        "ranking_max_cells_per_cluster": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ranking Max Cells Per Cluster"
+        },
+        "ranking_seed": {
+          "default": 0,
+          "title": "Ranking Seed",
+          "type": "integer"
+        },
         "rapids_distribution": {
           "default": "",
           "title": "Rapids Distribution",
