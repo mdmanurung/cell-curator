@@ -426,6 +426,27 @@ def test_score_only_tables_are_not_capped_by_advisory_confidence() -> None:
     assert "vote share below threshold" in impure.loc[0, "rationale"]
 
 
+def test_abstention_rationale_names_where_the_votes_went() -> None:
+    """A cluster whose votes split between two terms must show the split, so a reader can
+    tell a mixed cluster from one with no signal."""
+
+    vocabulary = pd.DataFrame(
+        [
+            {"level": "L1", "parent_scope": "ROOT", "label": "naive B"},
+            {"level": "L1", "parent_scope": "ROOT", "label": "transitional B"},
+        ]
+    )
+    scores = pd.DataFrame(
+        [
+            {"cluster_id": "0", "label": "naive B", "score": 5.3, "vote_fraction": 0.52},
+            {"cluster_id": "0", "label": "transitional B", "score": 5.4, "vote_fraction": 0.48},
+        ]
+    )
+    labels = assign_parent_scoped_level(scores, vocabulary, level="L1", parent_scope="ROOT")
+    assert labels.loc[0, "label"] == "Unknown"
+    assert "top cell votes: naive B 0.52, transitional B 0.48" in labels.loc[0, "rationale"]
+
+
 def test_strict_nesting_accepts_children_of_unknown_and_same_identity_splits() -> None:
     """Found on PBMC 3k: a CD8 T split kept its parent's label and crashed validation."""
 

@@ -134,7 +134,11 @@ def validate_parent_vocabulary(vocabulary: pd.DataFrame) -> None:
         # become a cell's type -- the one direction the separation exists to prevent.
         # A frame without the column carries no state rows for it to admit.
         state = sorted(
-            set(vocabulary.loc[~vocabulary["axis"].astype(str).eq("cell_type"), "label"].astype(str))
+            set(
+                vocabulary.loc[~vocabulary["axis"].astype(str).eq("cell_type"), "label"].astype(
+                    str
+                )
+            )
         )
         if state:
             raise ContractError(
@@ -282,6 +286,20 @@ def assign_parent_scoped_level(
         if bool(state.get("identity_must_abstain", False)):
             abstain_reasons.append(f"terminal parallel state: {state['cell_state']}")
         label = "Unknown" if abstain_reasons else str(winner["label"])
+        if voted and "vote share below threshold" in abstain_reasons:
+            # Show where the votes went, so a split between related terms is visible.
+            share_column = (
+                "raw_vote_fraction"
+                if "raw_vote_fraction" in cluster_scores
+                else "vote_fraction"
+            )
+            shares = cluster_scores.sort_values(share_column, ascending=False).head(3)
+            top_votes = ", ".join(
+                f"{name} {float(share):.2f}"
+                for name, share in zip(shares["label"], shares[share_column], strict=True)
+                if float(share) > 0
+            )
+            abstain_reasons[0] += f" (top cell votes: {top_votes or 'none'})"
         rationale = (
             "; ".join(abstain_reasons)
             if abstain_reasons
