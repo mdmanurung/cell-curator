@@ -51,7 +51,7 @@ input:
       kind: rna
       feature_space: gene
       feature_id_column: ""  # var_names are the unique symbols
-      gene_mapping_path: ""
+      gene_mapping_path: /exports/para-lipg-hpc/mdmanurung/cc-v8-work/prep-aifi_dev-2026-11-09/gene_map.tsv
       capabilities:
         - identity
         - subtype
@@ -89,7 +89,7 @@ input:
 canonical_partitions:
   ROOT:
     parent_key: bench_cluster
-    expected_parent_count: 1  # PLACEHOLDER: set to the cluster count in prep-aifi_dev-2026-11-09/cluster_sizes.tsv
+    expected_parent_count: 22
 
 adaptive:
   parent_local:
