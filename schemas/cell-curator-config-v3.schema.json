@@ -53,6 +53,11 @@
           "title": "Corpus Assay",
           "type": "string"
         },
+        "development_candidates": {
+          "default": false,
+          "title": "Development Candidates",
+          "type": "boolean"
+        },
         "enabled": {
           "default": false,
           "title": "Enabled",

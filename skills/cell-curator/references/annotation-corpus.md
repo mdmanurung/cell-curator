@@ -164,6 +164,21 @@ must be in the split file. Set `annotation.isolation` (`donor_split`, `test_spli
 Gate A. `CorpusSnapshot.learned_donors()` lists every donor the corpus learned from;
 the corpus digest pins that list.
 
+### Run unreviewed candidates on a development split
+
+Set `annotation.development_candidates: true` to let a method-development loop call
+records with status `imported` or `proposed` besides `reviewed`. `disputed`,
+`superseded` and `retired` records stay out. The flag needs `annotation.isolation`:
+`annotation_contract` refuses it without one, and the isolation check must pass.
+Gate A and the critic passes are unchanged.
+
+The run records `development_candidates: true` in `plan.json`, the annotation
+contract, `annotation.manifest.json`, the `development_candidates` column of
+`cell_labels.tsv`, the report banner and the prediction-export receipt.
+`write-back preview` and `write-back apply` refuse such a run, whatever the config
+says later. Use it only on development splits, never for the frozen benchmark
+or for labels you keep.
+
 ## Review and release corpus knowledge
 
 Create `changes.json` with `labels`, `sources`, and/or `mappings`. Supply full

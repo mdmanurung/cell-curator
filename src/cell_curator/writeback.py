@@ -250,6 +250,13 @@ def validate_writeback(
 ) -> dict[str, Any]:
     if config.run.mode.value != "annotation":
         raise ContractError("evidence-only runs cannot write biological labels")
+    plan_path = run_root / "plan.json"
+    planned = json.loads(plan_path.read_text()) if plan_path.is_file() else {}
+    if config.annotation.development_candidates or planned.get("development_candidates"):
+        raise ContractError(
+            "this run used annotation.development_candidates (unreviewed corpus records); "
+            "a development run can never be written back"
+        )
     ontology = ontology or ontology_from_config(config)
     source_path = Path(config.input.path)
     target = output_path or (

@@ -65,6 +65,12 @@ def annotation_contract(config: CellCuratorConfig) -> dict[str, Any]:
     from .corpus import load_corpus
     from .knowledge import corpus_context, merge_corpus_context
 
+    development = config.annotation.development_candidates
+    if development and not config.annotation.isolation:
+        raise ContractError(
+            "annotation.development_candidates requires annotation.isolation "
+            "(a donor split and a test split), so unreviewed records are checked against the test split"
+        )
     corpora = []
     for provider in config.knowledge.providers:
         if provider.kind != "corpus":
@@ -73,7 +79,8 @@ def annotation_contract(config: CellCuratorConfig) -> dict[str, Any]:
         if snapshot.revision != provider.version:
             raise ContractError("configured corpus version differs from its snapshot")
         context = merge_corpus_context(corpus_context(config), provider.context)
-        selected = {record.label_id for record in snapshot.select(context)}
+        selected = {record.label_id for record in snapshot.select(
+            context, development_candidates=development)}
         isolation = None
         if config.annotation.isolation:
             from .corpus import check_test_isolation
@@ -105,6 +112,7 @@ def annotation_contract(config: CellCuratorConfig) -> dict[str, Any]:
                 raise ContractError(f"required classifier {kind} is absent: {path}")
         resources[classifier.name] = files
     return {"corpora": corpora, "classifier_resources": resources,
+            "development_candidates": development,
             "rules": config.annotation.model_dump(mode="json")}
 
 
@@ -682,6 +690,9 @@ def finalize_annotation(config_path: str | Path) -> dict[str, Any]:
     cells["cell_state"] = cells["cluster_id"].map(lambda cluster: "|".join(state_map.get(cluster, [])))
     cells["L4"] = leaf + cells["cell_state"].map(lambda value: f" {value.replace('|', ' ')}" if value else "")
     cells["annotation_unit"] = "cluster_propagated_to_cells"
+    development = bool(plan["annotation_contract"].get("development_candidates"))
+    if development:
+        cells["development_candidates"] = True
     target = root / "annotation"
     _frame(target / "cell_labels.tsv", cells)
     mapping = pd.DataFrame({"barcode": cells["barcode"], "canonical_parent": cells["cluster_id"],
@@ -698,6 +709,8 @@ def finalize_annotation(config_path: str | Path) -> dict[str, Any]:
                        "canonical_parent_membership_unchanged": mapping["canonical_parent"].equals(cells["cluster_id"]),
                        "parent_counts_conserved": mapping["canonical_parent"].value_counts().equals(cells["cluster_id"].value_counts())}})
     report = ["<!doctype html><html lang='en'><meta charset='utf-8'><title>Annotation evidence</title>",
+        *(["<p><strong>DEVELOPMENT CANDIDATES: unreviewed corpus records were called. "
+           "This run can never be written back.</strong></p>"] if development else []),
         "<h1>Corpus annotation evidence</h1><p>Cluster labels propagated to cells. Classifiers provide corroboration; confidence is not a calibrated probability.</p>"]
     for level, table in zip(config.guidance.hierarchy_levels, decisions, strict=True):
         report.extend([f"<h2>{escape(level)}</h2>", table.to_html(index=False, escape=True),
@@ -711,4 +724,5 @@ def finalize_annotation(config_path: str | Path) -> dict[str, Any]:
         inputs=[*inputs, root / "hierarchy" / "execution.manifest.json"],
         artifact_kind="cell_curator_corpus_annotation", status="complete", corpus=plan["annotation_contract"]["corpora"],
         hierarchy_validation=execution["hierarchy_validation"],
-        annotation_unit="cluster_propagated_to_cells", writeback_applied=False)
+        annotation_unit="cluster_propagated_to_cells", writeback_applied=False,
+        development_candidates=development)

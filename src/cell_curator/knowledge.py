@@ -108,7 +108,8 @@ class CorpusProvider:
     """Expose only context-matched, reviewed records from a pinned snapshot."""
 
     def __init__(self, config: ProviderConfig, *, context: dict[str, str] | None = None,
-                 measurements: tuple[str, ...] = (), ontology: Any = None) -> None:
+                 measurements: tuple[str, ...] = (), ontology: Any = None,
+                 development_candidates: bool = False) -> None:
         from .corpus import load_corpus
 
         self.snapshot = load_corpus(config.path, expected_sha256=config.sha256)
@@ -117,6 +118,7 @@ class CorpusProvider:
         self.context = merge_corpus_context(context or {}, config.context)
         self.measurements = measurements
         self.ontology = ontology
+        self.development_candidates = development_candidates
 
     @property
     def identity(self) -> str:
@@ -124,7 +126,8 @@ class CorpusProvider:
 
     def programs(self) -> list[MarkerProgram]:
         return self.snapshot.programs(context=self.context, ontology=self.ontology,
-                                      measurements=self.measurements or None)
+                                      measurements=self.measurements or None,
+                                      development_candidates=self.development_candidates)
 
 
 def corpus_context(config: CellCuratorConfig) -> dict[str, str]:
@@ -167,6 +170,7 @@ def run_providers(config: CellCuratorConfig) -> list[MarkerProvider]:
         measurements=tuple(sorted({measurements[assay.kind] for assay in assays
                                    if assay.kind in measurements})),
         ontology=ontology_from_config(config) if any(item.kind == "corpus" for item in config.knowledge.providers) else None,
+        development_candidates=config.annotation.development_candidates,
     )
 
 
@@ -313,6 +317,7 @@ def providers_from_config(
     context: dict[str, str] | None = None,
     measurements: tuple[str, ...] = (),
     ontology: Any = None,
+    development_candidates: bool = False,
 ) -> list[MarkerProvider]:
     providers: list[MarkerProvider] = []
     for item in configs:
@@ -320,7 +325,8 @@ def providers_from_config(
             providers.append(LocalMarkerProvider(item.path, version=item.version))
         elif item.kind == "corpus":
             providers.append(CorpusProvider(item, context=context, measurements=measurements,
-                                            ontology=ontology))
+                                            ontology=ontology,
+                                            development_candidates=development_candidates))
         elif item.kind == "cached_table":
             providers.append(CachedTableProvider(item.path, version=item.version))
         elif item.kind == "remote_table":

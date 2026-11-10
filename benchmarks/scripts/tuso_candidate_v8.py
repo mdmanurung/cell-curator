@@ -1,27 +1,27 @@
-# Purpose: turn one tusoskill candidate JSON into a candidate-only corpus proposal and, once the
-#          user has reviewed it, into per-dev-set configs and the commands to run and score them.
-#          The script never approves anything: it stops before `corpus review` (AGENTS.md
-#          gate 3) and before `assumptions approve` (Gate A). A candidate corpus is a
-#          development artifact and never replaces benchmarks/data/v8-corpus/reviewed_v3.json.
+# Purpose: turn one tusoskill candidate JSON into a candidate-only corpus snapshot and
+#          per-dev-set configs with `annotation.development_candidates: true`, plus the commands
+#          to run and score them. The script never approves anything: it runs no `corpus review`
+#          (AGENTS.md gate 3, exception of 2026-11-10 for development splits) and stops before
+#          `assumptions approve` (Gate A). A candidate corpus is a development artifact: its
+#          runs can never be written back, and it never replaces
+#          benchmarks/data/v8-corpus/reviewed_v3.json.
 # Run:     .venv/bin/python benchmarks/scripts/tuso_candidate_v8.py CAND.json
 #              engine-only candidate (only "name" and "engine"): no corpus step; it goes straight to
 #              stage 2 on the frozen corpus.
-#              corpus candidate, stage 1: learn, import (candidate-only), propose; prints the
-#              review command and stops.
-#          .venv/bin/python benchmarks/scripts/tuso_candidate_v8.py CAND.json --reviewed R.json
-#              corpus candidate, stage 2: check isolation, write configs with fresh run_ids,
-#              print the commands in a pre-gate and a post-gate file per dev set.
+#              corpus candidate: learn, import, build the candidate snapshot (status `proposed`),
+#              check isolation, write dev configs with fresh run_ids, print the commands in a
+#              pre-gate and a post-gate file per dev set.
 #          --learn-dir DIR uses an existing learn_corpus_v8.py output instead of submitting one;
 #          --root DIR moves CANDIDATES_ROOT (for tests).
 # Inputs:  CAND.json   {"name": "...", and any key of learn_corpus_v8.SELECTION_KEYS,
 #                       and optional "engine": {min_confidence, min_margin, ...}}
 #          LEARN_PREVIOUS/ranked.tsv.gz  the frozen Wilcoxon table, reused (selection-only)
 #          BASE_CORPUS, FROZEN_CORPUS, the two dev-set config templates
-#          R.json      stage 2 only: the candidate proposal after the user's `corpus review`
 # Outputs: CANDIDATES_ROOT/NAME/candidate.json        the candidate as run
 #          CANDIDATES_ROOT/NAME/learn/                learn_corpus_v8.py outputs
-#          CANDIDATES_ROOT/NAME/corpus/imported.json  imported, not reviewed, not callable
-#          CANDIDATES_ROOT/NAME/corpus/proposal.json  for the user's review
+#          CANDIDATES_ROOT/NAME/corpus/imported.json  all learned records, status imported
+#          CANDIDATES_ROOT/NAME/corpus/candidate.json the frozen corpus's labels with the learned
+#                                                     markers, status proposed (never reviewed)
 #          CANDIDATES_ROOT/NAME/CANDIDATE_ONLY.txt    the marker
 #          CANDIDATES_ROOT/NAME/configs/{dataset}.yaml  stage 2
 #          CANDIDATES_ROOT/NAME/commands/{dataset}_pre_gate.sh   scene, plan, assumptions list
@@ -38,7 +38,8 @@ from pathlib import Path
 import yaml
 
 from cell_curator.contracts import sha256
-from cell_curator.corpus import check_test_isolation, load_corpus, propose_corpus
+from cell_curator.corpus import CorpusLabel, CorpusSnapshot, check_test_isolation, load_corpus
+from cell_curator.provenance import publish_json
 
 # Parameters -----------------------------------------------------------------------
 ROOT = Path(__file__).resolve().parents[2]
@@ -81,7 +82,6 @@ def cli(*args):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("candidate", type=Path)
-    parser.add_argument("--reviewed", type=Path)
     parser.add_argument("--learn-dir", type=Path)
     parser.add_argument("--root", type=Path, default=CANDIDATES_ROOT)
     args = parser.parse_args()
@@ -92,13 +92,11 @@ def main():
     out = args.root / name
     if set(candidate) <= ENGINE_ONLY:
         finish(candidate, out, FROZEN_CORPUS, frozen=True, candidate_path=args.candidate)
-    elif args.reviewed:
-        finish(candidate, out, args.reviewed, frozen=False)
     else:
         start(candidate, args.candidate, out, args.learn_dir)
 
 
-# Stage 1 ---------------------------------------------------------------------------
+# Corpus candidate ------------------------------------------------------------------
 def start(candidate, candidate_path, out, learn_dir):
     name = candidate["name"]
     out.mkdir(parents=True, exist_ok=False)  # a candidate dir is never overwritten
@@ -121,7 +119,7 @@ def start(candidate, candidate_path, out, learn_dir):
             cwd=ROOT,
         )  # fmt: skip
 
-    # Import: status imported, so the package cannot call any record ------------------------
+    # Import: status imported; only a development_candidates run can call these -------------
     imported = out / "corpus/imported.json"
     cli(
         "corpus", "import", "--input", BASE_CORPUS, "--records", learn_dir / "corpus_records.json",
@@ -131,45 +129,42 @@ def start(candidate, candidate_path, out, learn_dir):
         "--retrieved-at", datetime.date.today().isoformat(),
     )  # fmt: skip
 
-    # Propose: the frozen corpus's 34 accepted labels, same scope edits as revision v8-r3 ---
+    # Candidate snapshot: the frozen corpus's 34 labels, same scope edits as revision v8-r3,
+    # status `proposed` and no reviewer. Other imported labels are left out so the
+    # candidate calls the same label set as the frozen corpus.
     frozen = {
         label.cl_id for label in load_corpus(FROZEN_CORPUS).labels if label.status == "reviewed"
     }
     donors = (learn_dir / "corpus_donors.txt").read_text().split()  # derived_from, so the
     snapshot = load_corpus(imported)  # isolation check has donors to compare
-    changes = [
-        {
-            **label.model_dump(mode="json"),
-            "assays": [],
-            "limitations": [*label.limitations, ASSAY_NOTE],
-            "derived_from": [{"dataset_id": DATASET_ID, "donors": donors}],
-        }
+    labels = tuple(
+        CorpusLabel.model_validate(
+            {
+                **label.model_dump(mode="json"),
+                "assays": [],
+                "limitations": [*label.limitations, ASSAY_NOTE],
+                "derived_from": [{"dataset_id": DATASET_ID, "donors": donors}],
+                "status": "proposed",
+                "reviewer": "",
+                "rationale": "",
+            }
+        )
         for label in snapshot.labels
         if label.cl_id in frozen
-    ]
-    (out / "corpus/changes.json").write_text(json.dumps({"labels": changes}, indent=2))
-    propose_corpus(
-        imported, out / "corpus/proposal.json", labels=changes,
-        reason=f"Development candidate {name}; not for the frozen corpus", proposer="tuso_candidate_v8",
+    )
+    candidate_snapshot = CorpusSnapshot(
+        corpus_id=snapshot.corpus_id, revision=f"cand-{name}", parent_revision=snapshot.revision,
+        sources=snapshot.sources, labels=labels,
     )  # fmt: skip
-
-    callable_now = len(snapshot.select({"species": "human", "tissue": "blood"}))
+    corpus = out / "corpus/candidate.json"
+    publish_json(corpus, candidate_snapshot.model_dump(mode="json"))
     print(
-        f"\ncandidate {name}: {len(snapshot.labels)} labels imported, {callable_now} callable."
+        f"\ncandidate {name}: {len(snapshot.labels)} labels imported, {len(labels)} proposed."
     )
-    print("STOP. The package only calls records with status `reviewed` (corpus.py select());")
-    print("there is no flag for development use. A run on this corpus would label nothing.")
-    print("To go on, the user reviews the proposal in chat, then runs:\n")
-    print(
-        f"  {CLI} corpus review --input {imported} --proposal {out}/corpus/proposal.json \\\n"
-        f"    --output {out}/corpus/reviewed.json --reviewer 'YOUR NAME' --decision accept \\\n"
-        f"    --revision cand-{name} --rationale 'development candidate {name}, not frozen'\n"
-    )
-    print(f"Then: {PYTHON} benchmarks/scripts/tuso_candidate_v8.py {candidate_path} \\")
-    print(f"        --reviewed {out}/corpus/reviewed.json")
+    finish(candidate, out, corpus, frozen=False)
 
 
-# Stage 2 ---------------------------------------------------------------------------
+# Configs and commands --------------------------------------------------------------
 def finish(candidate, out, corpus, frozen, candidate_path=None):
     name = candidate["name"]
     # a finished prep (cluster counts) must exist for every dev set before anything is written
@@ -195,7 +190,7 @@ def finish(candidate, out, corpus, frozen, candidate_path=None):
     note = (
         "the frozen reviewed corpus"
         if frozen
-        else f"CANDIDATE-ONLY {name}: development, never the frozen corpus"
+        else f"CANDIDATE-ONLY {name}: development, unreviewed, never the frozen corpus"
     )
     for dataset, (template, _) in DEV_SETS.items():
         text = (ROOT / template).read_text()
@@ -218,6 +213,14 @@ def finish(candidate, out, corpus, frozen, candidate_path=None):
             text,
         )
         text = re.sub(r"(?m)^(    expected_parent_count: )\d+.*$", rf"\g<1>{clusters}", text)
+        if not frozen:  # unreviewed records are callable on this dev split only; no write-back
+            text, hits = re.subn(
+                r"(?m)^annotation:\n",
+                "annotation:\n  development_candidates: true  # unreviewed records; never written back\n",
+                text,
+            )
+            if hits != 1:
+                raise ValueError(f"annotation block found {hits} times in {template}")
         for key, value in candidate.get("engine", {}).items():
             if key not in ENGINE_KEYS:
                 raise ValueError(f"engine key {key} is not one of {ENGINE_KEYS}")
@@ -231,7 +234,8 @@ def finish(candidate, out, corpus, frozen, candidate_path=None):
         export_truth = out / f"scoring_{dataset}.truth_for_export.tsv"
         predictions = out / f"predictions_{dataset}.tsv"
         pre_gate = [
-            f"# {dataset}: isolation {verdict['status']}, run_id {run_id}",
+            f"# {dataset}: isolation {verdict['status']}, run_id {run_id}"
+            + ("" if frozen else ", development_candidates (no write-back)"),
             f"{CLI} run scene --config {config}",
             f"{CLI} run plan --config {config}",
             f"{CLI} assumptions list --config {config}",

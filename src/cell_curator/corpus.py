@@ -16,6 +16,8 @@ from .ontology import CellOntology
 from .provenance import publish_json
 
 ReviewStatus = Literal["imported", "proposed", "reviewed", "disputed", "superseded", "retired"]
+# Statuses a development-candidate run may call (never disputed, superseded or retired).
+CANDIDATE_STATUSES = frozenset({"reviewed", "imported", "proposed"})
 Relation = Literal["exact", "broader", "narrower", "related", "conflicting", "unresolved"]
 Measurement = Literal[
     "gene_expression", "protein_expression", "gene_activity", "accessibility", "transcript_isoform"
@@ -302,9 +304,16 @@ class CorpusSnapshot(_CorpusModel):
         return hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
 
     def select(
-        self, context: Mapping[str, str] | None = None, *, callable_only: bool = True
+        self, context: Mapping[str, str] | None = None, *, callable_only: bool = True,
+        development_candidates: bool = False,
     ) -> list[CorpusLabel]:
-        """Select eligible definitions; unknown context cannot satisfy a limited scope."""
+        """Select eligible definitions; unknown context cannot satisfy a limited scope.
+
+        Only `reviewed` records are callable. `development_candidates` also admits `imported`
+        and `proposed` ones for a development run; `disputed`, `superseded` and `retired`
+        records are never admitted.
+        """
+        admitted = CANDIDATE_STATUSES if development_candidates else {"reviewed"}
         if context is not None and not isinstance(context, Mapping):
             raise ContractError("corpus context must be a mapping")
         context = context or {}
@@ -333,7 +342,7 @@ class CorpusSnapshot(_CorpusModel):
                     ancestors.append(labels[parent])
                     parent = labels[parent].parent_id
                 if any(
-                    item.status != "reviewed" or not item.positive or not matches(item)
+                    item.status not in admitted or not item.positive or not matches(item)
                     for item in ancestors
                 ):
                     continue
@@ -349,11 +358,13 @@ class CorpusSnapshot(_CorpusModel):
         callable_only: bool = True,
         ontology: CellOntology | None = None,
         measurements: Sequence[str] | None = None,
+        development_candidates: bool = False,
     ) -> list[MarkerProgram]:
         """Export reviewed callable definitions to the existing signed-program engine."""
         if not callable_only:
             raise ContractError("unreviewed corpus records cannot be exported as callable programs")
-        selected = {item.label_id: item for item in self.select(context)}
+        selected = {item.label_id: item for item in self.select(
+            context, development_candidates=development_candidates)}
         all_labels = {item.label_id: item for item in self.labels}
         exact = {
             item.source_label_id: item.target_label_id

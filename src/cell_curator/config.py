@@ -400,6 +400,9 @@ class AnnotationConfig(StrictModel):
     min_state_positive_fraction: float = Field(default=0.5, gt=0, le=1)
     seed: int = Field(default=0, ge=0)
     isolation: IsolationConfig | None = None
+    # Development only (user decision, 2026-11-10): also call `imported` and `proposed`
+    # corpus records. It needs `isolation`, and such a run can never be written back.
+    development_candidates: bool = False
 
 
 class EvidenceConfig(StrictModel):

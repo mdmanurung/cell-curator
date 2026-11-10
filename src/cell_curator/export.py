@@ -350,6 +350,7 @@ def export_benchmark_predictions(
         "granularity": "per-cluster, carried to each cell of the cluster",
         "neutral_format": True,
         "accuracy_claimed": False,
+        "development_candidates": config.annotation.development_candidates,
     }
     publish_json(destination.with_suffix(destination.suffix + ".receipt.json"), receipt)
     return receipt

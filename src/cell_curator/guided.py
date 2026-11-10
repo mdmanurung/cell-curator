@@ -759,6 +759,7 @@ def construct_plan(config_path: str | Path) -> dict[str, Any]:
         "executable": not unresolved,
         "assumptions_sha256": digest,
         "annotation_contract": contract,
+        "development_candidates": contract["development_candidates"],
     }
     publish_json(root / "plan.json", plan)
     lines = [
