@@ -44,20 +44,26 @@ Output: one label per cell and per cluster, with the reasons.
    the best guess, flagged low-confidence.
 4. Records why: one row per cluster (each tool's call, marker votes, gate failures, rationale,
    rejected alternatives) and a list of flagged cells with a reason each.
-5. Adds supporting evidence as columns: known-marker enrichment, TF activity (CollecTRI) and
-   pathway scores (PROGENy). They never vote, and there is no cell-state call yet.
+5. Planned, not built: known-marker enrichment, TF activity (CollecTRI) and pathway scores
+   (PROGENy) as supporting columns. They will never vote, and there is no cell-state call.
 6. Runs the same everywhere: pinned versions, hashed inputs, a config with no silent
-   defaults, a `verify` command that reruns in a clean process, Snakemake with Apptainer.
+   defaults, a `verify` command that reruns in a clean process, and a Snakemake file.
+   The Apptainer image is planned, not built into the audited skill.
 7. Keeps the human gates: a consensus label is evidence and never writes back by itself.
 
 ### What is measured
 
-- The `annotation-consensus` skill runs end to end and reproduces the frozen results exactly;
-  two full AIFI runs on different nodes were byte-identical (re-audit row 13).
-- The co-voter was the best design at coverage 0.95 or more: AIFI 0.900 at 0.988 coverage
-  against 0.894 at 1.000 for a gated majority; AIDA 0.849 at 0.907 against 0.841 at 0.945.
-- Known-marker enrichment resolved 5 to 8 of the 15 `Unknown` AIDA clusters (`c015_markers`).
-- The 12-row determinism audit passes 11 rows; rows 5 and 12 are being fixed.
+- The `annotation-consensus` skill runs end to end and reproduces the frozen results; the
+  claim that two full AIFI runs on different nodes were byte-identical is not yet re-checked
+  on the final files (`unsupported: no inspected figure`; table fallback: hash comparison).
+- The co-voter beat a gated majority by +0.006 on AIFI (0.900 at 0.988 coverage against 0.894
+  at 1.000) and +0.008 on AIDA (0.849 at 0.907 against 0.841 at 0.945). The intervals
+  exclude zero, and coverage differs between the two, so the gain is small and not matched.
+- The tie-break step adds nothing: its interval spans zero.
+- A prototype of known-marker enrichment resolved 5 to 8 of the 15 `Unknown` AIDA clusters
+  (`c015_markers`). The step is not in the skill.
+- The 12-row determinism audit passed 11 rows on the first snapshot; the fixes for rows 5 and
+  12 are in re-audit and not yet confirmed.
 
 ### What it does not do
 
@@ -65,7 +71,7 @@ Output: one label per cell and per cluster, with the reasons.
   spans zero in the tie-break test. The pass bar is non-inferior to the best tool plus a
   recorded reason for every call (round 1, Q1).
 - It does not reach 0.95 coverage at 0.85 accuracy on AIDA; nothing tested does (best single
-  tool, popV, 0.841).
+  tool, popV, 0.835).
 - It cannot rescue a cluster where every tool is wrong; marker evidence disagrees with the
   agreed term on 21% (AIDA) and 39% (AIFI) of those wrong cells.
 - AIFI favours the tools: they were trained on AIFI labels.
@@ -81,7 +87,8 @@ reviewers who want to see what was chosen and what was rejected.
 
 ### Open decisions before it is a product
 
-1. The per-cell flag rule (AIDA 19.2% flagged, AIFI 32.6%); the user picks a narrower rule.
+1. The per-cell flag rule (AIDA 19.2% flagged, AIFI 32.6%; shares from the unreviewed
+   consensus output, source `c014_tiebreak` calls); the user picks a narrower rule.
 2. Review of the hand renames for public models and the popV and SingleR settings.
 3. The state-call rule, or the decision to leave it off.
 4. Whether the consensus mode moves from the standalone skill into `src/` (needs a plan row
