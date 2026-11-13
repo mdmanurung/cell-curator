@@ -158,6 +158,59 @@ votes (round 3); when the novel sets are read.
 - `provenance.py`: per-tool hashes and versions in the manifests.
 - Tests for each rule and for the schema.
 
+## Determinism contract for the `annotation-consensus` skill (user request, 2026-11-12)
+
+The skill must give byte-identical hashed outputs for the same inputs and config, anywhere.
+It is not accepted until every row below passes in the audit.
+
+| # | Requirement | How it is checked |
+| --- | --- | --- |
+| 1 | Pinned environment: python and package versions recorded; the run refuses a version that differs from the lock file unless `--allow-version-drift`, which is recorded | tamper test: change a pinned version, expect a refusal |
+| 2 | Every input (h5ad, tool predictions, config, resource files) hashed with sha256 and listed in `run_manifest.json` | edit one byte of an input, expect a different manifest and a failed `verify` |
+| 3 | No global RNG. Each random step (cell subsampling) uses its own seeded generator with the seed in the config | grep for `np.random.` and `random.`; rerun with different `PYTHONHASHSEED` |
+| 4 | Thread settings pinned before numpy is imported; hashed outputs identical at 1 and 8 threads (kNN and BLAS reductions are the risk) | run at `OMP_NUM_THREADS` 1 and 8, compare hashes |
+| 5 | Stable sorts, input-order alignment by name, sorted dict and set iteration; near-ties in votes broken by label order after rounding to 1e-9 | rerun with shuffled input row order, expect identical outputs after name alignment |
+| 6 | Fixed float formatting (10 significant digits) in every table | diff of raw bytes |
+| 7 | No timestamps, hostname, user name, working directory or temp path in hashed outputs; those live in `run_manifest.json` only | change cwd, temp dir, output directory name, user environment, compare |
+| 8 | Login node and a compute node give identical hashes | one sbatch run vs the login-node run |
+| 9 | Snakemake and the CLI `run` command give identical hashes | run both, compare |
+| 10 | `verify` reruns in a fresh process with a scrubbed environment and exits non-zero on any difference | inject a difference, expect failure |
+| 11 | Committed `expected_hashes.json` for the demo; a changed output fails a test until the file is updated on purpose | change a rule, expect the test to fail |
+| 12 | No network at run time; resource files (CollecTRI, PROGENy, huCIRA) hash-checked against the manifest | run with the network blocked |
+
+## Containerization (user decisions, 2026-11-12; not built yet)
+
+- Engine: Snakemake with Apptainer (round 4, Q13). Nextflow is not used.
+- Image (Q14): an Apptainer `.def` from a Python base image pinned by digest, packages
+  installed with `--require-hashes` from a lock file, `OPENBLAS_CORETYPE` fixed so the BLAS
+  kernel does not depend on the CPU, and the SIF sha256 written to `run_manifest.json`. If a
+  dependency cannot be pinned that way, fall back to a pixi environment with its `pixi.lock`
+  (user: "1 and otherwise use pixi"); the fall-back trigger is a failed or unpinnable wheel
+  build, recorded in the decision log when it happens.
+- Facts checked on this cluster: Apptainer 1.2.5 (`/share/software/apptainer/1.2.5/bin/apptainer`,
+  module `container/apptainer/1.2.5/gcc-8.5.0`) pulled `docker://alpine:3.20` and built a
+  `%post` image with `--fakeroot` as an unprivileged user; Nextflow 25.04.6 exists as a module
+  and is not used. pixi 0.76.1 and uv 0.11.14 are installed (`~/.local/bin`), so both the
+  wheel-lock route and the pixi fall-back are available.
+- Determinism rows 1, 8 and 12 are re-run inside the container; a container does not by
+  itself make results CPU-independent, so row 8 (login vs compute node) is the real test.
+- Order of work: finish the skill build and the 12-row audit first; build the image after,
+  so the image pins files that no longer change.
+
+## Regulator evidence (user decisions, 2026-11-13)
+
+After the prototype (`candidates/c016_regulators`; raw CollecTRI top TFs are dominated by MYC,
+NFKB, SP1 and TP53; centred scores show lineages; PROGENy JAK-STAT or VEGF tops every cluster;
+huCIRA cluster-versus-rest measured lineage, not cytokine response), the user approved:
+
+- CollecTRI TF activity and PROGENy pathway scores (decoupler ulm, pseudobulk per cluster and
+  donor, centred over clusters) are provenance columns only. They never vote and there is no
+  cell-state call yet; the state-call rule and thresholds stay undecided.
+- The cluster-versus-rest huCIRA input is dropped. huCIRA is kept for real condition contrasts
+  only (for example donor cohort or disease), not used now.
+- A multiple-testing error in the prototype (BH applied on top of ulm's own per-sample BH) is
+  being corrected before any count is quoted.
+
 ## Gates that do not change
 
 Gate A, critics, corpus review and write-back are untouched. A consensus label is
