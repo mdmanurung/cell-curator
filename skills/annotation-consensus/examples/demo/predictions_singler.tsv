@@ -1,0 +1,655 @@
+barcode	predicted_label	predicted_cl_id	confidence
+IN_NIB_H031_0	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.017971839935433054
+IN_NIB_H024_49	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.014076813093318985
+IN_NIB_H021_70	memory B cell	CL:0000787	0.027200827274133976
+IN_NIB_H031_72	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.04187123896905498
+IN_NIB_H027_78	Unknown		0.0027058693032010472
+IN_NIB_H027_143	effector memory CD4-positive, alpha-beta T cell	CL:0000905	0.004964889394828975
+IN_NIB_H019_160	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.003583973444479027
+IN_NIB_H032_199	naive regulatory T cell	CL:0002677	0.0030652771724429817
+IN_NIB_H021_200	naive regulatory T cell	CL:0002677	0.002988208798853975
+IN_NIB_H025_281	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.002721027052583036
+IN_NIB_H032_306	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.09820353006229299
+IN_NIB_H024_321	Unknown		0.0025982289840730255
+IN_NIB_H031_338	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.011899863662854004
+IN_NIB_H027_339	Unknown		0.013046822706159977
+IN_NIB_H024_356	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.04248614514060001
+IN_NIB_H019_413	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.043984383267559046
+IN_NIB_H029_472	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.005817786246528955
+IN_NIB_H031_517	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.043575359448537965
+IN_NIB_H025_524	CD4-positive, alpha-beta memory T cell	CL:0000897	0.076580942305569
+IN_NIB_H019_565	Unknown		0.0033856259112280407
+IN_NIB_H024_574	naive regulatory T cell	CL:0002677	0.007850361674732964
+IN_NIB_H029_605	transitional stage B cell	CL:0000818	0.004909078299664027
+IN_NIB_H021_611	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.04391971298679698
+IN_NIB_H029_632	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.006429203500815994
+IN_NIB_H024_684	transitional stage B cell	CL:0000818	0.00020170299089194987
+IN_NIB_H019_711	Unknown		0.0062513930339229695
+IN_NIB_H025_739	Unknown		0.04319659113668395
+IN_NIB_H024_749	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.006478891140125009
+IN_NIB_H019_776	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.00028379372852604945
+IN_NIB_H019_833	Unknown		0.04065881558312201
+IN_NIB_H024_851	naive B cell	CL:0000788	0.024653960688794996
+IN_NIB_H019_864	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.02144353098866203
+IN_NIB_H029_887	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.01370570986892905
+IN_NIB_H029_895	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.015621029837749045
+IN_NIB_H029_925	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.00243359922443398
+IN_NIB_H031_959	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.06319235116775801
+IN_NIB_H027_1011	Unknown		0.005398771404447
+IN_NIB_H021_1012	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.006576478081616988
+IN_NIB_H032_1069	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.052121022909281
+IN_NIB_H024_1077	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.00528033357910096
+IN_NIB_H019_1160	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.007093178629725028
+IN_NIB_H021_1161	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.022873787982327975
+IN_NIB_H031_1175	mucosal-associated invariant T cell	CL:0000940	0.12310729472386595
+IN_NIB_H032_1186	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.034463976550408004
+IN_NIB_H021_1196	plasma cell	CL:0000786	0.10396656293422701
+IN_NIB_H029_1213	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.041566007147795014
+IN_NIB_H025_1219	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.003335752267637049
+IN_NIB_H024_1225	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.0014841379610489591
+IN_NIB_H021_1245	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.14250850060741005
+IN_NIB_H019_1250	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.01827205534968701
+IN_NIB_H019_1257	Unknown		0.0027253438634370353
+IN_NIB_H029_1265	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.04945788041542998
+IN_NIB_H032_1310	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.03194096310589001
+IN_NIB_H025_1319	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.0049327754372759935
+IN_NIB_H019_1320	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.003068191064739989
+IN_NIB_H027_1326	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.008837824155279006
+IN_NIB_H029_1338	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.044316549051997
+IN_NIB_H031_1381	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.03970123844747597
+IN_NIB_H027_1458	mucosal-associated invariant T cell	CL:0000940	0.0014612790878619775
+IN_NIB_H025_1504	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.007084752871363009
+IN_NIB_H027_1571	naive B cell	CL:0000788	0.01879906123001296
+IN_NIB_H032_1575	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.03999340247795902
+IN_NIB_H027_1637	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.022796600383857002
+IN_NIB_H019_1713	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.0017511417492960257
+IN_NIB_H029_1764	central memory CD8-positive, alpha-beta T cell	CL:0000907	0.009576772427188018
+IN_NIB_H032_1784	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.005619199896715998
+IN_NIB_H025_1832	memory B cell	CL:0000787	0.004609097180639954
+IN_NIB_H027_1865	Unknown		0.0007739757083790044
+IN_NIB_H031_1878	Be cell	CL:0000968	0.0024840889462000026
+IN_NIB_H029_2001	transitional stage B cell	CL:0000818	0.0008598151350579508
+IN_NIB_H025_2050	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.021190365217649054
+IN_NIB_H024_2097	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.00919384258989997
+IN_NIB_H027_2138	mature gamma-delta T cell	CL:0000800	0.005301089967953976
+IN_NIB_H024_2146	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.01958250216096702
+IN_NIB_H024_2184	naive B cell	CL:0000788	0.026000851064413966
+IN_NIB_H021_2200	Unknown		0.011204147474656034
+IN_NIB_H027_2205	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.005029495406252971
+IN_NIB_H019_2225	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.02143925041337802
+IN_NIB_H021_2226	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.054158772260681
+IN_NIB_H024_2236	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.05270739599172902
+IN_NIB_H029_2238	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.017813038441052975
+IN_NIB_H021_2249	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.254964282754936
+IN_NIB_H025_2275	memory B cell	CL:0000787	0.052397101148919045
+IN_NIB_H025_2333	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.000934842361813959
+IN_NIB_H025_2337	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.00028808490367304707
+IN_NIB_H025_2344	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.007031586892668029
+IN_NIB_H027_2360	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.05372859632112803
+IN_NIB_H029_2379	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.03788361633191095
+KR_SGI_H020_33	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.12387547766919305
+KR_SGI_H017_117	intermediate monocyte	CL:0002393	0.05132612304988604
+KR_SGI_H019_130	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.05604879131000795
+KR_SGI_H020_162	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.10453039808633702
+KR_SGI_H022_192	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.07378368797117796
+KR_SGI_H020_197	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.045167024640824005
+KR_SGI_H026_203	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.04318242912527104
+KR_SGI_H020_242	intermediate monocyte	CL:0002393	0.046922486893479
+KR_SGI_H021_246	CD14-low, CD16-positive monocyte	CL:0002396	0.30529377374091704
+KR_SGI_H027_269	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.07812618464576704
+KR_SGI_H026_272	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.05042899211479002
+KR_SGI_H020_304	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.204645643606724
+KR_SGI_H021_352	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.05255790552424
+KR_SGI_H027_356	intermediate monocyte	CL:0002393	0.11485749285330504
+KR_SGI_H017_461	CD14-low, CD16-positive monocyte	CL:0002396	0.04251317834451296
+KR_SGI_H020_527	intermediate monocyte	CL:0002393	0.107744047210512
+KR_SGI_H020_544	CD14-low, CD16-positive monocyte	CL:0002396	0.387550573112324
+KR_SGI_H024_551	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.16246086434306395
+KR_SGI_H021_566	intermediate monocyte	CL:0002393	0.09348436641145697
+KR_SGI_H017_620	CD1c-positive myeloid dendritic cell	CL:0002399	0.16685785263046304
+KR_SGI_H021_647	CD1c-positive myeloid dendritic cell	CL:0002399	0.06276180939196796
+KR_SGI_H021_650	CD14-low, CD16-positive monocyte	CL:0002396	0.499049407224161
+KR_SGI_H017_671	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.024405271221693003
+KR_SGI_H019_679	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.15608445098691004
+KR_SGI_H021_694	CD14-low, CD16-positive monocyte	CL:0002396	0.08551694065277704
+KR_SGI_H020_748	CD14-low, CD16-positive monocyte	CL:0002396	0.251541135405959
+KR_SGI_H026_753	CD14-low, CD16-positive monocyte	CL:0002396	0.475467847352266
+KR_SGI_H021_756	CD14-low, CD16-positive monocyte	CL:0002396	0.08728182941679097
+KR_SGI_H020_777	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.06540474893932002
+KR_SGI_H029_816	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.055001561072826055
+KR_SGI_H019_839	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.042762242900516
+KR_SGI_H020_934	CD14-low, CD16-positive monocyte	CL:0002396	0.20061693867709196
+KR_SGI_H024_940	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.06387014384585699
+KR_SGI_H029_942	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.032388385567319045
+KR_SGI_H017_943	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.04234573072868797
+KR_SGI_H026_970	CD1c-positive myeloid dendritic cell	CL:0002399	0.332079103173494
+KR_SGI_H017_1017	CD14-low, CD16-positive monocyte	CL:0002396	0.10963652142256797
+KR_SGI_H026_1035	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.07493596828550897
+KR_SGI_H027_1066	CD14-low, CD16-positive monocyte	CL:0002396	0.383478342470733
+KR_SGI_H020_1083	intermediate monocyte	CL:0002393	0.04927336170362495
+KR_SGI_H019_1087	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.14721709407816796
+KR_SGI_H027_1150	CD14-low, CD16-positive monocyte	CL:0002396	0.449901445097007
+KR_SGI_H026_1158	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.047979909479944016
+KR_SGI_H021_1174	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.056172001867332955
+KR_SGI_H029_1180	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.10335406402651903
+KR_SGI_H022_1212	intermediate monocyte	CL:0002393	0.039653332240976
+KR_SGI_H020_1255	intermediate monocyte	CL:0002393	0.04677309163398902
+KR_SGI_H029_1265	CD1c-positive myeloid dendritic cell	CL:0002399	0.05046861263803104
+KR_SGI_H026_1267	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.03613920156193995
+KR_SGI_H020_1295	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.012910408573799992
+KR_SGI_H026_1317	intermediate monocyte	CL:0002393	0.062908210212818
+KR_SGI_H017_1338	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.06001808515902196
+KR_SGI_H021_1349	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.07016612621238005
+KR_SGI_H027_1382	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.056170122735531014
+KR_SGI_H024_1400	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.08733028240583796
+KR_SGI_H017_1434	CD14-low, CD16-positive monocyte	CL:0002396	0.36529131068073395
+KR_SGI_H019_1437	CD1c-positive myeloid dendritic cell	CL:0002399	0.05913722309148095
+KR_SGI_H017_1510	CD14-low, CD16-positive monocyte	CL:0002396	0.34753290581628904
+KR_SGI_H024_1515	CD14-low, CD16-positive monocyte	CL:0002396	0.22945138582727498
+KR_SGI_H022_1518	intermediate monocyte	CL:0002393	0.046009314077497976
+KR_SGI_H026_1595	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.0016968693588630401
+KR_SGI_H017_1631	CD1c-positive myeloid dendritic cell	CL:0002399	0.13699948701450004
+KR_SGI_H020_1678	CD1c-positive myeloid dendritic cell	CL:0002399	0.13701092504215195
+KR_SGI_H029_1695	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.04658646456217197
+KR_SGI_H026_1719	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.04947070480771498
+KR_SGI_H026_1724	intermediate monocyte	CL:0002393	0.036872488158368966
+KR_SGI_H024_1732	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.26735943203214096
+KR_SGI_H021_1749	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.11191676609009704
+KR_SGI_H029_1757	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.09038234988080296
+KR_SGI_H027_1811	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.044758349596489055
+KR_SGI_H027_1893	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.057321033877007044
+KR_SGI_H022_1909	intermediate monocyte	CL:0002393	0.067476561438508
+KR_SGI_H024_1931	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.07242009056069099
+KR_SGI_H026_1935	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.07006939777216104
+KR_SGI_H019_1940	intermediate monocyte	CL:0002393	0.045874022127143976
+KR_SGI_H019_1951	CD14-low, CD16-positive monocyte	CL:0002396	0.36371966947631196
+KR_SGI_H024_1962	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.048414716518640044
+KR_SGI_H021_2023	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.07455032700797604
+KR_SGI_H017_2033	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.16192007125195396
+KR_SGI_H026_2035	intermediate monocyte	CL:0002393	0.03526110205833399
+KR_SGI_H019_2045	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.08902488783395801
+KR_SGI_H019_2046	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.149786618474951
+KR_SGI_H022_2074	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.046556645774114
+KR_SGI_H021_2125	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.09666828295867402
+KR_SGI_H019_2169	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.056183367712781984
+KR_SGI_H024_2251	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.13394212829562002
+KR_SGI_H024_2275	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.07537353631099597
+KR_SGI_H029_2283	intermediate monocyte	CL:0002393	0.013717626976443964
+KR_SGI_H024_2286	CD14-low, CD16-positive monocyte	CL:0002396	0.39661151929599103
+KR_SGI_H024_2365	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.12264698162564402
+KR_SGI_H019_2385	CD14-positive, CD16-negative classical monocyte	CL:0002057	0.12772464797805105
+KR_SGI_H020_2395	intermediate monocyte	CL:0002393	0.029523510864417957
+JP_RIK_H037_2	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.04190610214684998
+JP_RIK_H037_12	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.03606231819735595
+JP_RIK_H042_16	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.02454911669257398
+JP_RIK_H037_22	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.05870262197946896
+JP_RIK_H040_45	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.014962365799066957
+JP_RIK_H042_67	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.010401517170383956
+JP_RIK_H040_110	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.005615469888636038
+JP_RIK_H042_113	mature gamma-delta T cell	CL:0000800	0.028484237047817995
+JP_RIK_H040_120	mature gamma-delta T cell	CL:0000800	0.0027702374516459516
+JP_RIK_H037_136	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.032039478580891956
+JP_RIK_H037_139	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.04619727286809305
+JP_RIK_H045_158	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.025514153709319976
+JP_RIK_H043_165	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.03952133079558795
+JP_RIK_H042_171	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.036784089517925
+JP_RIK_H044_177	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.008974629620402963
+JP_RIK_H044_193	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.041682022353975
+JP_RIK_H032_200	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.030027296839855055
+JP_RIK_H034_237	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.04700739675169796
+JP_RIK_H037_269	CD4-positive, alpha-beta memory T cell	CL:0000897	0.003682423868505036
+LONZA3038099_293	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.04752395063027104
+JP_RIK_H032_297	CD16-negative, CD56-bright natural killer cell, human	CL:0000938	0.04720360767837595
+JP_RIK_H040_316	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.003984421272838046
+JP_RIK_H045_317	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.09382931869173505
+JP_RIK_H045_354	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.038747659144556024
+JP_RIK_H045_488	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.09744463061166797
+JP_RIK_H042_497	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.04820283227395805
+JP_RIK_H045_513	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.002860333663548986
+JP_RIK_H042_526	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.02062642171606599
+JP_RIK_H037_544	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.045875681428557025
+JP_RIK_H037_652	mature gamma-delta T cell	CL:0000800	0.010879457562426031
+JP_RIK_H037_687	mature gamma-delta T cell	CL:0000800	0.010907954196687997
+JP_RIK_H034_763	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.042853631399324965
+JP_RIK_H040_765	mature gamma-delta T cell	CL:0000800	0.001609063234010999
+JP_RIK_H040_792	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.014186365310035032
+JP_RIK_H039_794	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.18674702032725998
+JP_RIK_H032_815	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.046189024287413005
+JP_RIK_H045_841	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.12977650095155602
+JP_RIK_H040_876	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.09021353420799005
+JP_RIK_H042_895	mature gamma-delta T cell	CL:0000800	0.0035521509577780552
+JP_RIK_H040_913	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.048044346261975956
+JP_RIK_H043_919	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.048047363640538965
+JP_RIK_H032_935	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.030977619129532008
+JP_RIK_H042_937	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.04566188846325403
+JP_RIK_H042_938	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.001040895690803012
+JP_RIK_H037_942	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.041644957636621016
+JP_RIK_H045_950	CD16-negative, CD56-bright natural killer cell, human	CL:0000938	0.045582395750279
+JP_RIK_H042_965	mature gamma-delta T cell	CL:0000800	0.014402809946585049
+JP_RIK_H045_984	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.009233712590601018
+JP_RIK_H042_989	CD16-negative, CD56-bright natural killer cell, human	CL:0000938	0.04453743215311501
+JP_RIK_H037_993	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.08827459158260598
+JP_RIK_H040_1009	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.0027321009205929503
+JP_RIK_H042_1012	mature gamma-delta T cell	CL:0000800	2.5989609728993557e-05
+JP_RIK_H044_1022	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.07387555441452198
+JP_RIK_H037_1026	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.11506577269137797
+JP_RIK_H045_1039	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.04655962356315302
+JP_RIK_H037_1046	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.09127230601046799
+JP_RIK_H042_1088	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.002392966097489957
+JP_RIK_H040_1090	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.014515234489749007
+JP_RIK_H039_1105	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.04036644400417699
+JP_RIK_H042_1129	mature gamma-delta T cell	CL:0000800	0.00016579805696903538
+JP_RIK_H045_1131	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.007977889926711002
+JP_RIK_H044_1134	Unknown		0.09632749531670803
+JP_RIK_H045_1139	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.03588130104724496
+JP_RIK_H043_1170	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.045751388227721956
+JP_RIK_H034_1177	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.046629985602279045
+JP_RIK_H042_1205	mature gamma-delta T cell	CL:0000800	0.0008047378648949888
+JP_RIK_H037_1216	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.008839692955449951
+JP_RIK_H037_1225	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.029157731171330026
+JP_RIK_H044_1231	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.03513212445495095
+JP_RIK_H044_1238	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.030517499830571948
+JP_RIK_H037_1246	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.034178433879286985
+JP_RIK_H040_1257	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.02426941229188395
+JP_RIK_H044_1266	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.037043522368542026
+JP_RIK_H044_1319	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.05434777620970299
+JP_RIK_H039_1342	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.044371184000895014
+JP_RIK_H044_1355	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.07770048497557802
+JP_RIK_H032_1408	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.10637523989945297
+JP_RIK_H037_1420	mature gamma-delta T cell	CL:0000800	0.07715299555006905
+JP_RIK_H037_1442	mature gamma-delta T cell	CL:0000800	0.0005584188174320159
+JP_RIK_H045_1482	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.036550267429887984
+JP_RIK_H042_1492	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.02914842476574897
+JP_RIK_H032_1493	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.10411591429155098
+JP_RIK_H042_1503	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.07557064300243099
+JP_RIK_H037_1509	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.05327570156587902
+JP_RIK_H042_1510	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.041050808799849015
+JP_RIK_H044_1528	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.05883287539803905
+JP_RIK_H037_1541	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.06944769221310498
+JP_RIK_H044_1565	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.005259222925768969
+JP_RIK_H044_1604	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.05364400287397497
+JP_RIK_H032_1672	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.03724755098215604
+JP_RIK_H042_1694	CD4-positive, alpha-beta memory T cell	CL:0000897	0.010088052853677976
+JP_RIK_H034_1749	mature gamma-delta T cell	CL:0000800	0.165234510307956
+JP_RIK_H043_1775	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.020714276226516004
+JP_RIK_H040_1867	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.0077191118754099675
+JP_RIK_H042_1894	CD4-positive, alpha-beta memory T cell	CL:0000897	0.0023254674134810527
+JP_RIK_H040_1912	mature gamma-delta T cell	CL:0000800	0.0034963080754409903
+JP_RIK_H045_1918	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.059766956818723016
+JP_RIK_H045_1940	mature gamma-delta T cell	CL:0000800	0.0072894262215980055
+JP_RIK_H032_1988	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.044031995936099966
+JP_RIK_H037_2000	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.09186032979040704
+JP_RIK_H040_2024	mature gamma-delta T cell	CL:0000800	0.005577923509835991
+JP_RIK_H043_2029	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.08753095057567395
+JP_RIK_H042_2030	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.0014614806318149487
+JP_RIK_H037_2032	mature gamma-delta T cell	CL:0000800	0.00350240844112204
+JP_RIK_H037_2055	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.05018768120988604
+JP_RIK_H037_2086	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.04591451069885599
+JP_RIK_H037_2090	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.033208449731567
+JP_RIK_H034_2103	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.037644285584050974
+JP_RIK_H034_2112	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.027976408032545974
+JP_RIK_H037_2120	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.013505084070283946
+JP_RIK_H039_2139	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.05951465920902799
+JP_RIK_H034_2142	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.03968639198217805
+JP_RIK_H039_2143	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.07286752983005196
+JP_RIK_H037_2155	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.11076724582217201
+JP_RIK_H043_2159	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.035624270170560024
+JP_RIK_H042_2164	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.16905247231361198
+JP_RIK_H045_2229	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.03030525425164099
+JP_RIK_H032_2271	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.05719075660983497
+JP_RIK_H042_2318	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.0024115322562799912
+JP_RIK_H042_2333	mature gamma-delta T cell	CL:0000800	0.005270995162293013
+JP_RIK_H045_2340	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.03944602796685004
+JP_RIK_H042_2345	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.01760258765900502
+TH_MAH_H026_5	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.004686330555569995
+TH_MAH_H020_51	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.022525520096196017
+TH_MAH_H029_167	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.074259472576649
+TH_MAH_H026_179	mature gamma-delta T cell	CL:0000800	0.0036959212214919823
+TH_MAH_H020_235	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.04746840338212799
+TH_MAH_H020_305	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.04246927675269696
+TH_MAH_H029_311	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.04208892817380605
+TH_MAH_H020_327	CD16-negative, CD56-bright natural killer cell, human	CL:0000938	0.020956258164829045
+TH_MAH_H029_330	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.029543591588159
+TH_MAH_H026_357	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.01770847424673605
+TH_MAH_H024_363	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.16334294703131402
+LONZA3038099_446	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.051029926624911015
+TH_MAH_H024_483	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.004117816686131981
+TH_MAH_H016_488	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.03641443806890199
+LONZA3038099_553	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.050683005230350964
+TH_MAH_H026_599	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.023734615855553032
+TH_MAH_H029_602	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.041007239866303946
+TH_MAH_H020_705	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.021416505206779957
+TH_MAH_H021_764	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.16635015236807604
+TH_MAH_H021_799	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.08453424925952302
+TH_MAH_H020_814	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.04042641572109795
+TH_MAH_H026_826	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.037137847685268954
+LONZA3038099_855	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.039911192903632986
+LONZA3038099_1031	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.038504171257152
+LONZA3061635_1050	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.036121743896943004
+TH_MAH_H020_1094	CD4-positive, alpha-beta memory T cell	CL:0000897	0.014990827146266983
+TH_MAH_H029_1108	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.036233290212669966
+LONZA3061635_1120	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.026644932021199996
+TH_MAH_H024_1157	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.11830571253581601
+TH_MAH_H024_1161	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.11132228741366601
+TH_MAH_H026_1183	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.04876918749152703
+TH_MAH_H026_1189	mature gamma-delta T cell	CL:0000800	0.005936866381569983
+TH_MAH_H024_1283	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.17807924724894997
+TH_MAH_H020_1308	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.04033408272384298
+TH_MAH_H029_1321	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.053972096647942
+TH_MAH_H024_1333	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.156028278099283
+TH_MAH_H029_1342	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.023588549450438978
+TH_MAH_H026_1354	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.131870526963626
+TH_MAH_H024_1359	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.196694748915488
+TH_MAH_H020_1362	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.03396351548607002
+TH_MAH_H021_1383	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.05853762352717495
+TH_MAH_H021_1405	mature gamma-delta T cell	CL:0000800	0.0031851524118829966
+TH_MAH_H020_1425	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.054677504667781984
+TH_MAH_H024_1477	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.089353118947607
+TH_MAH_H024_1483	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.04932111961093999
+TH_MAH_H024_1487	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.04157055176194002
+TH_MAH_H024_1497	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.110992451411696
+TH_MAH_H020_1506	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.06062663705943505
+TH_MAH_H029_1521	CD16-negative, CD56-bright natural killer cell, human	CL:0000938	0.04735629720394796
+TH_MAH_H029_1523	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.03455114744153098
+TH_MAH_H029_1594	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.04314032070177398
+TH_MAH_H024_1605	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.115105054333143
+TH_MAH_H024_1615	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.10309609475442005
+TH_MAH_H026_1617	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.045416684535247054
+TH_MAH_H026_1643	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.009710885362240962
+TH_MAH_H036_1729	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.03969752895488099
+TH_MAH_H044_1763	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.022107115734497973
+TH_MAH_H034_1789	mature gamma-delta T cell	CL:0000800	0.14509575464123203
+TH_MAH_H036_1798	CD16-negative, CD56-bright natural killer cell, human	CL:0000938	0.06170231849539498
+TH_MAH_H044_1801	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.007562830814559995
+TH_MAH_H040_1837	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.05433331018326504
+TH_MAH_H033_1890	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.049656546730098006
+TH_MAH_H036_1930	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.03196801558707696
+TH_MAH_H031_1976	mature gamma-delta T cell	CL:0000800	0.013068024291076008
+TH_MAH_H031_1979	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.020398079826089988
+TH_MAH_H042_1992	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.032689796841321006
+TH_MAH_H033_2029	mature gamma-delta T cell	CL:0000800	0.05013578596526902
+TH_MAH_H033_2090	mature gamma-delta T cell	CL:0000800	0.15393355106748496
+TH_MAH_H034_2161	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.13020810377897996
+TH_MAH_H036_2210	CD16-negative, CD56-bright natural killer cell, human	CL:0000938	0.04355003074500996
+TH_MAH_H031_2226	CD16-negative, CD56-bright natural killer cell, human	CL:0000938	0.10763718367456299
+TH_MAH_H031_2278	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.03971422553561099
+TH_MAH_H044_2282	CD16-positive, CD56-dim natural killer cell, human	CL:0000939	0.01758671021269298
+TH_MAH_H042_2313	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.09977978086309003
+TH_MAH_H036_2378	CD16-negative, CD56-bright natural killer cell, human	CL:0000938	0.045710382847004016
+KR_SGI_H020_20	effector memory CD4-positive, alpha-beta T cell	CL:0000905	0.0016933382212910297
+KR_SGI_H020_25	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.13758098404875896
+KR_SGI_H022_50	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.098169296279638
+KR_SGI_H022_96	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.204811805228594
+KR_SGI_H020_133	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.004464071445269946
+KR_SGI_H020_136	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.04389274741937599
+KR_SGI_H022_166	mature gamma-delta T cell	CL:0000800	0.016478543297055004
+KR_SGI_H021_176	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.0034915376039580392
+KR_SGI_H020_185-1	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.004103208804522973
+KR_SGI_H027_280	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.004286520699351981
+KR_SGI_H020_294	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.00409318574856099
+KR_SGI_H026_365	effector memory CD4-positive, alpha-beta T cell	CL:0000905	0.007043369959638945
+KR_SGI_H020_423	effector memory CD4-positive, alpha-beta T cell	CL:0000905	0.0011139066259570063
+KR_SGI_H027_434	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.003321171007187984
+KR_SGI_H019_507	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.22229318126532804
+KR_SGI_H027_548	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.009053825944331018
+KR_SGI_H026_556	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.00040522418184796294
+KR_SGI_H026_592	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.009475887630945978
+KR_SGI_H017_615	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.017697357411050052
+KR_SGI_H017_632	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.004023419285320018
+KR_SGI_H021_658	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.009814790203682033
+KR_SGI_H024_714	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.0069024457852280285
+KR_SGI_H024_722	effector memory CD4-positive, alpha-beta T cell	CL:0000905	0.001718668063665052
+KR_SGI_H024_759	effector memory CD4-positive, alpha-beta T cell	CL:0000905	0.00739921883557404
+KR_SGI_H029_770	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.0061678161422690225
+KR_SGI_H021_799	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.03321905172526096
+KR_SGI_H026_850	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.0013952190333530456
+KR_SGI_H026_854	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.006897613212159981
+KR_SGI_H027_869	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.11835765966832501
+KR_SGI_H026_877	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.14119772438961598
+KR_SGI_H027_880	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.007194385632789957
+KR_SGI_H021_898	mature gamma-delta T cell	CL:0000800	0.019599009088137054
+KR_SGI_H019_957	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.008312290704888037
+KR_SGI_H027_991	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.0016636375724510266
+KR_SGI_H020_1039	CD8aa(I) thymocyte	CL:0009068	0.02734981284624205
+KR_SGI_H029_1041	mature gamma-delta T cell	CL:0000800	0.15442461274797004
+KR_SGI_H019_1121	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.008218443580016999
+KR_SGI_H029_1225	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.0005859106983789886
+KR_SGI_H017_1235	effector memory CD4-positive, alpha-beta T cell	CL:0000905	0.00968075884615005
+KR_SGI_H029_1246	mature gamma-delta T cell	CL:0000800	0.015265532051811026
+KR_SGI_H029_1293	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.02337705117432398
+KR_SGI_H019_1304	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.023680206680586013
+KR_SGI_H020_1410	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.0023616102803659667
+KR_SGI_H019_1413-1	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.005517016537072039
+KR_SGI_H021_1423-1	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.008174798478541967
+KR_SGI_H027_1424	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.043792483393315984
+KR_SGI_H020_1430	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.06949345665819096
+KR_SGI_H026_1437	memory CCR4-positive regulatory T cell	CL:0001046	0.001967177743332993
+KR_SGI_H021_1439	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.007403909790817953
+KR_SGI_H026_1454	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.005050589657914051
+KR_SGI_H020_1574	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.15066964899054403
+KR_SGI_H017_1603	double negative thymocyte	CL:0002489	0.040315636572183955
+KR_SGI_H029_1650	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.0006230533375930492
+KR_SGI_H029_1667	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.013615025610641984
+KR_SGI_H027_1674	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.0011931124581819885
+KR_SGI_H017_1680-1	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.0029852693090890448
+KR_SGI_H024_1704	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.09743114807577802
+KR_SGI_H021_1714	effector memory CD4-positive, alpha-beta T cell	CL:0000905	0.004869507205299994
+KR_SGI_H022_1725	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.006504538572731033
+KR_SGI_H024_1748	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.001144560849609011
+KR_SGI_H020_1757	effector memory CD4-positive, alpha-beta T cell	CL:0000905	0.00666396108947398
+KR_SGI_H026_1809	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.014511826289488994
+KR_SGI_H029_1821	mucosal-associated invariant T cell	CL:0000940	0.04407859692120397
+KR_SGI_H024_1848	mucosal-associated invariant T cell	CL:0000940	0.125509254110461
+KR_SGI_H022_1907	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.0034308661387819628
+KR_SGI_H026_2027	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.12376422124971798
+KR_SGI_H029_2050	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.007277583936489029
+KR_SGI_H027_2171	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.0015562312227499486
+KR_SGI_H019_2193	effector memory CD4-positive, alpha-beta T cell	CL:0000905	0.008770661908502952
+KR_SGI_H019_2198	mature gamma-delta T cell	CL:0000800	0.031242759599906966
+KR_SGI_H029_2218-1	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.009320813442239007
+KR_SGI_H022_2226	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.0042133261394510235
+KR_SGI_H027_2248	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.003313005117252965
+KR_SGI_H026_2259	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.0009507127426610085
+KR_SGI_H027_2281	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.07948106589847803
+KR_SGI_H021_2299	naive regulatory T cell	CL:0002677	0.0017182954835429642
+KR_SGI_H022_2349	central memory CD8-positive, alpha-beta T cell	CL:0000907	0.009532671001552973
+KR_SGI_H026_2367	memory regulatory T cell	CL:0002678	0.01095302476346205
+KR_SGI_H024_2399	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.008362009577268958
+SG_HEL_H199_53	effector memory CD4-positive, alpha-beta T cell	CL:0000905	0.008315749535529049
+SG_HEL_H199_75	effector memory CD4-positive, alpha-beta T cell	CL:0000905	0.0019167610129630086
+SG_HEL_H003_87	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.014498958284654972
+SG_HEL_H003_127	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.002549248833257023
+SG_HEL_H045_148	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.0038227062834860215
+SG_HEL_H003_214	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.17353853787914397
+SG_HEL_H003_238	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.050538446041860974
+SG_HEL_H003_310	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.0020138473831099457
+SG_HEL_H003_379	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.006125185596832949
+SG_HEL_H045_416	effector memory CD4-positive, alpha-beta T cell	CL:0000905	0.0019871856331570292
+SG_HEL_H003_454	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.002993304519320006
+SG_HEL_H003_464	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.008772722147448953
+SG_HEL_H003_468	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.0037724852832049516
+SG_HEL_H003_478	effector memory CD4-positive, alpha-beta T cell	CL:0000905	0.008766655036286042
+SG_HEL_H003_481	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.009501122232558945
+SG_HEL_H045_502	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.0017432507932929608
+SG_HEL_H003_553	effector memory CD4-positive, alpha-beta T cell	CL:0000905	0.005215271400303978
+SG_HEL_H003_566	effector memory CD4-positive, alpha-beta T cell	CL:0000905	0.0006672604116050307
+SG_HEL_H045_580	effector memory CD4-positive, alpha-beta T cell	CL:0000905	0.004343657862940997
+SG_HEL_H045_663	effector memory CD4-positive, alpha-beta T cell	CL:0000905	0.006957624027143949
+SG_HEL_H003_702	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.009326092066110014
+SG_HEL_H003_783	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.13247585120275995
+SG_HEL_H199_850	mature gamma-delta T cell	CL:0000800	0.031764878735212054
+SG_HEL_H199_872	effector memory CD4-positive, alpha-beta T cell	CL:0000905	0.0058176812804500155
+SG_HEL_H003_891	naive regulatory T cell	CL:0002677	0.006294260132197027
+SG_HEL_H003_937	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.18261451080908997
+SG_HEL_H199_1034	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.00020644680601600296
+SG_HEL_H045_1081	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.10282705872755804
+SG_HEL_H199_1096	CD4-positive, alpha-beta memory T cell	CL:0000897	0.05540357158535303
+SG_HEL_H003_1155	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.010031482359529997
+SG_HEL_H045_1158	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.0024562618658240387
+SG_HEL_H003_1253	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.011677938182867997
+SG_HEL_H199_1289	mucosal-associated invariant T cell	CL:0000940	0.048626772603698964
+SG_HEL_H199_1345	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.046533108249652955
+SG_HEL_H199_1396	effector memory CD4-positive, alpha-beta T cell	CL:0000905	0.0009173074699819761
+SG_HEL_H199_1462	effector memory CD4-positive, alpha-beta T cell	CL:0000905	0.0019733514166120347
+SG_HEL_H045_1465	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.003671226182950016
+SG_HEL_H003_1532	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.004554318072820029
+SG_HEL_H199_1577	CD4-positive, alpha-beta memory T cell	CL:0000897	0.030281487672242036
+SG_HEL_H003_1604	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.17982135295647805
+SG_HEL_H003_1608	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.05003778144040805
+SG_HEL_H003_1664	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.02308223608279003
+SG_HEL_H045_1702	effector memory CD4-positive, alpha-beta T cell	CL:0000905	0.006653938350073996
+SG_HEL_H199_1843	effector memory CD4-positive, alpha-beta T cell	CL:0000905	0.0015439343285380547
+SG_HEL_H199_1867	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.04404583037440901
+SG_HEL_H003_1900	memory regulatory T cell	CL:0002678	0.00027698750225801927
+SG_HEL_H003_1902	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.024791274959813037
+SG_HEL_H003_2000	memory regulatory T cell	CL:0002678	0.014506651587924968
+SG_HEL_H045_2198	memory regulatory T cell	CL:0002678	0.007307181523315998
+SG_HEL_H045_2210	memory regulatory T cell	CL:0002678	0.060326483834252986
+SG_HEL_H199_2330	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.003990057020120008
+SG_HEL_H003_2340	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.00418945868755205
+SG_HEL_H199_2342	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.01047271811205297
+SG_HEL_H045_2359	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.008434671328163001
+TH_MAH_H055_14	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.04100778068125799
+TH_MAH_H050_61	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.108674037652154
+TH_MAH_H054_133	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.11901533642498896
+TH_MAH_H050_136	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.003546195356799009
+LONZA3061635_201	effector memory CD4-positive, alpha-beta T cell	CL:0000905	0.008100190359836001
+TH_MAH_H053_216	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.11452960882156904
+TH_MAH_H058_230	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.10500683914594999
+TH_MAH_H050_236	CD4-positive, alpha-beta memory T cell	CL:0000897	0.057920712374604055
+TH_MAH_H049_238	mucosal-associated invariant T cell	CL:0000940	0.003239649520299981
+TH_MAH_H058_277	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.053857130117746954
+TH_MAH_H047_331	effector memory CD4-positive, alpha-beta T cell	CL:0000905	0.003933432080692967
+TH_MAH_H048_339	mature gamma-delta T cell	CL:0000800	0.04573400359300095
+TH_MAH_H053_346	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.004962801742918965
+TH_MAH_H047_353	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.064778283656306
+TH_MAH_H055_381	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.02950466562322096
+TH_MAH_H054_385	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.0028587559079630287
+TH_MAH_H054_425	central memory CD8-positive, alpha-beta T cell	CL:0000907	0.00016224895919902949
+TH_MAH_H050_441	effector memory CD4-positive, alpha-beta T cell	CL:0000905	0.0032326019747279666
+TH_MAH_H058_479	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.09681986304353196
+TH_MAH_H050_485	mature gamma-delta T cell	CL:0000800	0.014452981215657967
+TH_MAH_H050_494	memory CCR4-positive regulatory T cell	CL:0001046	0.011432256511864969
+TH_MAH_H047_550	mature gamma-delta T cell	CL:0000800	0.01549286372889902
+TH_MAH_H047_591	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.06842955327451805
+LONZA3061635_617	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.00274440766523798
+TH_MAH_H048_638	effector memory CD4-positive, alpha-beta T cell	CL:0000905	0.009132472503461053
+TH_MAH_H050_686	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.0030834416826629463
+TH_MAH_H054_698	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.022308442151229957
+TH_MAH_H050_718	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.0013688501269819575
+TH_MAH_H054_719	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.0017419505648780254
+TH_MAH_H050_743	effector memory CD4-positive, alpha-beta T cell	CL:0000905	0.008172049507071955
+TH_MAH_H048_761	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.005251917389009986
+TH_MAH_H058_763	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.0046642518765129815
+TH_MAH_H058_781	effector memory CD4-positive, alpha-beta T cell	CL:0000905	0.008886538605910044
+LONZA3061635_829	effector memory CD4-positive, alpha-beta T cell	CL:0000905	0.004073424876098963
+LONZA3061635_831	effector memory CD4-positive, alpha-beta T cell	CL:0000905	0.0026772121902619572
+TH_MAH_H047_890	mucosal-associated invariant T cell	CL:0000940	0.0013536098973799815
+TH_MAH_H054_900	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.004991834368164971
+LONZA3061635_901	effector memory CD4-positive, alpha-beta T cell	CL:0000905	0.002424114320612958
+TH_MAH_H054_948	memory regulatory T cell	CL:0002678	0.0013488246760120504
+TH_MAH_H047_1007	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.009801148837756957
+TH_MAH_H047_1010	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.016748177455490953
+TH_MAH_H054_1035	central memory CD8-positive, alpha-beta T cell	CL:0000907	0.00708611127544001
+TH_MAH_H050_1075	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.042370982743556995
+TH_MAH_H049_1090	effector memory CD4-positive, alpha-beta T cell	CL:0000905	0.00032750882355503386
+TH_MAH_H058_1119	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.015233134404327053
+TH_MAH_H055_1120	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.0067831425732109984
+TH_MAH_H054_1134	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.08150892182376002
+TH_MAH_H050_1163	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.007602616091946013
+TH_MAH_H058_1177	mature gamma-delta T cell	CL:0000800	0.009211005819030005
+TH_MAH_H048_1215	effector memory CD4-positive, alpha-beta T cell	CL:0000905	0.0063613747052410075
+TH_MAH_H054_1247	mucosal-associated invariant T cell	CL:0000940	0.08212988023623502
+TH_MAH_H054_1332	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.0034690031377969666
+TH_MAH_H053_1333	mucosal-associated invariant T cell	CL:0000940	0.13212062395817803
+TH_MAH_H050_1339	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.0032939472489309507
+LONZA3061635_1341	CD8aa(I) thymocyte	CL:0009068	0.020045713535109977
+TH_MAH_H053_1362	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.03270562460694504
+TH_MAH_H055_1365	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.057899230781308986
+TH_MAH_H055_1375	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.00028743783386198096
+TH_MAH_H047_1384	mature gamma-delta T cell	CL:0000800	0.05034628141436903
+TH_MAH_H055_1389	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.0051214687395739755
+TH_MAH_H058_1392	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.017262776194916007
+TH_MAH_H050_1417	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.007005156852736949
+TH_MAH_H054_1420	effector memory CD4-positive, alpha-beta T cell	CL:0000905	7.684662393903086e-05
+LONZA3061635_1429	central memory CD8-positive, alpha-beta T cell	CL:0000907	0.016244710039899024
+TH_MAH_H055_1449	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.005957701363060952
+TH_MAH_H058_1458	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.04670789110915796
+TH_MAH_H058_1518	mature gamma-delta T cell	CL:0000800	0.024258427566200003
+TH_MAH_H047_1571	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.045845176502535945
+TH_MAH_H047_1592	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.00032519186605994843
+TH_MAH_H049_1600	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.041418672334312956
+TH_MAH_H047_1639	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.003224407974352972
+TH_MAH_H050_1670	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.012124664684106001
+TH_MAH_H048_1765	effector memory CD8-positive, alpha-beta T cell	CL:0000913	0.05442865113963502
+LONZA3061635_1792	mucosal-associated invariant T cell	CL:0000940	0.04672843550181405
+TH_MAH_H054_1810	effector memory CD4-positive, alpha-beta T cell	CL:0000905	0.004815398208391053
+TH_MAH_H054_1822	mucosal-associated invariant T cell	CL:0000940	0.002703419082200953
+TH_MAH_H050_1887	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.005092141083349988
+TH_MAH_H053_1897	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.03132053481717001
+TH_MAH_H058_1924	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.00600278816995603
+TH_MAH_H050_1926	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.009840447965138055
+TH_MAH_H048_1962	effector memory CD4-positive, alpha-beta T cell	CL:0000905	0.0031198255399009778
+TH_MAH_H054_1973	mucosal-associated invariant T cell	CL:0000940	0.058368167382429004
+LONZA3061635_1982	memory regulatory T cell	CL:0002678	0.00030269958405204633
+TH_MAH_H058_1990	mucosal-associated invariant T cell	CL:0000940	0.10715992435978605
+TH_MAH_H050_2043	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.020848329508173946
+TH_MAH_H047_2051	Unknown		0.0033001056960919595
+TH_MAH_H048_2079	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.0010738284072150384
+TH_MAH_H047_2097	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.02375782251994596
+LONZA3061635_2101	memory regulatory T cell	CL:0002678	0.010851361884327004
+TH_MAH_H047_2111	CD8aa(I) thymocyte	CL:0009068	0.007403852561034041
+TH_MAH_H055_2122	mucosal-associated invariant T cell	CL:0000940	0.014138340917346004
+TH_MAH_H050_2125	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.0031750404732699966
+TH_MAH_H055_2134	effector memory CD4-positive, alpha-beta T cell	CL:0000905	0.005892024913568994
+TH_MAH_H058_2184	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.007890365890607987
+TH_MAH_H049_2205	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.0054329965869459595
+LONZA3061635_2249	naive thymus-derived CD4-positive, alpha-beta T cell	CL:0000895	0.004425599119508017
+TH_MAH_H058_2274	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.02273832794753905
+TH_MAH_H055_2302	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.002639025947896001
+TH_MAH_H050_2310	central memory CD4-positive, alpha-beta T cell	CL:0000904	0.00043972261697400317
+TH_MAH_H053_2362	naive thymus-derived CD8-positive, alpha-beta T cell	CL:0000900	0.04992108575722998
+KR_SGI_H049_35	common myeloid progenitor	CL:0000049	0.045821789478941
+KR_SGI_H079_43	Unknown		0.09135767770684
+KR_SGI_H154_57	Unknown		0.08261767070659998
+SG_HEL_H294_72	common myeloid progenitor	CL:0000049	0.04090882147296504
+SG_HEL_H042_74	common myeloid progenitor	CL:0000049	0.118179404874451
+TH_MAH_H048_86	common myeloid progenitor	CL:0000049	0.049862191909622045
+TH_MAH_H049_90	common myeloid progenitor	CL:0000049	0.04582096881205
+TH_MAH_H049_91	common myeloid progenitor	CL:0000049	0.043177301819875
+TH_MAH_H054_93	common myeloid progenitor	CL:0000049	0.661769777050242
+LONZA3061635_96	common myeloid progenitor	CL:0000049	0.053653933158615996
+JP_RIK_H135_117	CD1c-positive myeloid dendritic cell	CL:0002399	0.06806081032674305
+KR_SGI_H054_134	CD1c-positive myeloid dendritic cell	CL:0002399	0.19063509419005498
+KR_SGI_H148_156	CD141-positive myeloid dendritic cell	CL:0002394	0.04203158674783003
+SG_HEL_H281_194	CD141-positive myeloid dendritic cell	CL:0002394	0.05503850990393999
+SG_HEL_H331_212	CD1c-positive myeloid dendritic cell	CL:0002399	0.26023961889191805
+SG_HEL_H056_240	CD16-negative, CD56-bright natural killer cell, human	CL:0000938	0.23570897414853897
+JP_RIK_H074_257	CD141-positive myeloid dendritic cell	CL:0002394	0.050439185630132055
+JP_RIK_H074_260	CD141-positive myeloid dendritic cell	CL:0002394	0.057658059983901055
+KR_SGI_H014_270	CD141-positive myeloid dendritic cell	CL:0002394	0.051236767920514015
+KR_SGI_H075_285	CD141-positive myeloid dendritic cell	CL:0002394	0.04659190289707105
+KR_SGI_H063_289	CD141-positive myeloid dendritic cell	CL:0002394	0.05393817905863396
+KR_SGI_H071_291	CD141-positive myeloid dendritic cell	CL:0002394	0.050633084687283
+SG_HEL_H002_313	CD141-positive myeloid dendritic cell	CL:0002394	0.04967519317154001
+SG_HEL_H111_315	CD141-positive myeloid dendritic cell	CL:0002394	0.05275874379936496
+JP_RIK_H050_330	plasma cell	CL:0000786	0.10820564570021096
+JP_RIK_H066_334	plasma cell	CL:0000786	0.09134978784352399
+JP_RIK_H119_353	plasma cell	CL:0000786	0.13561813858125005
+KR_SGI_H075_362	plasma cell	CL:0000786	0.09307339591916297
+KR_SGI_H147_371	plasma cell	CL:0000786	0.11233713137450896
+KR_SGI_H153_373	plasma cell	CL:0000786	0.08714855934761201
+SG_HEL_H146_378	plasma cell	CL:0000786	0.10416175318825505
+SG_HEL_H277_396	plasma cell	CL:0000786	0.10895541217723903
+SG_HEL_H135_406	plasma cell	CL:0000786	0.09598506929615602
+JP_RIK_H042_428	double negative thymocyte	CL:0002489	0.06657643694245396
+JP_RIK_H067_438	double negative thymocyte	CL:0002489	0.520065270296517
+JP_RIK_H076_450	innate lymphoid cell	CL:0001065	0.109068822591596
+JP_RIK_H094_457	double negative thymocyte	CL:0002489	0.057560804000319044
+KR_SGI_H042_479	double negative thymocyte	CL:0002489	0.023639231433504992
+KR_SGI_H041_483	double negative thymocyte	CL:0002489	0.039430379618487055
+KR_SGI_H077_4	innate lymphoid cell	CL:0001065	0.008676486903599012
+KR_SGI_H109_11	double negative thymocyte	CL:0002489	0.002094411728982948
+KR_SGI_H120_13	double negative thymocyte	CL:0002489	0.649631780880545
+KR_SGI_H134_18	double negative thymocyte	CL:0002489	0.028691085320751042
+SG_HEL_H027_46	double negative thymocyte	CL:0002489	0.053706342259751016

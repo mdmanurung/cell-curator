@@ -1,0 +1,70 @@
+# annotation-consensus: ONE strict config. Every key below is required unless marked optional.
+# A missing key stops the run; an unknown key stops the run; there are no defaults and no
+# overlays. Relative paths resolve against this file's directory.
+#
+# Impactful choices (a plausible alternative changes a headline number) are marked [IMPACTFUL].
+# They belong to the person running the analysis. The values here are DEMO VALUES, NOT APPROVED
+# DEFAULTS: they are copied from the frozen offline benchmark (AIDA split A, tool order from AIFI)
+# so the demo reproduces known numbers. Choose your own and record who approved them in
+# consensus.values_status.
+
+schema_version: 1
+
+run:
+  name: annotation-consensus-example
+  output_dir: out/example        # optional; --output overrides it. Needed by the Snakefile.
+
+inputs:
+  cells: examples/demo/cells.h5ad          # h5ad: obs[cluster_key], obsm[smoothing.embedding_key]
+  cluster_key: bench_cluster
+  vocabulary: examples/demo/vocabulary.tsv # TSV: label, cl_id (+ marker columns when votes are computed)
+  ontology: ../../benchmarks/data/aida-phase1-v2-pbmc-hvg2000/cl.obo   # referenced, never copied
+  tools:                                   # one TSV per tool: barcode, predicted_label, predicted_cl_id
+    celltypist: examples/demo/predictions_celltypist.tsv
+    popv: examples/demo/predictions_popv.tsv
+    singler: examples/demo/predictions_singler.tsv
+  markers: examples/demo/markers.tsv       # optional: levels/L1/markers.tsv of a cell-curator run
+
+votes:
+  mode: precomputed                        # precomputed | compute
+  path: examples/demo/cell_votes.tsv       # barcode, cluster_id, top1, top2, score1, score2, voted
+  # compute:                               # used only when mode is compute
+  #   matrix_source: X                     # X | layer
+  #   matrix_key: ""                       # layer name when matrix_source is layer
+  #   feature_id_column: ""                # var column of gene symbols; "" means var_names
+  #   gene_map: ""                         # optional TSV feature_id, gene_symbol
+  #   level: L1
+  #   parent_scope: ROOT
+  #   check_scores: ""                     # the run's levels/L1/scores.tsv; max abs diff must be < 1e-9
+
+smoothing:
+  k: 20                                    # [IMPACTFUL] neighbours besides the cell itself
+  embedding_key: X_pca                     # [IMPACTFUL] obsm key of the kNN graph
+
+consensus:
+  rule: h5                                 # [IMPACTFUL] majority | h4 (marker co-voter) | h5 (h4 + tie-break)
+  marker_weight: 1.0                       # [IMPACTFUL] marker voter, in units of one tool vote
+  gate: 0.53                               # [IMPACTFUL] winning share needed for a strict label
+  tie_break_delta: 0.0                     # [IMPACTFUL] vote-split width in tool votes (rule h5 only)
+  snap_to_vocabulary: true                 # [IMPACTFUL] move tool terms to the nearest vocabulary term
+  marker_scope: cell                       # [IMPACTFUL] cell | cluster: marker share per cell or cluster mean
+  tool_order: [celltypist, popv, singler]  # [IMPACTFUL] best tool first; breaks exact ties
+  values_status: "demo values, not approved defaults"   # say who approved the values above, or keep this
+
+cluster_gate:                              # cluster label from per-cell calls; marker-only call
+  share: 0.5                               # [IMPACTFUL] plurality share of the cluster's cells
+  lead: 0.2                                # [IMPACTFUL] plurality share minus the runner-up's share
+  fallback_margin: 0.40                    # [IMPACTFUL] smoothed per-cell margin for marker-only fallback
+
+markers_table:                             # optional block; needed when inputs.markers is set
+  top_n: 50                                # [IMPACTFUL] genes kept under BOTH wilcoxon and logreg
+  comparator_role: parent_remainder        # [IMPACTFUL]
+
+scoring:                                   # optional block; read only by the score step
+  script: ../../benchmarks/scripts/score_v8.py
+  truth: examples/demo/truth.tsv           # barcode, cell_type, cell_type_ontology_term_id
+  dataset: aida_split_a_demo
+
+determinism:
+  threads: 1                               # OMP/OPENBLAS/MKL threads; in no hashed file or config hash; the kNN search runs on one thread
+  float_digits: 6                          # significant digits of every written float

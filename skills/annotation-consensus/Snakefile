@@ -1,0 +1,139 @@
+"""annotation-consensus as a Snakemake DAG: one rule per step, resume by outputs.
+
+Run:  snakemake -s skills/annotation-consensus/Snakefile --configfile CONFIG.yaml -c1
+      snakemake -s skills/annotation-consensus/Snakefile --configfile CONFIG.yaml -c1 score
+The output directory is run.output_dir of the config (relative to the config file).
+To show scores in the report, run the score target first, then the default target.
+Every rule calls annotation_consensus.py, the same CLI as the command line. Snakemake removes a
+rule's outputs before it reruns, so the CLI's never-overwrite rule does not block a resume.
+"""
+
+import sys
+from pathlib import Path
+
+import yaml
+from snakemake.exceptions import WorkflowError
+
+
+if len(workflow.configfiles) != 1:
+    raise WorkflowError("pass exactly one strict run configuration with --configfile CONFIG.yaml")
+
+CONFIG = Path(workflow.configfiles[0]).resolve()
+DECLARED_CONFIG = yaml.safe_load(CONFIG.read_text())
+if DECLARED_CONFIG != config:
+    raise WorkflowError(
+        "Snakemake config overlays are prohibited; materialize the exact merged values "
+        "into one strict annotation-consensus config file"
+    )
+if "output_dir" not in config.get("run", {}):
+    raise WorkflowError("the Snakefile needs run.output_dir in the config")
+
+CLI = Path(workflow.basedir) / "annotation_consensus.py"
+OUT = (CONFIG.parent / config["run"]["output_dir"]).resolve()
+HAS_MARKERS = bool(config["inputs"].get("markers"))
+THREADS_ENV = (
+    f"OMP_NUM_THREADS={config['determinism']['threads']} "
+    f"OPENBLAS_NUM_THREADS={config['determinism']['threads']} "
+    f"MKL_NUM_THREADS={config['determinism']['threads']}"
+)
+
+
+def step(name):
+    return f"{THREADS_ENV} {sys.executable} {CLI} {name} --input {CONFIG} --output {OUT}"
+
+
+rule all:
+    input:
+        OUT / "reproducibility" / "checksums.sha256",
+
+
+rule validate:
+    output:
+        OUT / "validation.json",
+    shell:
+        step("validate")
+
+
+rule votes:
+    input:
+        OUT / "validation.json",
+    output:
+        OUT / "work" / "votes_status.json",
+    shell:
+        step("votes")
+
+
+rule smooth:
+    input:
+        OUT / "work" / "votes_status.json",
+    output:
+        OUT / "work" / "smoothed_votes.npy",
+        OUT / "work" / "smoothed_labels.tsv",
+        OUT / "work" / "cells.tsv",
+    shell:
+        step("smooth")
+
+
+rule map_tools:
+    input:
+        OUT / "validation.json",
+    output:
+        OUT / "tool_term_map.tsv",
+        OUT / "work" / "tools_mapped.tsv",
+    shell:
+        step("map-tools")
+
+
+rule consensus:
+    input:
+        OUT / "work" / "smoothed_votes.npy",
+        OUT / "work" / "smoothed_labels.tsv",
+        OUT / "work" / "cells.tsv",
+        OUT / "tool_term_map.tsv",
+        OUT / "work" / "tools_mapped.tsv",
+    output:
+        OUT / "calls.tsv",
+        OUT / "consensus.tsv",
+        OUT / "cell_flags.tsv",
+        OUT / "work" / "consensus_summary.json",
+    shell:
+        step("consensus")
+
+
+rule markers:
+    input:
+        OUT / "validation.json",
+    output:
+        OUT / "work" / "markers_status.json",
+        *([OUT / "marker_table.tsv"] if HAS_MARKERS else []),
+    shell:
+        step("markers")
+
+
+# Optional: reads truth. Run it by name; the default target does not need it.
+rule score:
+    input:
+        OUT / "calls.tsv",
+        OUT / "work" / "tools_mapped.tsv",
+    output:
+        OUT / "scores.tsv",
+    shell:
+        step("score")
+
+
+rule report:
+    input:
+        OUT / "calls.tsv",
+        OUT / "consensus.tsv",
+        OUT / "cell_flags.tsv",
+        OUT / "tool_term_map.tsv",
+        OUT / "work" / "markers_status.json",
+    output:
+        OUT / "report.md",
+        OUT / "result.json",
+        OUT / "reproducibility" / "commands.sh",
+        OUT / "reproducibility" / "environment.txt",
+        OUT / "reproducibility" / "input_checksums.sha256",
+        OUT / "reproducibility" / "checksums.sha256",
+    shell:
+        step("report")
