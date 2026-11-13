@@ -12,6 +12,82 @@ on a dataset (CellTypist, popV, SingleR, scANVI, Azimuth), breaks ties between t
 records why each cluster, and each cell that departs from its cluster, got its label.
 Accuracy is not the pitch. The pitch is an ontology-checked label with a reason.
 
+## Product statement (draft, numbers as of 2026-11-13)
+
+cell-curator becomes an auditable consensus layer over the annotation tools a lab already
+uses. It does not replace them and it does not claim to beat the best one.
+
+### The problem
+
+Researchers annotate one dataset with several tools (CellTypist, popV, SingleR, scANVI). The
+tools disagree and use different label vocabularies. People then pick one tool or take a
+majority vote, and the reasons are lost. Three things go wrong:
+
+- Agreement hides errors. On the benchmarks, all three tools agree on 70% of AIDA cells and
+  83% of AIFI cells and are still wrong on 7.6% and 4.4% of all cells (`c012_harmonizer`
+  report). A majority vote cannot see those cells.
+- Labels carry no reasons. A reviewer cannot see why a cluster got its label, which
+  alternatives lost, or which tool decided.
+- Reruns drift. The same inputs can give different labels on another machine, in another
+  order or with another library version.
+
+### What the product does
+
+Input: a clustered dataset, the prediction tables of the tools, and a reviewed marker corpus.
+Output: one label per cell and per cluster, with the reasons.
+
+1. Harmonizes vocabularies: maps every tool's labels to Cell Ontology terms and keeps lineage
+   relations, so "NK cell" and "CD56-dim NK" can agree.
+2. Builds the consensus: each tool votes, the marker-program evidence is one more equal vote,
+   and an ontology tie-break handles split votes.
+3. Separates certainty from guesses: the strict column keeps `Unknown`; a second column gives
+   the best guess, flagged low-confidence.
+4. Records why: one row per cluster (each tool's call, marker votes, gate failures, rationale,
+   rejected alternatives) and a list of flagged cells with a reason each.
+5. Adds supporting evidence as columns: known-marker enrichment, TF activity (CollecTRI) and
+   pathway scores (PROGENy). They never vote, and there is no cell-state call yet.
+6. Runs the same everywhere: pinned versions, hashed inputs, a config with no silent
+   defaults, a `verify` command that reruns in a clean process, Snakemake with Apptainer.
+7. Keeps the human gates: a consensus label is evidence and never writes back by itself.
+
+### What is measured
+
+- The `annotation-consensus` skill runs end to end and reproduces the frozen results exactly;
+  two full AIFI runs on different nodes were byte-identical (re-audit row 13).
+- The co-voter was the best design at coverage 0.95 or more: AIFI 0.900 at 0.988 coverage
+  against 0.894 at 1.000 for a gated majority; AIDA 0.849 at 0.907 against 0.841 at 0.945.
+- Known-marker enrichment resolved 5 to 8 of the 15 `Unknown` AIDA clusters (`c015_markers`).
+- The 12-row determinism audit passes 11 rows; rows 5 and 12 are being fixed.
+
+### What it does not do
+
+- It is not a better classifier: about one point over a plain majority, with an interval that
+  spans zero in the tie-break test. The pass bar is non-inferior to the best tool plus a
+  recorded reason for every call (round 1, Q1).
+- It does not reach 0.95 coverage at 0.85 accuracy on AIDA; nothing tested does (best single
+  tool, popV, 0.841).
+- It cannot rescue a cluster where every tool is wrong; marker evidence disagrees with the
+  agreed term on 21% (AIDA) and 39% (AIFI) of those wrong cells.
+- AIFI favours the tools: they were trained on AIFI labels.
+- Public models predict coarser labels (descendant accuracy 0.006 to 0.44 on AIFI), so they
+  need a reviewed mapping before they vote.
+- There is no cell-state call; huCIRA needs a real condition contrast.
+
+### Users
+
+Labs that annotate with several tools and need one defensible label per cluster with the
+reasons on file; atlas builders who need a reproducible, reviewable harmonization stage;
+reviewers who want to see what was chosen and what was rejected.
+
+### Open decisions before it is a product
+
+1. The per-cell flag rule (AIDA 19.2% flagged, AIFI 32.6%); the user picks a narrower rule.
+2. Review of the hand renames for public models and the popV and SingleR settings.
+3. The state-call rule, or the decision to leave it off.
+4. Whether the consensus mode moves from the standalone skill into `src/` (needs a plan row
+   and tests).
+5. When the novel sets (Tabula Sapiens, Cross-tissue) are read, once, after the method lock.
+
 ## What exists today
 
 - `levels/L1/labels.tsv` has `rationale`, `rejected_alternatives` (with scores),
