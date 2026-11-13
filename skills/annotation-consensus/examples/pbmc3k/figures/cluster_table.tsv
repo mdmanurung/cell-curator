@@ -1,0 +1,9 @@
+	scanpy_name	run1_h5_strict	run1_h5_best_guess	run2_majority_strict	run2_majority_best_guess	n_cells
+0	CD4 T cells	naive thymus-derived CD4-positive, alpha-beta T cell	naive thymus-derived CD4-positive, alpha-beta T cell	naive thymus-derived CD4-positive, alpha-beta T cell	naive thymus-derived CD4-positive, alpha-beta T cell	1144
+1	CD14+ Monocytes	CD14-positive, CD16-negative classical monocyte	CD14-positive, CD16-negative classical monocyte	CD14-positive, CD16-negative classical monocyte	CD14-positive, CD16-negative classical monocyte	480
+2	B cells	transitional stage B cell	transitional stage B cell	transitional stage B cell	transitional stage B cell	342
+3	CD8 T cells	Unknown	central memory CD8-positive, alpha-beta T cell	Unknown	central memory CD8-positive, alpha-beta T cell	316
+4	NK cells	Unknown	natural killer cell	natural killer cell	natural killer cell	154
+5	FCGR3A+ Monocytes	CD14-low, CD16-positive monocyte	CD14-low, CD16-positive monocyte	CD14-low, CD16-positive monocyte	CD14-low, CD16-positive monocyte	150
+6	Dendritic cells	Unknown	CD141-positive myeloid dendritic cell	Unknown	plasmacytoid dendritic cell	37
+7	Megakaryocytes	platelet	platelet	platelet	platelet	15
