@@ -418,7 +418,8 @@ Not built:
   section 10, which are not made.
 - Scoring uses `benchmarks/scripts/score_v8.py` from this repository.
 - Design plan: `plans/v8-consensus-mode.md`. Tests: `tests/test_annotation_consensus.py`
-  (`.venv/bin/python -m pytest skills/annotation-consensus/tests -q`; add `-m "not slow"` to skip the full-data regression).
+  (`.venv/bin/python -m pytest skills/annotation-consensus/tests -q` runs the fast suite, about 6 min;
+  `ANNOTATION_CONSENSUS_FULL=1` adds the full-data AIDA regression, about 15 min in total, so submit it with `sbatch`).
 - Snakemake: `Snakefile`, one rule per step, same CLI.
 
 ## 13. Citations
