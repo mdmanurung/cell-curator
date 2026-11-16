@@ -13,22 +13,10 @@ scope when applicable.
 - `plan.md`: phase DAG, resources, review order, and stop conditions.
 - `run_state.json`: mode, phase state, blockers, immutable hashes, and timestamps.
 
-## Parent and candidate tables
+## Mapping table
 
-- `adaptive_parent_audit.tsv`: one row per canonical parent; counts, guide
-  entropy/minorities, incompatible programs, doublets, donor/capture dominance,
-  QC/complexity/sex/batch metrics, flags, reasons.
-- `candidate_registry.tsv`: one row per candidate; candidate/parent IDs, source
-  kind, source resolution/cluster, membership hash, counts, nesting, stability,
-  closest comparator, triage action, and blank label/CL fields.
-- `candidate_membership.tsv`: one row per candidate per parent cell with Boolean
-  membership. Unique key is `(candidate_id, barcode)`.
-- `parent_decision_summary.tsv`: exactly one row per parent with outcome,
-  accepted child IDs, reasons, alternatives, confidence, reviewer state.
 - `parent_child_mapping.tsv`: exactly one row per input cell with canonical
   parent, final leaf ID, membership role, evidence outcome, and review status.
-- `child_evidence_summary.tsv`: one row per tested candidate with every gate,
-  failed reasons, evidence paths, confidence, and blank/final label fields.
 
 ## Comparator and marker artifacts
 

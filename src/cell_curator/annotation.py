@@ -469,7 +469,7 @@ def collect_level(config_path: str | Path, level: str) -> dict[str, Any]:
         assay = config.input.assays[config.annotation.assay]
         declaration = assay.representations[config.annotation.representation]
         if declaration.ranking_backend.lower() not in {"scipy_mannwhitney", "scipy", "cpu"}:
-            raise ContractError("the corpus DAG currently requires an explicit CPU marker backend; native GPU lanes remain in workflow/Snakefile")
+            raise ContractError("the corpus DAG currently requires an explicit CPU marker backend; native GPU marker ranking is not supported in the corpus DAG")
         matrix = matrix_for(adata, declaration)
         detection = matrix_for(adata, declaration.detection.model_dump()) if declaration.detection else None
         if detection is None or detection.shape != matrix.shape:

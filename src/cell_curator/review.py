@@ -613,17 +613,8 @@ def _report_dependency_hashes(
         *labels_paths,
         run_root / "context.json",
         run_root / "assumptions.json",
-        run_root / "evidence" / "summary" / "multimodal_label_scores.tsv",
-        run_root / "evidence" / "summary" / "cell_state_evidence.tsv",
-        run_root / "evidence" / "summary" / "program_cooccurrence.tsv",
-        run_root / "evidence" / "summary" / "source_corroboration.tsv",
-        run_root / "decisions" / "parent_decision_summary.tsv",
-        run_root / "decisions" / "child_evidence_summary.tsv",
         run_root / "mapping" / "parent_child_mapping.tsv",
         run_root / "mapping" / "mapping.validation.json",
-        run_root / "adaptive_parent_audit.tsv",
-        run_root / "adaptive" / "technical_summary.tsv",
-        run_root / "adaptive" / "doublet_summary.tsv",
         run_root / "discovery" / "cluster_profiles.tsv",
         run_root / "review" / (f"colors_{level}.json" if level else "colors.json"),
         run_root / "review" / "critic_packet.json",
@@ -1158,14 +1149,7 @@ def build_html_report(
             ignore_index=True,
         )
     else:
-        proposals = pd.read_csv(
-            run_root / "evidence" / "summary" / "annotation_proposals.tsv",
-            sep="\t",
-            keep_default_na=False,
-        )
-        proposals["level"] = config.guidance.hierarchy_levels[0]
-        proposals["parent_scope"] = "ROOT"
-        labels = proposals.rename(columns={"cell_type": "label"})
+        raise ContractError("the report needs the durable labels tables; run annotation finalize")
     if all_labels_paths:
         all_labels = pd.concat(
             [pd.read_csv(path, sep="\t", keep_default_na=False) for path in all_labels_paths],
