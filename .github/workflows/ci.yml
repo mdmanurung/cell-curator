@@ -155,8 +155,7 @@ jobs:
           share = Path(sysconfig.get_path("data")) / "share" / "cell-curator"
           for relative in (
               "SKILL.md",
-              "workflow/Snakefile",
-              "workflow/config",
+              "workflow/annotation.smk",
               "workflow/profiles/slurm",
               "schemas/cell-curator-config-v3.schema.json",
               "references/quadbio-parity.md",

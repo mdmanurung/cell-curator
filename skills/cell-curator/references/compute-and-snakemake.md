@@ -2,18 +2,15 @@
 
 ## Workflow boundaries
 
-`workflow/Snakefile` defines the manifest-driven DAG. Its phases are:
+`workflow/annotation.smk` defines the DAG for a corpus run. Its phases are:
 
-1. freeze the input and audit parent clusters on CPU;
-2. discover candidates and assess local graph stability on CPU;
-3. prepare binary comparisons on CPU;
-4. run backend-specific marker methods, including validated RAPIDS routes;
-5. compute enrichment, absolute evidence, technical summaries, and critic inputs;
-6. build the review packet;
-7. validate the final mapping;
-8. apply an approved write-back.
+1. run each configured classifier (advisory evidence);
+2. collect marker evidence for the first hierarchy level;
+3. import the labels of an `annotation-consensus` run as the level's decisions;
+4. finalize: validate hierarchy nesting and write cell labels, the mapping and the report;
+5. build evidence cards, the critic packet and the review report.
 
-Review, finalization, and write-back are explicit targets. Supply the configuration
+Validation, the review packet and write-back are separate commands. Supply the configuration
 with `--configfile` and use `workflow/profiles/slurm` for scheduler execution.
 Snakemake manages dependencies, stale artifacts, and resume.
 

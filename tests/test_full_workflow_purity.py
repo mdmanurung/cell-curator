@@ -68,25 +68,6 @@ def test_a_complete_run_needs_no_subprocess_and_prints_nothing(
     assert captured.out == "", f"library code wrote to stdout: {captured.out!r}"
 
 
-def test_the_granular_phases_are_individually_callable(
-    tmp_path: Path, no_subprocess: None
-) -> None:
-    """Each step must stand alone, so a notebook can stop and look between them."""
-
-    curator = _unattended(tmp_path, mode="annotation", run_id="granular-v1")
-    curator.prepare()
-
-    assert not curator.audit_parents().empty
-    curator.propose_subclusters()
-    evidence, bottom_up = curator.evidence()
-    assert not evidence.empty and not bottom_up.empty
-    decisions, parents = curator.decide_subclusters()
-    assert decisions is not None and parents is not None
-    assert not curator.map_cells().empty
-    assert curator.review_packet().exists()
-    assert curator.validate_run()["status"] == "complete"
-
-
 def test_the_function_api_reaches_the_same_result_without_the_object(
     tmp_path: Path, no_subprocess: None
 ) -> None:

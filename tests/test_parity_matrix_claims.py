@@ -1,7 +1,7 @@
 """The parity matrix is a claim about the code, so the code gets to check it.
 
 `quadbio-parity.md` names an implementation file, a CLI or Python entry point,
-and a test file for each of forty-five capabilities. Every one of those is a
+and a test file for each of forty-three capabilities. Every one of those is a
 factual assertion that a symbol exists, a command resolves, and a path is real,
 and all three were maintained by hand. `test_documentation_links.py` proves the
 *paths* resolve; nothing proved the *symbols* are still there, so a renamed
@@ -106,7 +106,7 @@ def _member_names() -> set[str]:
     return names
 
 
-def test_the_matrix_still_has_forty_five_mapped_capabilities() -> None:
+def test_the_matrix_still_has_forty_three_mapped_capabilities() -> None:
     """A silently emptied or collapsed matrix would satisfy every other check here.
 
     Each check below iterates rows, so a table that lost its rows would pass by
@@ -114,7 +114,9 @@ def test_the_matrix_still_has_forty_five_mapped_capabilities() -> None:
     against; raising it is a deliberate act, lowering it needs a reason.
     """
 
-    assert len(_matrix_rows()) == 45
+    # 45 until 2026-11-16, when the user chose to delete the old non-corpus pipeline; its parent-local
+    # refinement and parallel-state profiling rows went with it (plans/v8-agent-decisions.md).
+    assert len(_matrix_rows()) == 43
 
 
 def test_every_implementation_path_in_the_matrix_is_real() -> None:

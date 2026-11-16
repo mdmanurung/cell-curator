@@ -99,14 +99,16 @@ cur.inspect()
 cur.prepare()
 cur.plan()
 cur.approve_assumptions(reviewer="your-name")  # Gate A: you approve the plan's assumptions
-scores, proposals = cur.evidence()
-packet = cur.annotate()
-cur.validate_run()
 ```
 
-`annotate()` resumes completed phases. Write-back requires a person to confirm it. A
-tested example is available in
-[quickstart_synthetic.ipynb](examples/quickstart_synthetic.ipynb).
+The package chooses no label. After the plan, run an `annotation-consensus` run
+(`skills/annotation-consensus`) with `plan/vocabulary.tsv`, set
+`annotation.consensus_directory` to its output, and continue with
+`collect_annotation_level`, `import_consensus_annotation_level` and
+`finalize_corpus_annotation`, or the CLI commands `annotation collect-level`,
+`annotation import-consensus` and `annotation finalize`. Write-back requires a person
+to confirm it. A worked example on public data is in
+[skills/annotation-consensus/examples/pbmc3k](skills/annotation-consensus/examples/pbmc3k/README.md).
 
 ## Configure the input
 
@@ -179,15 +181,14 @@ uv run cell-curator run validate --config config.yaml
 For additional commands, `cell-curator --help` lists all 23 command groups.
 
 For resumable execution, Snakemake manages dependencies and stale artifacts. The
-targets below preserve the evidence, review, and finalization boundaries. Write-back
-remains a separate step:
+annotation DAG (`workflow/annotation.smk`) needs `annotation.enabled: true` and an
+existing consensus run. Its targets keep the review boundary. Write-back remains a
+separate step:
 
 ```bash
-uv run snakemake --snakefile workflow/Snakefile all_evidence \
+uv run snakemake --snakefile workflow/annotation.smk annotation \
   --configfile config.yaml --cores 4
-uv run snakemake --snakefile workflow/Snakefile review_packet \
-  --configfile config.yaml --cores 4
-uv run snakemake --snakefile workflow/Snakefile finalization \
+uv run snakemake --snakefile workflow/annotation.smk annotation_review \
   --configfile config.yaml --cores 4
 ```
 

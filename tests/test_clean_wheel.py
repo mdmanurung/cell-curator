@@ -8,10 +8,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import anndata as ad
-import numpy as np
-import pandas as pd
-import yaml
 from test_distribution_manifests import _project_version
 
 
@@ -118,8 +114,7 @@ def test_clean_wheel_install_import_cli_and_package_data(tmp_path: Path) -> None
                 "print(json.dumps({'version':cell_curator.__version__,"
                 "'module':cell_curator.__file__,"
                 "'files':[str(x) for x in f],"
-                "'snakefile':s('share/cell-curator/workflow/Snakefile'),"
-                "'example':s('share/cell-curator/workflow/config/preauthorized.example.yaml'),"
+                "'snakefile':s('share/cell-curator/workflow/annotation.smk'),"
                 "'asset':s('share/cell-curator/assets/config.template.yaml')}))"
             ),
         ],
@@ -135,10 +130,8 @@ def test_clean_wheel_install_import_cli_and_package_data(tmp_path: Path) -> None
         "share/cell-curator/agents/",
         "share/cell-curator/assets/",
         "share/cell-curator/references/",
-        "share/cell-curator/workflow/Snakefile",
-        "share/cell-curator/workflow/config/",
+        "share/cell-curator/workflow/annotation.smk",
         "share/cell-curator/workflow/profiles/slurm/",
-        "share/cell-curator/workflow/scripts/",
         "share/cell-curator/benchmarks/",
         "share/cell-curator/benchmarks/manifests/",
         "share/cell-curator/benchmarks/fixtures/",
@@ -150,89 +143,9 @@ def test_clean_wheel_install_import_cli_and_package_data(tmp_path: Path) -> None
     assert shutil.which("cell-curator", path=clean_env["PATH"]) == str(cli)
     assert "usage: cell-curator" in _run([str(cli), "--help"], cwd=tmp_path, env=clean_env)
 
-    counts = np.array([[5, 0], [4, 0], [0, 5], [0, 4]], dtype=np.float32)
-    fixture = ad.AnnData(
-        X=np.log1p(counts),
-        obs=pd.DataFrame(
-            {
-                "canonical_cluster": ["0", "0", "1", "1"],
-                "lineage": ["immune"] * 4,
-            },
-            index=[f"wheel-{index}" for index in range(4)],
-        ),
-        var=pd.DataFrame({"gene_symbol": ["A", "B"]}, index=["A", "B"]),
+    # The corpus DAG and the consensus importer ship in the wheel and the CLI reaches them.
+    assert Path(installed["snakefile"]).is_file()
+    help_text = _run(
+        [str(cli), "annotation", "import-consensus", "--help"], cwd=tmp_path, env=clean_env
     )
-    fixture.layers["counts"] = counts
-    fixture.layers["logcounts"] = np.log1p(counts)
-    fixture.obsm["X_pca_harmony"] = np.array(
-        [[-2, 0], [-1, 0], [1, 0], [2, 0]], dtype=np.float32
-    )
-    input_path = tmp_path / "wheel-fixture.h5ad"
-    fixture.write_h5ad(input_path)
-    markers = tmp_path / "wheel-markers.json"
-    markers.write_text(json.dumps({"A type": {"positive": ["A"]}}))
-    workflow_config = yaml.safe_load(Path(installed["asset"]).read_text())
-    workflow_config["run"].update(
-        {
-            "run_id": "wheel-zero-candidate-run",
-            "output_root": str(tmp_path / "wheel-results"),
-            "mode": "evidence-only",
-        }
-    )
-    workflow_config["input"]["path"] = str(input_path)
-    workflow_config["canonical_partitions"] = {
-        "immune": {"parent_key": "canonical_cluster", "expected_parent_count": 2}
-    }
-    workflow_config["adaptive"]["eligibility"].update(
-        {"min_cells": 2, "min_donors": None, "min_captures": None}
-    )
-    workflow_config["adaptive"]["parent_local"]["enabled"] = False
-    workflow_config["knowledge"]["providers"] = [
-        {"kind": "local_markers", "path": str(markers), "version": "wheel-fixture"}
-    ]
-    workflow_config["guidance"] = {
-        "interactive": False,
-        "preauthorized": True,
-        "reviewer": "wheel-fixture-reviewer",
-        "pause_after_each_level": False,
-        "assumptions": ["Wheel fixture is pre-authorized."],
-        "hierarchy_levels": ["L1"],
-        "context": {
-            "organism": "human",
-            "tissue": "synthetic",
-            "developmental_stage": "adult",
-            "condition": "healthy",
-            "technology": "dissociated",
-            "experimental_context": "installed-wheel zero-candidate execution",
-            "composition_covariates": ["lineage"],
-            "vocabulary_contract": "local fixture",
-            "reference_contract": "local_only",
-            "visualization_key": "X_pca_harmony",
-            "writeback_prefix": "wheel_label",
-        },
-    }
-    config_path = tmp_path / "wheel-config.yaml"
-    config_path.write_text(yaml.safe_dump(workflow_config, sort_keys=False))
-    _run(
-        [
-            str(python),
-            "-m",
-            "snakemake",
-            "--snakefile",
-            installed["snakefile"],
-            "all_evidence",
-            "--configfile",
-            str(config_path),
-            "--cores",
-            "1",
-        ],
-        cwd=tmp_path,
-        env=clean_env,
-    )
-    workflow_root = tmp_path / "wheel-results" / "wheel-zero-candidate-run"
-    assert (workflow_root / "comparators" / "groups").is_dir()
-    comparator_manifest = json.loads(
-        (workflow_root / "comparators" / "comparator_manifest.json").read_text()
-    )
-    assert comparator_manifest["zero_applicable_lane_run"] is True
-    assert (workflow_root / "evidence" / "summary" / "evidence.manifest.json").is_file()
+    assert "--level" in help_text

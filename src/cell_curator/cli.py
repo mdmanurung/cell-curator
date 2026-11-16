@@ -233,16 +233,8 @@ def build_parser() -> argparse.ArgumentParser:
         "pipeline", help="execute one immutable workflow phase"
     )
     pipeline_sub = pipeline_command.add_subparsers(dest="action", required=True)
-    for action in ("audit", "refine", "evidence", "decide", "map", "review", "packet"):
-        action_parser = pipeline_sub.add_parser(action)
-        _config_argument(action_parser)
-    lane_parser = pipeline_sub.add_parser("evidence-lane")
-    _config_argument(lane_parser)
-    lane_parser.add_argument("--assay", required=True)
-    lane_parser.add_argument("--representation", required=True)
-    candidate_lane_parser = pipeline_sub.add_parser("candidate-evidence-lane")
-    _config_argument(candidate_lane_parser)
-    candidate_lane_parser.add_argument("--lane-id", required=True)
+    packet_parser = pipeline_sub.add_parser("packet", help="freeze the immutable review packet")
+    _config_argument(packet_parser)
 
     markers = commands.add_parser(
         "markers", help="assemble, profile, and score signed marker programs"
@@ -368,17 +360,9 @@ def build_parser() -> argparse.ArgumentParser:
     scarches.add_argument("--output-dir", required=True, type=Path)
 
     cluster = commands.add_parser(
-        "cluster", help="refine, profile, and score parent-local clusters"
+        "cluster", help="calculate advisory confidence"
     )
     cluster_sub = cluster.add_subparsers(dest="action", required=True)
-    subcluster = cluster_sub.add_parser(
-        "subcluster", help="run stored and parent-local refinement"
-    )
-    _config_argument(subcluster)
-    profile = cluster_sub.add_parser(
-        "profile", help="summarize refined-child QC/composition/spatial context"
-    )
-    _config_argument(profile)
     confidence = cluster_sub.add_parser("confidence", help="calculate advisory confidence")
     confidence.add_argument("--margin", required=True, type=float)
     confidence.add_argument("--specificity", required=True, type=float)
@@ -772,47 +756,8 @@ def dispatch(args: argparse.Namespace) -> Any:
             preauthorized=args.preauthorized,
         )
     if args.command == "pipeline":
-        from .pipeline import (
-            audit,
-            build_review_packet,
-            candidate_evidence_lane,
-            decide,
-            evidence_all,
-            evidence_lane,
-            map_cells,
-            refine,
-            review,
-        )
+        from .pipeline import build_review_packet
 
-        if args.action == "audit":
-            return {"n_parents": len(audit(args.config))}
-        if args.action == "refine":
-            registry, _, evaluations = refine(args.config)
-            return {"n_candidates": len(registry), "n_evaluations": len(evaluations)}
-        if args.action == "evidence-lane":
-            return {
-                "receipt": str(
-                    evidence_lane(
-                        args.config, assay=args.assay, representation=args.representation
-                    )
-                )
-            }
-        if args.action == "candidate-evidence-lane":
-            return {
-                "receipt": str(
-                    candidate_evidence_lane(args.config, comparison_lane_id=args.lane_id)
-                )
-            }
-        if args.action == "evidence":
-            scores, proposals = evidence_all(args.config)
-            return {"n_scores": len(scores), "n_proposals": len(proposals)}
-        if args.action == "decide":
-            children, parents = decide(args.config)
-            return {"n_children": len(children), "n_parents": len(parents)}
-        if args.action == "map":
-            return {"n_cells": len(map_cells(args.config))}
-        if args.action == "review":
-            return {"report": str(review(args.config))}
         return {"review_packet": str(build_review_packet(args.config))}
     if args.command == "markers":
         if args.action != "assemble":
@@ -929,31 +874,17 @@ def dispatch(args: argparse.Namespace) -> Any:
         )
         return {**status, "n_cells": len(cells)}
     if args.command == "cluster":
-        if args.action == "confidence":
-            from .hierarchy import advisory_confidence
+        from .hierarchy import advisory_confidence
 
-            return {
-                "advisory_confidence": advisory_confidence(
-                    margin=args.margin,
-                    specificity=args.specificity,
-                    agreement=args.agreement,
-                    coverage=args.coverage,
-                ),
-                "calibrated_probability": False,
-            }
-        if args.action == "subcluster":
-            from .pipeline import refine
-
-            registry, membership, evaluations = refine(args.config)
-            return {
-                "status": "complete",
-                "n_candidates": len(registry),
-                "n_membership_rows": len(membership),
-                "n_evaluations": len(evaluations),
-            }
-        from .hierarchy import profile_refined_clusters
-
-        return profile_refined_clusters(args.config)
+        return {
+            "advisory_confidence": advisory_confidence(
+                margin=args.margin,
+                specificity=args.specificity,
+                agreement=args.agreement,
+                coverage=args.coverage,
+            ),
+            "calibrated_probability": False,
+        }
     if args.command == "hierarchy":
         from .hierarchy import (
             validate_hierarchy_nesting,

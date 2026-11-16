@@ -397,98 +397,6 @@ class CellCurator:
 
         return run_marker_tools(self.config_path, **kwargs)
 
-    # -- adaptive refinement --------------------------------------------------
-
-    def audit_parents(self) -> Any:
-        """Flag clusters that look impure, before proposing any split.
-
-        Returns one row per frozen parent cluster carrying the signals that
-        justify looking closer: donor and capture dominance, doublet fraction,
-        incompatible-program fraction, technical-metric outliers, and guide
-        entropy. A flag is a reason to investigate, never a decision — the
-        thresholds live under ``adaptive.audit`` in the configuration.
-        """
-
-        from .api import audit_parent_clusters
-
-        return audit_parent_clusters(self.config_path)
-
-    def propose_subclusters(self) -> tuple[Any, Any, Any]:
-        """Discover bounded subcluster candidates for flagged parents.
-
-        Canonical parents stay frozen. This first tries to reuse a stored
-        higher-resolution clustering whose children match a parent cleanly
-        (purity, fraction, and adjacency criteria under
-        ``adaptive.stored_candidates``); only when no stored family matches does
-        it fall back to a bounded parent-local reclustering pass
-        (``adaptive.parent_local``, one pass by default, rejecting one-cluster
-        outcomes and requiring stability above the configured threshold).
-
-        Returns ``(registry, candidates, evaluations)`` and writes the
-        comparator manifest each candidate is later tested against. Nothing is
-        accepted here — every candidate must still clear
-        ``evidence.required_candidate_gates`` and reviewer sign-off.
-        """
-
-        from .api import discover_subcluster_candidates
-
-        return discover_subcluster_candidates(self.config_path)
-
-    def candidate_evidence(self, lane_id: str) -> Path:
-        """Run one candidate-versus-comparator evidence lane by manifest id."""
-
-        from .api import run_candidate_evidence_lane
-
-        return run_candidate_evidence_lane(self.config_path, lane_id=lane_id)
-
-    def decide_subclusters(self) -> tuple[Any, Any]:
-        """Derive split/retain outcomes for every candidate from frozen evidence.
-
-        Each parent resolves to one of ``ACCEPT SPLIT``, ``RETAIN PARENT``,
-        ``DOUBLET/MIXED``, or ``TECHNICAL/UNRESOLVED``. A parent is split only
-        when the evidence gates pass; impurity that turns out to be technical or
-        doublet-driven is reported as such rather than carved into subtypes.
-        """
-
-        from .api import propose_annotations
-
-        return propose_annotations(self.config_path)
-
-    def refine_clusters(self) -> dict[str, Any]:
-        """Audit, propose, score, and decide subclusters in one call.
-
-        Convenience over :meth:`audit_parents`, :meth:`propose_subclusters`,
-        :meth:`evidence`, and :meth:`decide_subclusters`. It reports outcomes;
-        it does not write labels or modify the input.
-        """
-
-        audited = self.audit_parents()
-        registry, candidates, evaluations = self.propose_subclusters()
-        self.evidence()
-        decisions, parents = self.decide_subclusters()
-        return {
-            "audited_parents": audited,
-            "candidate_registry": registry,
-            "candidates": candidates,
-            "evaluations": evaluations,
-            "decisions": decisions,
-            "parent_outcomes": parents,
-        }
-
-    def evidence(self) -> tuple[Any, Any]:
-        """Run every executable evidence lane and return the consolidated tables."""
-
-        from .api import generate_evidence
-
-        return generate_evidence(self.config_path)
-
-    def review_packet(self, *, strict: bool = True) -> Path:
-        """Build evidence cards, critic packets, and the self-contained report."""
-
-        from .api import build_review_artifacts
-
-        return build_review_artifacts(self.config_path, strict=strict)
-
     def status(self) -> dict[str, Any]:
         """Return the current stage, blockers, and the next action to take."""
 
@@ -516,13 +424,6 @@ class CellCurator:
         from .api import apply_writeback
 
         return apply_writeback(self.config_path, *args, **kwargs)
-
-    def map_cells(self) -> Any:
-        """Derive the durable cell-to-label mapping from frozen decisions."""
-
-        from .api import map_annotated_cells
-
-        return map_annotated_cells(self.config_path)
 
     def freeze_review_packet(self) -> Path:
         """Freeze the immutable review packet directory for human sign-off."""
@@ -552,22 +453,6 @@ class CellCurator:
         from .api import annotate
 
         return annotate(self.config_path)
-
-    def run_evidence_lane(self, *, assay: str, representation: str) -> Path:
-        """Execute one immutable assay/representation evidence lane."""
-
-        from .api import run_evidence_lane
-
-        return run_evidence_lane(
-            self.config_path, assay=assay, representation=representation
-        )
-
-    def profile_refined_clusters(self) -> dict[str, Any]:
-        """Summarize refined-child QC, composition, and spatial context."""
-
-        from .api import profile_refined_clusters
-
-        return profile_refined_clusters(self.config_path)
 
     # -- context, assumptions, and capability -----------------------------------
 

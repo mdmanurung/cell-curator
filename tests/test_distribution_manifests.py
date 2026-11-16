@@ -67,7 +67,7 @@ def test_readme_quickstart_paths_exist() -> None:
     """The README tells users to copy these before anything else works."""
 
     assert (SKILL_ROOT / "assets" / "config.template.yaml").is_file()
-    assert (REPO_ROOT / "workflow" / "Snakefile").is_file()
+    assert (REPO_ROOT / "workflow" / "annotation.smk").is_file()
     assert (REPO_ROOT / "workflow" / "profiles" / "slurm" / "config.yaml").is_file()
 
 

@@ -322,36 +322,12 @@ def register_knowledge_provider(
     return config.model_copy(update={"knowledge": knowledge})
 
 
-def generate_evidence(config_path: str | Path) -> tuple[Any, Any]:
-    """Run and consolidate all configured, executable assay evidence lanes."""
-
-    from .pipeline import evidence_all
-
-    return evidence_all(Path(config_path))
-
-
-def propose_annotations(config_path: str | Path) -> tuple[Any, Any]:
-    """Derive child and parent annotation decisions from immutable evidence."""
-
-    from .pipeline import decide
-
-    return decide(Path(config_path))
-
-
 def validate_run(config_path: str | Path) -> dict[str, Any]:
     """Validate completeness, hashes, mapping conservation, and review state."""
 
     from .pipeline import validate
 
     return validate(Path(config_path))
-
-
-def build_review_artifacts(config_path: str | Path, *, strict: bool = True) -> Path:
-    """Build evidence cards, critic packets, and the self-contained HTML report."""
-
-    from .pipeline import review
-
-    return review(Path(config_path), strict=strict)
 
 
 def preview_writeback(
@@ -561,48 +537,6 @@ def record_annotation_assumption(
 # --- pipeline phases ----------------------------------------------------------
 
 
-def audit_parent_clusters(config_path: str | Path) -> Any:
-    """Flag frozen parent clusters whose composition warrants a closer look."""
-
-    from .pipeline import audit
-
-    return audit(Path(config_path))
-
-
-def discover_subcluster_candidates(config_path: str | Path) -> tuple[Any, Any, Any]:
-    """Discover bounded subcluster candidates and build the comparator manifest."""
-
-    from .pipeline import refine
-
-    return refine(Path(config_path))
-
-
-def run_evidence_lane(
-    config_path: str | Path, *, assay: str, representation: str
-) -> Path:
-    """Execute one immutable assay/representation evidence lane."""
-
-    from .pipeline import evidence_lane
-
-    return evidence_lane(Path(config_path), assay=assay, representation=representation)
-
-
-def run_candidate_evidence_lane(config_path: str | Path, *, lane_id: str) -> Path:
-    """Execute one manifest-selected candidate comparison lane."""
-
-    from .pipeline import candidate_evidence_lane
-
-    return candidate_evidence_lane(Path(config_path), comparison_lane_id=lane_id)
-
-
-def map_annotated_cells(config_path: str | Path) -> Any:
-    """Derive the durable cell-to-label mapping from frozen decisions."""
-
-    from .pipeline import map_cells
-
-    return map_cells(Path(config_path))
-
-
 def freeze_review_packet(config_path: str | Path) -> Path:
     """Freeze the immutable review packet directory for human sign-off."""
 
@@ -636,14 +570,6 @@ def build_marker_vocabulary(
         feature_space=feature_space,
         output_path=output_path,
     )
-
-
-def profile_refined_clusters(config_path: str | Path) -> dict[str, Any]:
-    """Summarize refined-child QC, composition, and spatial context."""
-
-    from .hierarchy import profile_refined_clusters as profile
-
-    return profile(config_path)
 
 
 def advisory_confidence(

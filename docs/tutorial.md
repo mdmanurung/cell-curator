@@ -1,25 +1,16 @@
 # Tutorial: PBMC 3k
 
-This tutorial annotates the 10x Genomics PBMC 3k dataset with the human PBMC marker
-panel that ships with the package. It needs scanpy and a network connection for the
-two downloads.
+This tutorial labels the 10x Genomics PBMC 3k dataset with three public annotation
+tools and a marker vote, and records why each cluster got its label. cell-curator chooses
+no label itself: the `annotation-consensus` skill does, and `annotation import-consensus`
+checks its output against the run and writes the labels.
 
-```bash
-uv run python examples/pbmc3k_tutorial.py
-```
+The worked example is in `skills/annotation-consensus/examples/pbmc3k/` in the
+repository. Its README lists the scripts in run order, the two consensus runs (marker
+vote on and off), and five figures. PBMC 3k has one donor and no truth labels, so the
+example shows the workflow, not accuracy. `Unknown` is a result: the `rationale`
+column of the consensus table says which gate stopped each call.
 
-The script keeps the clusters from the scanpy tutorial but gives cell-curator only
-their numeric codes. At the end it prints each cluster's cell-curator label beside the
-scanpy name, so you can see which calls agree and which clusters stay `Unknown`.
-
-`Unknown` is a result, not a failure. The `rationale` column of
-`labels/L1.tsv` in the run directory says which gate stopped each call. A common one on
-this dataset is "expected-negative markers were violated", where a cluster expresses a
-gene the panel says it should not.
-
-If every label lacks a `cl_id`, the ontology download failed and the run continued
-without it. See [Troubleshooting](troubleshooting.md).
-
-```{literalinclude} ../examples/pbmc3k_tutorial.py
-:language: python
-```
+The order is fixed. Run `run scene` and `run plan`; run the consensus skill with
+`plan/vocabulary.tsv`; set `annotation.consensus_directory`; then run
+`annotation collect-level`, `annotation import-consensus` and `annotation finalize`.

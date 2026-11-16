@@ -27,9 +27,8 @@ from cell_curator.cli import build_parser
 
 SKILL_PATH = SKILL_ROOT / "SKILL.md"
 
-# Actions the skill omits on purpose. The `pipeline` actions are the Snakefile's
-# per-rule entry points — a public surface, but one the workflow addresses rather
-# than an agent, which reaches the same phases through `run execute`. The rest
+# Actions the skill omits on purpose. `pipeline packet` is the corpus DAG's
+# review-packet entry point, which the workflow addresses rather than an agent. The rest
 # serve packaging, introspection, and benchmarking rather than an annotation run.
 # Documenting an action removes it from here; this set only ever shrinks.
 INTERNAL_ACTIONS: frozenset[tuple[str, ...]] = frozenset(
@@ -42,15 +41,7 @@ INTERNAL_ACTIONS: frozenset[tuple[str, ...]] = frozenset(
         ("config", "schema"),
         ("knowledge", "validate"),
         ("ontology", "validate"),
-        ("pipeline", "audit"),
-        ("pipeline", "candidate-evidence-lane"),
-        ("pipeline", "decide"),
-        ("pipeline", "evidence"),
-        ("pipeline", "evidence-lane"),
-        ("pipeline", "map"),
         ("pipeline", "packet"),
-        ("pipeline", "refine"),
-        ("pipeline", "review"),
         ("run", "init"),
     }
 )

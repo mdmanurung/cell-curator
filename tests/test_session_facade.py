@@ -116,33 +116,6 @@ def test_markers_mapping_is_persisted_as_a_local_provider(tmp_path: Path) -> Non
     assert written == MARKERS
 
 
-def test_evidence_runs_through_the_same_pipeline_as_the_cli(tmp_path: Path) -> None:
-    curator = _unattended(tmp_path)
-    curator.prepare()
-    evidence, bottom_up = curator.evidence()
-    assert not evidence.empty
-    assert not bottom_up.empty
-    assert set(evidence["cluster_id"].astype(str)) == {"0", "1"}
-
-
-def test_adaptive_refinement_audits_parents_and_proposes_bounded_candidates(
-    tmp_path: Path,
-) -> None:
-    curator = _unattended(tmp_path)
-    curator.prepare()
-
-    audited = curator.audit_parents()
-    assert len(audited) == 2
-    assert {"parent_id", "n_cells"}.issubset(audited.columns)
-
-    registry, _, _ = curator.propose_subclusters()
-    # Canonical parents stay frozen: refinement proposes candidates, never
-    # rewrites the parent partition.
-    assert curator.validate().input.keys.canonical_parent == "leiden"
-    assert (curator.run_directory / "comparators" / "comparator_manifest.tsv").is_file()
-    assert registry is not None
-
-
 def test_exactly_one_of_adata_or_path_is_required(tmp_path: Path) -> None:
     with pytest.raises(ContractError, match="exactly one of adata= or path="):
         CellCurator(
@@ -216,11 +189,8 @@ def test_the_added_methods_all_delegate_and_exist(tmp_path: Path) -> None:
 
     curator = _curator(tmp_path)
     for name in (
-        "map_cells",
         "freeze_review_packet",
         "annotate",
-        "run_evidence_lane",
-        "profile_refined_clusters",
         "confirm_context",
         "list_assumptions",
         "add_assumption",
