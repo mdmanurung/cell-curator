@@ -132,8 +132,6 @@ def _writeback_values(
     """Resolve the same complete column set for preview and the eventual write."""
     durable = resolve_durable_mapping_values(mapping, labels)
     values = {f"{prefix}_type": durable["cell_type"], f"{prefix}_state": durable["cell_state"], f"{prefix}_leaf": durable["leaf_id"]}
-    if not config.annotation.enabled:
-        return values, durable
     validate_corpus_annotation(config, run_root)
     sidecar = pd.read_csv(run_root / "annotation" / "cell_labels.tsv", sep="\t", keep_default_na=False)
     required = {"barcode", "cluster_id", "cell_state", "L4", "annotation_unit", *config.guidance.hierarchy_levels}
@@ -437,9 +435,8 @@ def validate_writeback(
         "critic_findings_sha256": run_root / "review" / "critic_findings.tsv",
         "critic_reconciliation_sha256": run_root / "review" / "critic_reconciliation.tsv",
     }
-    if config.annotation.enabled:
-        review_paths["annotation_manifest_sha256"] = run_root / "annotation" / "annotation.manifest.json"
-        review_paths["annotation_cells_sha256"] = run_root / "annotation" / "cell_labels.tsv"
+    review_paths["annotation_manifest_sha256"] = run_root / "annotation" / "annotation.manifest.json"
+    review_paths["annotation_cells_sha256"] = run_root / "annotation" / "cell_labels.tsv"
     missing_review = [str(path) for path in review_paths.values() if not path.is_file()]
     if missing_review:
         raise ContractError(f"write-back review artifacts are absent: {missing_review}")

@@ -727,8 +727,7 @@ def dispatch(args: argparse.Namespace) -> Any:
             return construct_plan(args.config)
         if args.action == "execute":
             output = run_annotation(args.config)
-            key = "annotation_manifest" if load_config(args.config).annotation.enabled else "review_packet"
-            return {key: str(output)}
+            return {"annotation_manifest": str(output)}
         if args.action == "status":
             return guided_status(args.config)
         load_config(args.config)

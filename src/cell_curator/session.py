@@ -441,9 +441,7 @@ class CellCurator:
         written back to any object — that stays behind :meth:`write_back`.
         """
 
-        from .config import load_config
-
-        if len(self.hierarchy_levels) != 1 and not load_config(self.config_path).annotation.enabled:
+        if len(self.hierarchy_levels) != 1:
             raise ContractError(
                 "annotate() runs the standard single-level pipeline, but this run "
                 f"declares {len(self.hierarchy_levels)} hierarchy levels "

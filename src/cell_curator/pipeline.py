@@ -778,40 +778,27 @@ def initialize(config_path: Path) -> dict[str, Any]:
 def validate(config_path: Path) -> dict[str, Any]:
     config = load_config(config_path)
     root = run_root(config)
-    required = [
-        "context.json",
-        "environment.json",
-        "assumptions.json",
-        "plan.json",
-        "input_contract.manifest.json",
-        "qc/qc.manifest.json",
-        "qc/cell_metrics.tsv",
-        "adaptive_parent_audit.tsv",
-        "adaptive/technical_summary.tsv",
-        "adaptive/doublet_summary.tsv",
-        "discovery/discovery.manifest.json",
-        "comparators/comparator_manifest.json",
-        "evidence/receipts.validated.json",
-        "evidence/summary/evidence.manifest.json",
-        "evidence/summary/program_cooccurrence.tsv",
-        "evidence/summary/source_corroboration.tsv",
-        "decisions/candidate_evidence.manifest.json",
-        "decisions/parent_decision_summary.tsv",
-        "mapping/mapping.validation.json",
-    ]
-    if config.annotation.enabled:
-        from .review import validate_corpus_annotation
+    from .review import validate_corpus_annotation
 
-        validate_corpus_annotation(config, root)
-        required = [
-            "context.json", "environment.json", "assumptions.json", "plan.json",
-            "input_contract.manifest.json", "qc/qc.manifest.json", "qc/cell_metrics.tsv",
-            "annotation/annotation.manifest.json", "annotation/cell_labels.tsv",
-            "hierarchy/execution.manifest.json", "mapping/parent_child_mapping.tsv",
-            "mapping/mapping.validation.json",
-            *[f"annotation/levels/{level}/{name}" for level in config.guidance.hierarchy_levels
-              for name in ("evidence.manifest.json", "decision.manifest.json", "markers.tsv", "scores.tsv", "states.tsv")],
-        ]
+    validate_corpus_annotation(config, root)
+    required = [
+        "context.json", "environment.json", "assumptions.json", "plan.json",
+        "input_contract.manifest.json", "qc/qc.manifest.json", "qc/cell_metrics.tsv",
+        "annotation/annotation.manifest.json", "annotation/cell_labels.tsv",
+        "hierarchy/execution.manifest.json", "mapping/parent_child_mapping.tsv",
+        "mapping/mapping.validation.json",
+        *[
+            f"annotation/levels/{level}/{name}"
+            for level in config.guidance.hierarchy_levels
+            for name in (
+                "evidence.manifest.json",
+                "decision.manifest.json",
+                "markers.tsv",
+                "scores.tsv",
+                "states.tsv",
+            )
+        ],
+    ]
     # Review files are rebuilt after critics reconcile, so they are required but not
     # hashed into this write-once manifest; write-back's approval token binds them.
     review_files = [
@@ -870,11 +857,7 @@ def validate(config_path: Path) -> dict[str, Any]:
     # Critic reconciliation is not part of computational validation: critics review
     # the frozen packet this produces, and write-back enforces their reconciliation.
     ontology = ontology_from_config(config)
-    proposals = pd.concat(label_frames, ignore_index=True).rename(columns={"label": "cell_type"}) if config.annotation.enabled else pd.read_csv(
-        root / "evidence" / "summary" / "annotation_proposals.tsv",
-        sep="\t",
-        keep_default_na=False,
-    )
+    proposals = pd.concat(label_frames, ignore_index=True).rename(columns={"label": "cell_type"})
     supplied_cl_ids = proposals[
         proposals.get("cl_id", pd.Series(index=proposals.index, dtype=str))
         .astype(str)
@@ -971,20 +954,15 @@ def build_review_packet(config_path: Path) -> Path:
         "input_contract.manifest.json",
         "knowledge.manifest.json",
         "qc",
-        "adaptive_parent_audit.tsv",
-        "discovery",
-        "evidence",
-        "decisions",
         "labels",
         "checkpoints",
         "mapping",
         "review",
         "final_provenance.manifest.json",
+        "annotation",
+        "hierarchy",
+        "plan",
     ]
-    if config.annotation.enabled:
-        include = [item for item in include if item not in {
-            "adaptive_parent_audit.tsv", "discovery", "evidence", "decisions"}]
-        include.extend(["annotation", "hierarchy", "plan"])
     try:
         for relative in include:
             source = root / relative

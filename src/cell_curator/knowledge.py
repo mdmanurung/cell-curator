@@ -163,7 +163,7 @@ def run_providers(config: CellCuratorConfig) -> list[MarkerProvider]:
     measurements = {"rna": "gene_expression", "protein": "protein_expression",
                     "gene_activity": "gene_activity", "atac": "accessibility",
                     "spatial": "gene_expression"}
-    assays = (config.input.assays[config.annotation.assay],) if config.annotation.enabled else tuple(config.input.assays.values())
+    assays = (config.input.assays[config.annotation.assay],)
     return providers_from_config(
         config.knowledge.providers, policy=config.knowledge.policy,
         context=corpus_context(config),
