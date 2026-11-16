@@ -25,6 +25,21 @@ Twelve of twelve rows pass for the demo fixture, with two limits stated below (r
 
 Fast suite on HEAD before this audit: 81 passed, 3 deselected, 336 s. Full suite earlier today: 83 passed, 1 skipped, 896 s.
 
+## Container re-run (2026-11-16)
+
+The image was rebuilt from `fd819fb` (`skills/annotation-consensus/container/`; SIF `2deafd07f26c…`). Rows 1, 8 and 12 were rerun inside it on the demo.
+
+| Row | Inside the container | Evidence |
+| --- | --- | --- |
+| 1 | pass: the run starts with no `--allow-version-drift` and the manifest lists no differences | `container/_build/runs/*/run_manifest.json` |
+| 8 | pass: login node, Xeon Gold 6234 (`res-hpc-path02`) and E5-4650 v3 (`res-hpc-exe032`) give 0 of 18 files differing from `expected_hashes.json` | `container/README.md` |
+| 12 | pass: run under `unshare -rn`, 0 of 18 files differing | same |
+| 10 | pass: `verify --demo` inside the container reports 18 stored files and the rerun byte-identical | same |
+
+The earlier prototype differed on `environment.txt` (host 0.2.0 against wheel 0.3.0). That cause was stale install metadata in the host `.venv`. It was fixed in `fd819fb` (pin 0.3.0, `.venv` metadata refreshed), and all 18 files now match, `environment.txt` included.
+
+The image carries the `cell_curator` wheel, so it must be rebuilt after the `src/` change in the removal phase.
+
 ## Limits
 
 - **Row 12 is narrower than the contract.** The contract lists CollecTRI, PROGENy and huCIRA resource files. The skill uses none of them: `annotation_consensus.py` never names them, and TF and pathway scores are not built. The run reads only the files in `input_checksums.sha256` (cells, votes, markers, tool predictions, vocabulary), and the manifest hashes each. The contract text still needs the user's wording decision.

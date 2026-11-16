@@ -1535,6 +1535,7 @@ def write_manifest(ctx):
         "lock_file_sha256": sha256_file(LOCK_FILE),
         "versions": installed_versions(read_lock()),
         "version_drift": {"allowed": ctx.allow_drift, "differences": list(ctx.drift)},
+        "container_sif_sha256": os.environ.get("CONSENSUS_SIF_SHA256"),  # set by container/run_container.sh
         "note": "not hashed: holds time, host, paths, thread count and input hashes",
     }
     (ctx.out / "run_manifest.json").write_text(json.dumps(manifest, indent=1, sort_keys=True) + "\n")

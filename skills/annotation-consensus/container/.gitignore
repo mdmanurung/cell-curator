@@ -1,0 +1,4 @@
+# Built here, never committed: the cell_curator wheel (rebuilt by build_wheel.sh), SIFs, caches, runs.
+wheelhouse/cell_curator-*.whl
+cell-curator.txt
+_build/

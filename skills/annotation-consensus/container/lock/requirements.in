@@ -1,0 +1,15 @@
+# Direct needs of annotation_consensus.py and the cell_curator wheel (see README, step 1).
+# Versions are the ones in cell-curator/.venv (host_freeze.txt is used as constraints).
+numpy
+pandas
+scipy
+scikit-learn
+anndata
+pyyaml
+pyarrow
+h5py
+snakemake
+# cell_curator 0.3.0 (wheel, installed with --no-deps) imports these at package import time:
+pydantic
+mudata
+networkx

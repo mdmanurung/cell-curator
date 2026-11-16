@@ -391,8 +391,9 @@ Not built:
 - The public-pretrained sensitivity run (cached public CellTypist models and any public popV and SingleR models).
 - Any change to `src/`. The package changes listed in the plan (`config.py`, `annotation.py`, `hierarchy.py`,
   `reconciliation.py`, `review.py`, `provenance.py`) are not made.
-- Determinism rows 8 (login node vs compute node) and 12 (network blocked, resource-file hash checks) of the plan,
-  and the Apptainer image. Rows 1 to 7 and 9 to 11 have tests (`tests/test_annotation_consensus.py`, section 7).
+- Tests for determinism rows 8 (login node vs compute node) and 12 (network blocked). Both were run by hand and are
+  recorded in `plans/v8-consensus-audit.md`, with the container runs in `container/README.md`. Rows 1 to 7 and 9 to 11
+  have tests (`tests/test_annotation_consensus.py`, section 7). Resource-file hash checks are not built.
 - Running the annotation tools themselves. Their predictions are inputs.
 
 ## 11. Safety

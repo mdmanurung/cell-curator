@@ -1,0 +1,41 @@
+Bootstrap: docker
+From: python@sha256:dbf1de478a55d6763afaa39c2f3d7b54b25230614980276de5cacdde79529d0c
+# python:3.11.12-slim-bookworm, multi-arch index digest resolved from registry-1.docker.io on 2026-11-12.
+# The digest, not the tag, pins the base image.
+
+%files
+    lock/requirements.lock /opt/build/requirements.lock
+    cell-curator.txt /opt/build/cell-curator.txt
+    wheelhouse /opt/build/wheelhouse
+
+%post
+    set -eu
+    export PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_NO_CACHE_DIR=1
+    # Third-party packages: every line of the lock carries hashes; no wheel, no install.
+    python -m pip install --require-hashes --only-binary=:all: --no-deps \
+        --find-links /opt/build/wheelhouse -r /opt/build/requirements.lock
+    # cell_curator: wheel built by build_wheel.sh from a git commit, hash-checked.
+    python -m pip install --require-hashes --only-binary=:all: --no-deps \
+        --find-links /opt/build/wheelhouse -r /opt/build/cell-curator.txt
+    python -m pip check
+    python -m pip freeze --all > /opt/build/pip-freeze.txt
+    python -c "import anndata, numpy, pandas, scipy, sklearn, yaml, pyarrow, h5py, snakemake; from cell_curator.ontology import CellOntology; from cell_curator.contracts import feature_positions"
+    find /usr/local -name __pycache__ -prune -exec rm -rf {} + 2>/dev/null || true
+
+%environment
+    export LC_ALL=C.UTF-8 LANG=C.UTF-8 TZ=UTC
+    export PYTHONDONTWRITEBYTECODE=1 PYTHONHASHSEED=0
+    # Lowest common OpenBLAS kernel of the cluster (README, "OPENBLAS_CORETYPE").
+    export OPENBLAS_CORETYPE=SANDYBRIDGE
+    export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
+    export HDF5_USE_FILE_LOCKING=FALSE
+
+%runscript
+    exec python "$@"
+
+%labels
+    base_image python@sha256:dbf1de478a55d6763afaa39c2f3d7b54b25230614980276de5cacdde79529d0c
+    purpose annotation-consensus environment
+
+%help
+    apptainer exec --cleanenv --containall --bind REPO:/repo:ro consensus.sif python /repo/skills/annotation-consensus/annotation_consensus.py --demo --output /out/NAME
