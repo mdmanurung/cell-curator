@@ -112,6 +112,10 @@ def build_evidence_cards(config: CellCuratorConfig, run_root: Path) -> list[Path
         if "parent_scope" in block:
             block = block[block["parent_scope"].astype(str).eq(parent_scope)]
         block = block.head(10)
+        # A label that carries no agreement value (a consensus label) has no entropy to show.
+        agreement = pd.to_numeric(proposal.get("agreement", 0.0), errors="coerce")
+        entropy = proposal.get("normalized_entropy", None if pd.isna(agreement) else 1.0 - agreement)
+        entropy = "not measured" if entropy is None or pd.isna(entropy) else f"{float(entropy):.3f}"
         lines = [
             f"# {level} · {parent_scope} · cluster {cluster}",
             "",
@@ -120,7 +124,7 @@ def build_evidence_cards(config: CellCuratorConfig, run_root: Path) -> list[Path
             f"- Cell state: `{proposal['cell_state']}`",
             f"- Confidence: `{float(proposal['confidence']):.3f}`",
             f"- Margin: `{float(proposal['margin']):.3f}`",
-            f"- Normalized entropy: `{float(proposal.get('normalized_entropy', 1.0 - float(proposal.get('agreement', 0.0)))):.3f}`",
+            f"- Normalized entropy: `{entropy}`",
             f"- Abstained: `{proposal.get('abstained', proposal['cell_type'] == 'Unknown')}`",
             f"- Rationale: {proposal['rationale']}",
             f"- Rejected alternatives: {proposal.get('rejected_alternatives', 'none measured')}",

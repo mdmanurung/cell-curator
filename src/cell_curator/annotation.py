@@ -676,36 +676,13 @@ def collect_level(config_path: str | Path, level: str) -> dict[str, Any]:
                     unit_of_inference="descriptive_cluster_markers")
 
 
-def resolve_level(config_path: str | Path, level: str) -> dict[str, Any]:
-    from .guided import require_label_gate
-    from .hierarchy import LABEL_COLUMNS, assign_parent_scoped_level
-
-    config, root, plan = _setup(config_path)
-    target = root / "annotation" / "levels" / level
-    _check_receipt(target / "evidence.manifest.json")
-    scores = pd.read_csv(target / "scores.tsv", sep="\t", keep_default_na=False, dtype={"cluster_id": str, "barcode": str})
-    vocabulary = pd.read_csv(plan["vocabulary_path"], sep="\t", keep_default_na=False, dtype={"cluster_id": str, "barcode": str})
-    vocabulary = vocabulary[vocabulary["axis"].eq("cell_type")]
-    frames = []
-    for parent, block in scores.groupby("parent_scope", sort=True):
-        require_label_gate(config_path, level=level, parent=str(parent))
-        labels = assign_parent_scoped_level(block, vocabulary, level=level, parent_scope=str(parent),
-            minimum_confidence=config.evidence.min_confidence, minimum_margin=config.evidence.min_margin)
-        frames.append(labels)
-    labels = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=LABEL_COLUMNS)
-    _frame(target / "labels.tsv", labels)
-    return _receipt(target / "decision.manifest.json", artifacts=[target / "labels.tsv"],
-        inputs=[target / "evidence.manifest.json", target / "scores.tsv"],
-        artifact_kind="cell_curator_corpus_level_decisions", level=level)
-
-
 def finalize_annotation(config_path: str | Path) -> dict[str, Any]:
     from .data import close_input
     from .guided import require_label_gate
     from .pipeline import execute_recursive_hierarchy
 
     config, root, plan = _setup(config_path)
-    score_tables, inputs = {}, []
+    score_tables, decision_tables, inputs = {}, {}, []
     decisions = []
     for level in config.guidance.hierarchy_levels:
         directory = root / "annotation" / "levels" / level
@@ -714,13 +691,16 @@ def finalize_annotation(config_path: str | Path) -> dict[str, Any]:
         table = pd.read_csv(directory / "scores.tsv", sep="\t", keep_default_na=False, dtype={"cluster_id": str, "barcode": str})
         for parent, block in table.groupby("parent_scope", sort=True):
             score_tables[level, str(parent)] = block
-        decisions.append(pd.read_csv(directory / "labels.tsv", sep="\t", keep_default_na=False, dtype={"cluster_id": str, "barcode": str}))
+        labels = pd.read_csv(directory / "labels.tsv", sep="\t", keep_default_na=False, dtype={"cluster_id": str, "barcode": str})
+        for parent, block in labels.groupby("parent_scope", sort=True):
+            decision_tables[level, str(parent)] = block
+        decisions.append(labels)
         inputs.extend([directory / "decision.manifest.json", directory / "evidence.manifest.json"])
     completed = root / "annotation" / "annotation.manifest.json"
     if completed.is_file():
         return _check_receipt(completed)
     execution = execute_recursive_hierarchy(config_path, score_tables=score_tables,
-        minimum_confidence=config.evidence.min_confidence, minimum_margin=config.evidence.min_margin)
+                                            decisions=decision_tables)
     loaded = _input(config, root)
     try:
         cells = pd.DataFrame({"barcode": loaded.root.obs_names.astype(str),

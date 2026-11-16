@@ -48,6 +48,11 @@
           "title": "Classifiers",
           "type": "array"
         },
+        "consensus_directory": {
+          "default": "",
+          "title": "Consensus Directory",
+          "type": "string"
+        },
         "corpus_assay": {
           "default": "",
           "title": "Corpus Assay",

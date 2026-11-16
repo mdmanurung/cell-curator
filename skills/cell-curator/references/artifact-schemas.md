@@ -41,32 +41,24 @@ scope when applicable.
 - RAPIDS receipt: validated hardware/software contract, method parameters,
   convergence, hashes, and explicit fallback booleans.
 
-## Recursive hierarchy invocation
+## Consensus import and hierarchy execution
 
-Pass `run execute --score-manifest FILE` a strict JSON object with
-`schema_version: 3` and a non-empty `score_tables` array. Each entry contains
-exactly `level`, `parent_scope`, and `path`, plus optional `state_path`. Paths are
-absolute or relative to the manifest directory. Optional top-level fields are
-`vocabulary_path`, `minimum_confidence`, and `minimum_margin`.
+`annotation import-consensus` reads the run named by `annotation.consensus_directory`:
+`consensus.tsv`, `run_manifest.json` and `work/cells.tsv`. `consensus.tsv` needs the
+columns `cluster_id`, `label`, `cl_id`, `decision_rule`, `rationale`,
+`rejected_alternatives`, `cluster_cell_share` and `cluster_cell_lead`. It writes
+`annotation/levels/L1/labels.tsv`, copies the three files to `annotation/levels/L1/consensus/`,
+and publishes `decision.manifest.json` with every input hash and `decided_by:
+annotation-consensus`.
 
-Every score TSV contains `cluster_id`, `label`, and finite numeric `score`. An
-optional `vote_fraction` column (emitted by program scoring) makes vote share the
-ranking, the confidence, and the margin, gated by `minimum_confidence` and
-`minimum_margin`. Without it, optional `specificity`, `agreement`, and `coverage`
-columns feed an advisory confidence that is reported but not gated. Below
-the first level a row may refine only a cluster its parent level routed into that
-scope: either its `cluster_id` is that cluster, or an optional `parent_cluster_id`
-column names it (for subclusters). Any other row is refused, and a routed cluster
-absent from the child table is retained with reason `missing_from_child_score_table`. Every
-state JSON maps cluster IDs to structured parallel-state values. Duplicate scopes,
-unknown fields, invalid thresholds, absent files, cross-parent labels, and stale
-artifacts are hard errors.
-
-The executor copies scoped inputs into `hierarchy/scores/` and `hierarchy/states/`,
-writes scoped labels below `labels/scopes/`, consolidates sibling parents into one
-durable `labels/L*.tsv`, writes retained leaves, and hashes each scope checkpoint.
-Missing child scopes retain their accepted parent leaf and never reuse sibling
-evidence.
+`finalize` passes those labels to the hierarchy executor as one decision table per
+`(level, parent_scope)`. The executor chooses no label. It copies scoped inputs into
+`hierarchy/scores/` and `hierarchy/decisions/`, writes scoped labels below
+`labels/scopes/`, consolidates sibling parents into one durable `labels/L*.tsv`,
+writes retained leaves, and hashes each scope checkpoint, so a changed decision
+re-executes its scope. A decision label must be `Unknown` or an identity label the
+vocabulary lists for that scope; a cell state program is refused. Only the vocabulary
+rows of the configured levels need an approved assumption.
 
 ## Review packet
 

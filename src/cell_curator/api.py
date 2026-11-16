@@ -85,11 +85,11 @@ def collect_annotation_level(config_path: str | Path, level: str) -> dict[str, A
     return collect_level(config_path, level)
 
 
-def resolve_annotation_level(config_path: str | Path, level: str) -> dict[str, Any]:
-    """Resolve one hierarchy level from its hash-validated evidence."""
-    from .annotation import resolve_level
+def import_consensus_annotation_level(config_path: str | Path, level: str) -> dict[str, Any]:
+    """Write one level's decisions from the configured annotation-consensus run."""
+    from .consensus_import import import_consensus_level
 
-    return resolve_level(config_path, level)
+    return import_consensus_level(config_path, level)
 
 
 def finalize_corpus_annotation(config_path: str | Path) -> dict[str, Any]:
@@ -253,40 +253,6 @@ def run_marker_tools(
         parent_scope=parent_scope,
         output_dir=output_directory,
     )
-
-
-def execute_recursive_hierarchy(
-    config_path: str | Path,
-    *,
-    score_tables: Mapping[tuple[str, str], Any],
-    vocabulary_path: str | Path | None = None,
-    state_tables: Mapping[tuple[str, str], Any] | None = None,
-    minimum_confidence: float | None = None,
-    minimum_margin: float | None = None,
-) -> dict[str, Any]:
-    """Execute and resume arbitrary-depth parent-scoped annotation."""
-
-    from .pipeline import execute_recursive_hierarchy as execute
-
-    return execute(
-        config_path,
-        score_tables=score_tables,
-        vocabulary_path=vocabulary_path,
-        state_tables=state_tables,
-        minimum_confidence=minimum_confidence,
-        minimum_margin=minimum_margin,
-    )
-
-
-def execute_recursive_hierarchy_manifest(
-    config_path: str | Path,
-    manifest_path: str | Path,
-) -> dict[str, Any]:
-    """Execute recursive annotation from a strict JSON artifact manifest."""
-
-    from .pipeline import execute_recursive_hierarchy_manifest as execute
-
-    return execute(config_path, manifest_path)
 
 
 def check_review_report(config_path: str | Path, *, level: str | None = None) -> dict[str, Any]:
@@ -643,34 +609,6 @@ def freeze_review_packet(config_path: str | Path) -> Path:
     from .pipeline import build_review_packet
 
     return build_review_packet(Path(config_path))
-
-
-def assign_hierarchy_level(
-    config_path: str | Path,
-    *,
-    scores_path: str | Path,
-    level: str,
-    parent: str,
-    vocabulary_path: str | Path | None = None,
-    state_path: str | Path | None = None,
-    output_path: str | Path | None = None,
-) -> dict[str, Any]:
-    """Assign one parent-scoped hierarchy level and checkpoint the labels table."""
-
-    from .pipeline import assign_hierarchy_level as assign
-
-    return assign(
-        config_path,
-        scores_path=scores_path,
-        level=level,
-        parent=parent,
-        vocabulary_path=vocabulary_path,
-        state_path=state_path,
-        output_path=output_path,
-    )
-
-
-# --- markers and clusters -----------------------------------------------------
 
 
 def build_marker_vocabulary(

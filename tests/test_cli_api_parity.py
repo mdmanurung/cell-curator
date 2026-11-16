@@ -24,7 +24,7 @@ from cell_curator.cli import build_parser
 CLI_TO_PUBLIC_NAME: dict[tuple[str, ...], str] = {
     ("annotation", "classifier"): "run_annotation_classifier",
     ("annotation", "collect-level"): "collect_annotation_level",
-    ("annotation", "resolve-level"): "resolve_annotation_level",
+    ("annotation", "import-consensus"): "import_consensus_annotation_level",
     ("annotation", "finalize"): "finalize_corpus_annotation",
     ("corpus", "validate"): "load_annotation_corpus",
     ("corpus", "export"): "export_corpus_programs",
@@ -63,7 +63,6 @@ CLI_TO_PUBLIC_NAME: dict[tuple[str, ...], str] = {
     ("data", "qc"): "compute_input_qc",
     ("environment", "detect"): "detect_compute_environment",
     ("evidence-card", "scaffold"): "build_evidence_cards",
-    ("hierarchy", "assign"): "assign_hierarchy_level",
     ("hierarchy", "validate"): "validate_hierarchy_nesting",
     ("knowledge", "validate"): "validate_knowledge_providers",
     ("markers", "assemble"): "build_marker_vocabulary",

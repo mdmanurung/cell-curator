@@ -86,10 +86,8 @@ def _check_cells(consensus_dir: Path, config: Any, root: Path) -> None:
         )
 
 
-def import_consensus_level(
-    config_path: str | Path, level: str, consensus_dir: str | Path
-) -> dict[str, Any]:
-    """Write ``levels/<level>/labels.tsv`` and its decision receipt from a consensus run."""
+def import_consensus_level(config_path: str | Path, level: str) -> dict[str, Any]:
+    """Write ``levels/<level>/labels.tsv`` and its decision receipt from the configured consensus run."""
 
     from .guided import require_label_gate
 
@@ -99,7 +97,9 @@ def import_consensus_level(
         raise ContractError(
             f"consensus import covers the first level {levels[0]!r} only, not {level!r}"
         )
-    consensus_dir = Path(consensus_dir)
+    if not config.annotation.consensus_directory:
+        raise ContractError("annotation.consensus_directory names no annotation-consensus run")
+    consensus_dir = Path(config.annotation.consensus_directory)
     target = root / "annotation" / "levels" / level
     _check_receipt(target / "evidence.manifest.json")
     require_label_gate(config_path, level=level, parent=ROOT)
@@ -146,7 +146,7 @@ def import_consensus_level(
             "parent_scope": ROOT,
             "cluster_id": consensus["cluster_id"],
             "label": consensus["label"],
-            "cell_state": "",
+            "cell_state": "normal",  # the default the corpus path always wrote; no state call is made
             "cl_id": consensus["cl_id"],
             "confidence": _share(consensus, "cluster_cell_share"),
             "margin": _share(consensus, "cluster_cell_lead"),

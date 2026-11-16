@@ -17,7 +17,7 @@ def test_frozen_packet_keeps_corpus_definitions_and_state_evidence(
     packet = build_review_packet(tmp_path / "config.yaml")
     assert (packet / "plan" / snapshot.name).read_bytes() == original
     assert (packet / "annotation" / "cell_labels.tsv").is_file()
-    assert (packet / "annotation" / "levels" / "L3" / "states.tsv").is_file()
+    assert (packet / "annotation" / "levels" / "L1" / "states.tsv").is_file()
     # A frozen review packet is checked against its own inventory, not live sources.
     Path(provider.path).write_bytes(original + b"\n")
     assert build_review_packet(tmp_path / "config.yaml") == packet

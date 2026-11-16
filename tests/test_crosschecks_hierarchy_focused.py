@@ -18,10 +18,6 @@ from cell_curator.crosschecks import (
 )
 from cell_curator.environment import GPUValidationError
 from cell_curator.hierarchy import (
-    advisory_confidence,
-    assign_parent_scoped_level,
-    classify_parallel_state,
-    recursive_parent_scoped_assignment,
     validate_hierarchy_nesting,
 )
 
@@ -276,107 +272,6 @@ def test_reference_knn_rejects_empty_or_incomplete_reference_labels_before_matri
     assert str(error.value) == message
 
 
-def test_parent_scope_unknown_confidence_and_cell_state_are_independent() -> None:
-    vocabulary = pd.DataFrame(
-        [
-            {"level": "L2", "parent_scope": "Immune", "label": "T", "cl_id": "CL:0000084"},
-            {"level": "L2", "parent_scope": "Immune", "label": "B", "cl_id": "CL:0000236"},
-            {
-                "level": "L2",
-                "parent_scope": "Stromal",
-                "label": "Endothelial",
-                "cl_id": "CL:0000115",
-            },
-        ]
-    )
-    scores = pd.DataFrame(
-        [
-            *_high_evidence_scores("cycling", "T", "B"),
-            *_high_evidence_scores("low_quality", "T", "B"),
-            {
-                "cluster_id": "uncertain",
-                "label": "T",
-                "score": 0.51,
-                "specificity": 0.8,
-                "agreement": 0.8,
-                "coverage": 0.8,
-            },
-            {
-                "cluster_id": "uncertain",
-                "label": "B",
-                "score": 0.50,
-                "specificity": 0.8,
-                "agreement": 0.8,
-                "coverage": 0.8,
-            },
-            {
-                "cluster_id": "cycling",
-                "label": "Endothelial",
-                "score": 10.0,
-                "specificity": 1.0,
-                "agreement": 1.0,
-                "coverage": 1.0,
-            },
-        ]
-    )
-    states = {
-        "cycling": classify_parallel_state(cycling_fraction=0.9),
-        "low_quality": classify_parallel_state(depth_robust_z=-4.0),
-    }
-
-    assigned = assign_parent_scoped_level(
-        scores,
-        vocabulary,
-        level="L2",
-        parent_scope="Immune",
-        state_by_cluster=states,
-    ).set_index("cluster_id")
-
-    assert assigned.loc["cycling", "label"] == "T"
-    assert assigned.loc["cycling", "cell_state"] == "cycling"
-    assert "Endothelial" not in assigned.loc["cycling", "rejected_alternatives"]
-    assert assigned.loc["low_quality", "label"] == "Unknown"
-    assert assigned.loc["low_quality", "cell_state"] == "low-quality"
-    assert assigned.loc["uncertain", "label"] == "Unknown"
-    assert "evidence margin below threshold" in assigned.loc["uncertain", "rationale"]
-    assert assigned["confidence"].between(0.0, 1.0).all()
-    assert advisory_confidence(
-        margin=0.8, specificity=0.9, agreement=0.9, coverage=0.9
-    ) > advisory_confidence(margin=0.01, specificity=0.2, agreement=0.2, coverage=0.2)
-
-
-def test_recursive_assignment_retains_parent_without_child_checkpoint() -> None:
-    vocabulary = pd.DataFrame(
-        [
-            {"level": "L1", "parent_scope": "ROOT", "label": "Immune"},
-            {"level": "L1", "parent_scope": "ROOT", "label": "Stromal"},
-            {"level": "L2", "parent_scope": "Immune", "label": "T"},
-            {"level": "L2", "parent_scope": "Immune", "label": "B"},
-            {"level": "L2", "parent_scope": "Stromal", "label": "Fibroblast"},
-            {"level": "L2", "parent_scope": "Stromal", "label": "Endothelial"},
-        ]
-    )
-    score_tables = {
-        ("L1", "ROOT"): pd.DataFrame(
-            [
-                *_high_evidence_scores("root_immune", "Immune", "Stromal"),
-                *_high_evidence_scores("root_stromal", "Stromal", "Immune"),
-            ]
-        ),
-        ("L2", "Immune"): pd.DataFrame(_high_evidence_scores("immune_child", "T", "B")),
-    }
-
-    outputs = recursive_parent_scoped_assignment(
-        vocabulary=vocabulary,
-        score_tables=score_tables,
-    )
-
-    assert set(outputs) == {("L1", "ROOT"), ("L2", "Immune")}
-    assert outputs[("L2", "Immune")].iloc[0]["parent_scope"] == "Immune"
-    assert outputs[("L2", "Immune")].iloc[0]["label"] == "T"
-    assert "Stromal" in set(outputs[("L1", "ROOT")]["label"])
-
-
 def test_strict_nesting_allows_unknown_but_rejects_reused_child_and_duplicate_leaf() -> None:
     immune = pd.DataFrame(
         [{"level": "L2", "parent_scope": "Immune", "cluster_id": "i0", "label": "Shared"}]
@@ -399,52 +294,6 @@ def test_strict_nesting_allows_unknown_but_rejects_reused_child_and_duplicate_le
     duplicated = pd.DataFrame({"barcode": ["c0", "c0"], "leaf_id": ["Shared", "Unknown"]})
     with pytest.raises(ContractError, match="duplicate barcodes"):
         validate_hierarchy_nesting([immune, stromal], cell_membership=duplicated)
-
-
-def test_score_only_tables_are_not_capped_by_advisory_confidence() -> None:
-    """Advisory confidence tops out at 0.5 without specificity and agreement, which
-    sat under the 0.55 gate, so a clear winner in a cluster/label/score table abstained."""
-
-    vocabulary = pd.DataFrame(
-        [
-            {"level": "L1", "parent_scope": "ROOT", "label": "T"},
-            {"level": "L1", "parent_scope": "ROOT", "label": "B"},
-        ]
-    )
-    scores = pd.DataFrame(
-        [
-            {"cluster_id": "0", "label": "T", "score": 3.0},
-            {"cluster_id": "0", "label": "B", "score": -1.0},
-        ]
-    )
-    plain = assign_parent_scoped_level(scores, vocabulary, level="L1", parent_scope="ROOT")
-    assert plain.loc[0, "label"] == "T"
-
-    voted = scores.assign(vote_fraction=[0.5, 0.3])
-    impure = assign_parent_scoped_level(voted, vocabulary, level="L1", parent_scope="ROOT")
-    assert impure.loc[0, "label"] == "Unknown"
-    assert "vote share below threshold" in impure.loc[0, "rationale"]
-
-
-def test_abstention_rationale_names_where_the_votes_went() -> None:
-    """A cluster whose votes split between two terms must show the split, so a reader can
-    tell a mixed cluster from one with no signal."""
-
-    vocabulary = pd.DataFrame(
-        [
-            {"level": "L1", "parent_scope": "ROOT", "label": "naive B"},
-            {"level": "L1", "parent_scope": "ROOT", "label": "transitional B"},
-        ]
-    )
-    scores = pd.DataFrame(
-        [
-            {"cluster_id": "0", "label": "naive B", "score": 5.3, "vote_fraction": 0.52},
-            {"cluster_id": "0", "label": "transitional B", "score": 5.4, "vote_fraction": 0.48},
-        ]
-    )
-    labels = assign_parent_scoped_level(scores, vocabulary, level="L1", parent_scope="ROOT")
-    assert labels.loc[0, "label"] == "Unknown"
-    assert "top cell votes: naive B 0.52, transitional B 0.48" in labels.loc[0, "rationale"]
 
 
 def test_strict_nesting_accepts_children_of_unknown_and_same_identity_splits() -> None:

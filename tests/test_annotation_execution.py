@@ -267,7 +267,7 @@ def test_workflow_launcher_uses_snakemake_and_checks_its_final_receipt(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     workflow_dependency(monkeypatch, available=True)
-    for name in ("collect_level", "resolve_level", "finalize_annotation"):
+    for name in ("collect_level", "finalize_annotation"):
         monkeypatch.setattr(
             f"cell_curator.annotation.{name}",
             lambda *_: pytest.fail("launcher must use the DAG"),

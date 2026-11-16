@@ -12,16 +12,17 @@ import pandas as pd
 import pytest
 import yaml
 from conftest import REPO_ROOT
+from consensus_fixture import write_consensus_run
 from test_end_to_end import _config
 
 from cell_curator.annotation import (
     annotation_contract,
     collect_level,
     finalize_annotation,
-    resolve_level,
     run_classifier,
 )
 from cell_curator.config import load_config
+from cell_curator.consensus_import import import_consensus_level
 from cell_curator.contracts import ContractError, sha256
 from cell_curator.corpus import CorpusLabel, CorpusSnapshot, CorpusSource
 from cell_curator.guided import confirm_context, construct_plan, prepare_scene
@@ -40,6 +41,7 @@ def annotation_fixture(
     required: bool = True,
     exclusions: dict[str, list[dict]] | None = None,
     markers: dict | None = None,
+    consensus: bool = True,
 ) -> tuple[Path, Path, dict[str, list[str]]]:
     """Eight terminal clusters share their broad markers with sibling clusters."""
     features = [
@@ -71,7 +73,8 @@ def annotation_fixture(
                     "description": f"Synthetic definition for {name}; no biological claim.",
                     "source_id": "synthetic",
                     "source_label": name,
-                    "species": ["Homo sapiens"], "tissues": ["blood"],
+                    "species": ["Homo sapiens"],
+                    "tissues": ["blood"],
                     "positive": [positive],
                     "negative": [negative] if negative else [],
                     "level": level,
@@ -125,7 +128,7 @@ def annotation_fixture(
                     leaf_name,
                 ]
     counts[:20, -1] = 4
-    label("state-S", "S+", "state-S", None, level="L4", parent="leaf-0", axis="cell_state")
+    label("state-S", "S+", "state-S", None, level="L4", parent="lineage-A", axis="cell_state")
     source = tmp_path / "input.h5ad"
     cells = [f"cell-{i:03d}" for i in range(len(counts))]
     clusters = np.repeat([str(i) for i in range(8)], 20)
@@ -173,12 +176,15 @@ def annotation_fixture(
     value["canonical_partitions"]["immune"]["expected_parent_count"] = (
         5 if collapse_lineage else 8
     )
-    value["guidance"]["hierarchy_levels"] = ["L1", "L2", "L3"]
-    value["guidance"]["context"]["tissue"] = "blood"  # decision row 16: corpus labels are tissue-scoped
+    value["guidance"]["hierarchy_levels"] = ["L1"]
+    value["guidance"]["context"]["tissue"] = (
+        "blood"  # decision row 16: corpus labels are tissue-scoped
+    )
     value["annotation"] = {
         "enabled": True,
         "assay": "transcriptome",
         "representation": "logcounts",
+        "consensus_directory": str(tmp_path / "consensus") if consensus else "",
     }
     if not approved:
         value["guidance"].update({"interactive": True, "preauthorized": False})
@@ -226,7 +232,7 @@ def annotation_fixture(
     return config_path, root, expected
 
 
-def test_three_level_annotation_replays_and_keeps_parent_scopes(
+def test_consensus_annotation_replays_and_propagates_labels_to_cells(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -234,29 +240,27 @@ def test_three_level_annotation_replays_and_keeps_parent_scopes(
     source = Path(load_config(config_path).input.path)
     source_hash = sha256(source)
     run_classifier(config_path, "celltypist")
-    for level in ("L1", "L2", "L3"):
-        evidence = collect_level(config_path, level)
-        resolve_level(config_path, level)
-        assert all(item["status"] == "complete" for item in evidence["scopes"])
-        scores = pd.read_csv(root / "annotation" / "levels" / level / "scores.tsv", sep="\t")
-        for row in scores.itertuples():
-            depth = int(level[1:]) - 1
-            assert row.parent_scope == (
-                "ROOT" if depth == 0 else expected[str(row.cluster_id)][depth - 1]
-            )
-        # Replaying already published stages must not rewrite evidence or decisions.
-        digest = sha256(root / "annotation" / "levels" / level / "scores.tsv")
-        assert collect_level(config_path, level) == evidence
-        resolve_level(config_path, level)
-        assert sha256(root / "annotation" / "levels" / level / "scores.tsv") == digest
+    evidence = collect_level(config_path, "L1")
+    assert all(item["status"] == "complete" for item in evidence["scopes"])
+    scores = pd.read_csv(root / "annotation" / "levels" / "L1" / "scores.tsv", sep="\t")
+    assert set(scores["parent_scope"]) == {"ROOT"}
+    write_consensus_run(
+        config_path, root, {cluster: values[0] for cluster, values in expected.items()}
+    )
+    import_consensus_level(config_path, "L1")
+    # Replaying already published stages must not rewrite evidence or decisions.
+    digest = sha256(root / "annotation" / "levels" / "L1" / "scores.tsv")
+    assert collect_level(config_path, "L1") == evidence
+    import_consensus_level(config_path, "L1")
+    assert sha256(root / "annotation" / "levels" / "L1" / "scores.tsv") == digest
     manifest = finalize_annotation(config_path)
     labels_path = root / "annotation" / "cell_labels.tsv"
     labels = pd.read_csv(labels_path, sep="\t", keep_default_na=False)
     assert len(labels) == 160
     for cluster, values in expected.items():
         block = labels[labels["cluster_id"].astype(str).eq(cluster)]
-        assert block[["L1", "L2", "L3"]].drop_duplicates().values.tolist() == [values]
-        assert set(block["L4"]) == {values[-1] + (" S+" if cluster == "0" else "")}
+        assert block["L1"].drop_duplicates().tolist() == [values[0]]
+        assert set(block["L4"]) == {values[0] + (" S+" if cluster == "0" else "")}
     assert set(labels["annotation_unit"]) == {"cluster_propagated_to_cells"}
     assert manifest["writeback_applied"] is False
     assert source_hash == sha256(source)
@@ -286,7 +290,7 @@ def test_gate_a_stops_annotation_before_collecting_label_evidence(
     assert not (root / "annotation" / "levels" / "L1" / "scores.tsv").exists()
 
 
-def test_required_classifier_conflict_preserves_unknown(
+def test_required_classifier_conflict_fails_the_marker_supported_label(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -295,13 +299,6 @@ def test_required_classifier_conflict_preserves_unknown(
     )
     run_classifier(config_path, "celltypist")
     collect_level(config_path, "L1")
-    resolve_level(config_path, "L1")
-    labels = pd.read_csv(root / "annotation" / "levels" / "L1" / "labels.tsv", sep="\t")
-    assert (
-        labels[labels["cluster_id"].astype(str).isin(["0", "1", "2", "3"])]["label"]
-        .eq("Unknown")
-        .all()
-    )
     scores = pd.read_csv(
         root / "annotation" / "levels" / "L1" / "scores.tsv", sep="\t", keep_default_na=False
     )
@@ -335,32 +332,14 @@ def test_required_classifier_must_run_before_marker_collection(
     assert not (root / "annotation" / "levels" / "L1" / "scores.tsv").exists()
 
 
-def test_missing_child_comparator_retains_the_supported_parent(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    config_path, root, _ = annotation_fixture(tmp_path, monkeypatch, collapse_lineage=True)
-    collect_level(config_path, "L1")
-    resolve_level(config_path, "L1")
-    evidence = collect_level(config_path, "L2")
-    status = next(item for item in evidence["scopes"] if item["parent"] == "Lineage A")
-    assert status["status"] == "unavailable_no_comparator"
-    assert status["marker_methods"] == []
-    resolve_level(config_path, "L2")
-    collect_level(config_path, "L3")
-    resolve_level(config_path, "L3")
-    finalize_annotation(config_path)
-    cells = pd.read_csv(root / "annotation" / "cell_labels.tsv", sep="\t")
-    retained = cells[cells["cluster_id"].eq("A")]
-    assert len(retained) == 80
-    assert retained[["L1", "L2", "L3"]].eq("Lineage A").all().all()
-
-
 def test_snakemake_executes_all_annotation_stages_and_resumes_without_work(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     config_path, root, expected = annotation_fixture(tmp_path, monkeypatch)
+    write_consensus_run(
+        config_path, root, {cluster: values[0] for cluster, values in expected.items()}
+    )
     work = tmp_path / "snakemake-work"
     work.mkdir()
     environment = {
@@ -392,8 +371,8 @@ def test_snakemake_executes_all_annotation_stages_and_resumes_without_work(
     )
     for cluster, values in expected.items():
         block = cells[cells["cluster_id"].astype(str).eq(cluster)]
-        assert block[["L1", "L2", "L3"]].drop_duplicates().values.tolist() == [values]
-        assert set(block["L4"]) == {values[-1] + (" S+" if cluster == "0" else "")}
+        assert block["L1"].drop_duplicates().tolist() == [values[0]]
+        assert set(block["L4"]) == {values[0] + (" S+" if cluster == "0" else "")}
     manifest = root / "annotation" / "annotation.manifest.json"
     digest = sha256(manifest)
     second = subprocess.run(
@@ -444,9 +423,13 @@ def test_exclusion_is_tested_through_its_own_signature(
     scores = pd.read_csv(
         root / "annotation" / "levels" / "L1" / "scores.tsv", sep="\t", keep_default_na=False
     )
-    a0 = scores[scores["label"].eq("Lineage A") & scores["cluster_id"].astype(str).eq("0")].iloc[0]
+    a0 = scores[
+        scores["label"].eq("Lineage A") & scores["cluster_id"].astype(str).eq("0")
+    ].iloc[0]
     assert "excluded:self" in a0["gate_failures"]
     assert "excluded:ghost" not in a0["gate_failures"]
     assert "exclusion_unmeasured:ghost" in a0["gate_flags"]
-    b4 = scores[scores["label"].eq("Lineage B") & scores["cluster_id"].astype(str).eq("4")].iloc[0]
+    b4 = scores[
+        scores["label"].eq("Lineage B") & scores["cluster_id"].astype(str).eq("4")
+    ].iloc[0]
     assert "excluded" not in b4["gate_failures"]

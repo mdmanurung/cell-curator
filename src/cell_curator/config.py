@@ -409,6 +409,11 @@ class AnnotationConfig(StrictModel):
     # Development only (user decision, 2026-11-10): also call `imported` and `proposed`
     # corpus records. It needs `isolation`, and such a run can never be written back.
     development_candidates: bool = False
+    # Output directory of an annotation-consensus run. It chooses the label of each cluster;
+    # `annotation import-consensus` checks it against the plan's vocabulary and cells. The
+    # directory may be empty when the config is written, because the run needs the plan's
+    # vocabulary first. The decision receipt hashes what the import reads.
+    consensus_directory: str = ""
 
 
 class EvidenceConfig(StrictModel):

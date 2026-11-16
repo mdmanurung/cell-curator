@@ -10,9 +10,6 @@ import pytest
 import yaml
 from conftest import SKILL_ROOT
 
-import cell_curator.hierarchy as hierarchy_module
-from cell_curator import execute_recursive_hierarchy_manifest as public_manifest_execute
-from cell_curator.cli import build_parser, dispatch
 from cell_curator.config import load_config
 from cell_curator.contracts import ContractError, sha256
 from cell_curator.guided import (
@@ -194,6 +191,21 @@ def _label_row(
     }
 
 
+def _decisions(
+    tables: dict[tuple[str, str], pd.DataFrame],
+) -> dict[tuple[str, str], pd.DataFrame]:
+    """One label row per cluster: the label with the highest score, as a stand-in consensus."""
+    return {
+        (level, parent): pd.DataFrame(
+            [
+                _label_row(level=level, parent=parent, cluster=str(cluster), label=block.loc[block["score"].idxmax(), "label"])
+                for cluster, block in table.groupby("cluster_id", sort=True)
+            ]
+        )
+        for (level, parent), table in tables.items()
+    }
+
+
 def test_plan_routes_each_parent_scope_and_rejects_noncategorical_covariates(
     tmp_path: Path,
 ) -> None:
@@ -274,7 +286,6 @@ def test_labels_scaffold_accumulates_scopes_and_preserves_manual_rows(
 
 
 def test_recursive_execution_three_levels_resume_and_scope_regating(
-    monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     config_path, source, _ = _write_fixture(tmp_path)
@@ -283,7 +294,9 @@ def test_recursive_execution_three_levels_resume_and_scope_regating(
     construct_plan(config_path)
     score_tables = _score_tables()
 
-    first = execute_recursive_hierarchy(config_path, score_tables=score_tables)
+    first = execute_recursive_hierarchy(
+        config_path, score_tables=score_tables, decisions=_decisions(score_tables)
+    )
     assert set(first["executed_scopes"]) == {
         "L1::ROOT",
         "L2::Immune",
@@ -312,15 +325,10 @@ def test_recursive_execution_three_levels_resume_and_scope_regating(
         identity: (sha256(path), path.stat().st_mtime_ns)
         for identity, path in checkpoints.items()
     }
-    with monkeypatch.context() as resume_patch:
-        resume_patch.setattr(
-            hierarchy_module,
-            "assign_parent_scoped_level",
-            lambda *_args, **_kwargs: pytest.fail(
-                "valid recursive checkpoints were recomputed"
-            ),
-        )
-        second = execute_recursive_hierarchy(config_path, score_tables=score_tables)
+    second = execute_recursive_hierarchy(
+        config_path, score_tables=score_tables, decisions=_decisions(score_tables)
+    )
+    assert second["executed_scopes"] == [], "valid recursive checkpoints were recomputed"
     assert set(second["resumed_scopes"]) == set(checkpoints)
     assert {
         identity: (sha256(path), path.stat().st_mtime_ns)
@@ -333,17 +341,10 @@ def test_recursive_execution_three_levels_resume_and_scope_regating(
         statement="A material CD4/CD8 interpretation change requires renewed L3 review.",
         material=True,
     )
-    original_assign = hierarchy_module.assign_parent_scoped_level
-    recomputed: list[tuple[str, str]] = []
-
-    def spy_assign(*args: object, **kwargs: object) -> pd.DataFrame:
-        recomputed.append((str(kwargs["level"]), str(kwargs["parent_scope"])))
-        return original_assign(*args, **kwargs)
-
-    monkeypatch.setattr(hierarchy_module, "assign_parent_scoped_level", spy_assign)
     with pytest.raises(ContractError, match="Gate A blocks biological labels"):
-        execute_recursive_hierarchy(config_path, score_tables=score_tables)
-    assert recomputed == []
+        execute_recursive_hierarchy(
+            config_path, score_tables=score_tables, decisions=_decisions(score_tables)
+        )
     for identity in ("L1::ROOT", "L2::Immune", "L2::Stromal"):
         assert sha256(checkpoints[identity]) == before[identity][0]
 
@@ -353,8 +354,10 @@ def test_recursive_execution_three_levels_resume_and_scope_regating(
         scope="L3::T",
         preauthorized=True,
     )
-    third = execute_recursive_hierarchy(config_path, score_tables=score_tables)
-    assert recomputed == [("L3", "T")]
+    third = execute_recursive_hierarchy(
+        config_path, score_tables=score_tables, decisions=_decisions(score_tables)
+    )
+    assert third["executed_scopes"] == ["L3::T"]
     assert set(third["resumed_scopes"]) == {
         "L1::ROOT",
         "L2::Immune",
@@ -363,56 +366,6 @@ def test_recursive_execution_three_levels_resume_and_scope_regating(
     for identity in ("L1::ROOT", "L2::Immune", "L2::Stromal"):
         assert sha256(checkpoints[identity]) == before[identity][0]
     assert sha256(checkpoints["L3::T"]) != before["L3::T"][0]
-
-
-def test_recursive_manifest_public_api_and_cli(tmp_path: Path) -> None:
-    config_path, source, _ = _write_fixture(tmp_path, run_id="recursive-manifest-v1")
-    source_digest = sha256(source)
-    prepare_scene(config_path)
-    construct_plan(config_path)
-    entries: list[dict[str, str]] = []
-    for index, ((level, parent), frame) in enumerate(_score_tables().items()):
-        score_path = tmp_path / f"scope-{index}.tsv"
-        frame.to_csv(score_path, sep="\t", index=False)
-        entries.append({"level": level, "parent_scope": parent, "path": score_path.name})
-    manifest_path = tmp_path / "recursive-scores.json"
-    manifest_path.write_text(
-        json.dumps({"schema_version": 3, "score_tables": entries}, indent=2)
-    )
-
-    args = build_parser().parse_args(
-        [
-            "run",
-            "execute",
-            "--config",
-            str(config_path),
-            "--score-manifest",
-            str(manifest_path),
-        ]
-    )
-    executed = dispatch(args)
-    assert set(executed["executed_scopes"]) == {
-        "L1::ROOT",
-        "L2::Immune",
-        "L2::Stromal",
-        "L3::T",
-    }
-    resumed = public_manifest_execute(config_path, manifest_path)
-    assert set(resumed["resumed_scopes"]) == set(executed["executed_scopes"])
-    assert sha256(source) == source_digest
-
-    invalid_path = tmp_path / "invalid-recursive-scores.json"
-    invalid_path.write_text(
-        json.dumps(
-            {
-                "schema_version": 3,
-                "score_tables": entries,
-                "unsupported": True,
-            }
-        )
-    )
-    with pytest.raises(ContractError, match="unsupported fields"):
-        public_manifest_execute(config_path, invalid_path)
 
 
 def test_provider_manifest_hashes_local_files_and_disabled_remote_never_networks(
@@ -456,9 +409,8 @@ def test_a_state_program_is_never_assignable_as_an_identity(tmp_path: Path) -> N
     """The planned vocabulary records every program; assignment takes only identity rows.
 
     `plan/vocabulary.tsv` is written from all declared marker programs, cell state
-    included, and both execution routes read exactly that file. Nothing between the
-    read and `assign_parent_scoped_level` inspected the axis, so a declared cell
-    state program was an assignable cell type on the score-manifest route.
+    included. The walker reduces it to identity rows and refuses a decision that names
+    a cell state program as a cell type.
     """
 
     config_path, _, markers = _write_fixture(tmp_path, run_id="state-vocabulary-v1")
@@ -483,24 +435,12 @@ def test_a_state_program_is_never_assignable_as_an_identity(tmp_path: Path) -> N
             *_scores("immune-cycling", "Cycling", "T"),
         ]
     )
-    entries: list[dict[str, str]] = []
-    for index, ((level, parent), frame) in enumerate(tables.items()):
-        score_path = tmp_path / f"state-scope-{index}.tsv"
-        frame.to_csv(score_path, sep="\t", index=False)
-        entries.append({"level": level, "parent_scope": parent, "path": score_path.name})
-    manifest_path = tmp_path / "state-scores.json"
-    manifest_path.write_text(json.dumps({"schema_version": 3, "score_tables": entries}))
-
-    public_manifest_execute(config_path, manifest_path)
-
+    with pytest.raises(ContractError, match=r"outside its identity vocabulary: \['Cycling'\]"):
+        execute_recursive_hierarchy(
+            config_path, score_tables=tables, decisions=_decisions(tables)
+        )
     receipt = json.loads((root / "plan/identity_vocabulary_status.json").read_text())
     assert receipt["excluded_cell_state_labels"] == ["Cycling"]
-
-    assigned = pd.concat(
-        [pd.read_csv(path, sep="\t") for path in sorted((root / "labels").glob("*.tsv"))],
-        ignore_index=True,
-    )
-    assert "Cycling" not in set(assigned["label"].astype(str))
 
 
 def test_an_operator_vocabulary_label_with_no_approved_assumption_is_refused(
@@ -519,28 +459,34 @@ def test_an_operator_vocabulary_label_with_no_approved_assumption_is_refused(
     pd.concat([vocabulary, extra]).to_csv(operator, sep="\t", index=False)
     with pytest.raises(ContractError, match="no approved assumption naming them"):
         execute_recursive_hierarchy(
-            config_path, score_tables=_score_tables(), vocabulary_path=operator
+            config_path,
+            score_tables=_score_tables(),
+            decisions=_decisions(_score_tables()),
+            vocabulary_path=operator,
         )
 
 
-def test_changed_thresholds_reexecute_and_a_dropped_level_loses_its_table(
+def test_a_changed_decision_reexecutes_and_a_dropped_level_loses_its_table(
     tmp_path: Path,
 ) -> None:
-    config_path, _, _ = _write_fixture(tmp_path, run_id="threshold-resume-v1")
+    config_path, _, _ = _write_fixture(tmp_path, run_id="decision-resume-v1")
     prepare_scene(config_path)
     construct_plan(config_path)
     root = run_directory(load_config(config_path))
     tables = _score_tables()
-    first = execute_recursive_hierarchy(config_path, score_tables=tables)
+    decisions = _decisions(tables)
+    first = execute_recursive_hierarchy(config_path, score_tables=tables, decisions=decisions)
     assert (root / "labels/L3.tsv").is_file()
 
-    stricter = execute_recursive_hierarchy(
-        config_path, score_tables=tables, minimum_confidence=0.99
-    )
-    assert stricter["executed_scopes"], "a new threshold must not resume old labels"
+    changed = {scope: frame.copy() for scope, frame in decisions.items()}
+    changed[("L1", "ROOT")]["rationale"] = "A reviewer reworded the rationale."
+    again = execute_recursive_hierarchy(config_path, score_tables=tables, decisions=changed)
+    assert again["executed_scopes"] == ["L1::ROOT"], "a changed decision must not resume old labels"
 
     without_l3 = {scope: frame for scope, frame in tables.items() if scope[0] != "L3"}
-    execute_recursive_hierarchy(config_path, score_tables=without_l3)
+    execute_recursive_hierarchy(
+        config_path, score_tables=without_l3, decisions=_decisions(without_l3)
+    )
     assert not (root / "labels/L3.tsv").exists()
     assert first["executed_scopes"]
 
@@ -557,4 +503,6 @@ def test_a_child_row_for_a_cluster_its_parent_never_routed_is_refused(
         [{**row, "parent_cluster_id": "root-stromal"} for row in _scores("x", "T", "B")]
     )
     with pytest.raises(ContractError, match="did not route there"):
-        execute_recursive_hierarchy(config_path, score_tables=tables)
+        execute_recursive_hierarchy(
+            config_path, score_tables=tables, decisions=_decisions(tables)
+        )

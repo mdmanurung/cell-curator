@@ -161,33 +161,23 @@ cell-curator hierarchy validate --labels results/RUN/labels/L1.tsv
 cell-curator run status --config config.yaml
 ```
 
-To assign one level from a score table you computed yourself, use this instead of
-`run execute`, never after it:
+The package chooses no label. The labels come from an `annotation-consensus` run
+(`skills/annotation-consensus`). Set `annotation.consensus_directory` in the config to
+that run's output directory; the directory can be empty when you write the config,
+because the consensus run needs the plan's vocabulary first. The run covers the first
+hierarchy level only (`guidance.hierarchy_levels: [L1]`). After `run plan` and Gate A:
 
 ```bash
-cell-curator hierarchy assign --config config.yaml --scores scores.tsv \
-  --level L1 --parent ROOT
+cell-curator annotation collect-level --config config.yaml --level L1
+# run annotation-consensus with plan/vocabulary.tsv as its vocabulary, then:
+cell-curator annotation import-consensus --config config.yaml --level L1
+cell-curator annotation finalize --config config.yaml
 ```
 
-For multiple levels, pass `run execute` a schema-v3 score manifest. Each entry must
-identify one `(level, parent_scope)` and its score table. Resolve paths relative to
-the manifest, retain an accepted parent when no child table exists, and do not reuse
-scores across parents.
-
-```json
-{
-  "schema_version": 3,
-  "score_tables": [
-    {"level": "L1", "parent_scope": "ROOT", "path": "scores/L1-ROOT.tsv"},
-    {"level": "L2", "parent_scope": "Immune", "path": "scores/L2-Immune.tsv"}
-  ]
-}
-```
-
-```bash
-cell-curator run execute --config config.yaml \
-  --score-manifest hierarchy-scores.json
-```
+`import-consensus` refuses a consensus run unless its cells and clusters match the
+run's input, every label is in the approved L1 vocabulary (or is `Unknown`), and each
+`cl_id` matches the vocabulary. The imported `confidence` is the share of the
+cluster's cells that vote for the label. It is not a calibrated probability.
 
 Use only applicable cross-checks. Inspect `unavailable` receipts and their stated
 remediation. Automated predictions remain hypotheses.

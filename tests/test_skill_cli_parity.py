@@ -35,9 +35,6 @@ SKILL_PATH = SKILL_ROOT / "SKILL.md"
 INTERNAL_ACTIONS: frozenset[tuple[str, ...]] = frozenset(
     {
         ("annotation", "classifier"),
-        ("annotation", "collect-level"),
-        ("annotation", "resolve-level"),
-        ("annotation", "finalize"),
         ("benchmark", "evaluate"),
         ("benchmark", "sweep"),
         ("benchmark", "validate-manifest"),

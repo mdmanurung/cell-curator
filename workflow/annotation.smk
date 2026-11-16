@@ -29,6 +29,10 @@ CLASSIFIER_STATUSES = [RUN / "annotation" / "classifiers" / name / "status.json"
 CLASSIFIER_CELLS = [RUN / "annotation" / "classifiers" / name / "cell_predictions.tsv" for name in CLASSIFIERS]
 DECISIONS = [RUN / "annotation" / "levels" / level / "decision.manifest.json" for level in LEVELS]
 LEVEL_LABELS = [RUN / "annotation" / "levels" / level / "labels.tsv" for level in LEVELS]
+CONSENSUS_DIRECTORY = Path(ANCHORED.annotation.consensus_directory) if ANCHORED.annotation.consensus_directory else None
+if CONSENSUS_DIRECTORY is None:
+    raise WorkflowError("set annotation.consensus_directory to the output of an annotation-consensus run")
+CONSENSUS = [CONSENSUS_DIRECTORY / name for name in ("consensus.tsv", "run_manifest.json", "work/cells.tsv")]
 CANONICAL = RUN / "canonical" / f"input.{ANCHORED.input.kind}"
 EXTERNAL = [RUN / "context.json", RUN / "plan.json", RUN / "assumptions.json", RUN / "input_contract.manifest.json"]
 KNOWLEDGE = sorted({Path(provider.path) for provider in ANCHORED.knowledge.providers if provider.path})
@@ -123,14 +127,15 @@ rule annotation_level_decision:
         predictions=CLASSIFIER_CELLS,
         statuses=CLASSIFIER_STATUSES,
         parent=previous_decision,
+        consensus=CONSENSUS,
     output:
         labels=RUN / "annotation" / "levels" / "{level}" / "labels.tsv",
         manifest=RUN / "annotation" / "levels" / "{level}" / "decision.manifest.json",
     wildcard_constraints:
         level="|".join(re.escape(level) for level in LEVELS),
     run:
-        from cell_curator.annotation import resolve_level
-        resolve_level(Path(str(input.config)), str(wildcards.level))
+        from cell_curator.consensus_import import import_consensus_level
+        import_consensus_level(Path(str(input.config)), str(wildcards.level))
 
 
 rule annotation_finalize:

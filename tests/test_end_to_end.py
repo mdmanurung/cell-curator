@@ -680,7 +680,7 @@ def test_standard_pipeline_rejects_multi_level_config_before_materialization(
     value["guidance"]["hierarchy_levels"] = ["L1", "L2"]
     config_path.write_text(yaml.safe_dump(value, sort_keys=False))
 
-    with pytest.raises(ContractError, match="score-manifest"):
+    with pytest.raises(ContractError, match="exactly one hierarchy level"):
         run_annotation(config_path)
     assert not (tmp_path / "results" / "multi-level-v1").exists()
 

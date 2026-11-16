@@ -207,7 +207,7 @@ def test_annotate_refuses_a_multi_level_run_with_a_useful_message(tmp_path: Path
         mode="annotation",
         hierarchy_levels=("L1", "L2"),
     )
-    with pytest.raises(ContractError, match="execute_hierarchy_manifest"):
+    with pytest.raises(ContractError, match="single-level pipeline"):
         curator.annotate()
 
 
@@ -219,10 +219,8 @@ def test_the_added_methods_all_delegate_and_exist(tmp_path: Path) -> None:
         "map_cells",
         "freeze_review_packet",
         "annotate",
-        "execute_hierarchy_manifest",
         "run_evidence_lane",
         "profile_refined_clusters",
-        "assign_labels",
         "confirm_context",
         "list_assumptions",
         "add_assumption",

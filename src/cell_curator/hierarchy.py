@@ -49,78 +49,6 @@ def advisory_confidence(
     return float(np.dot(values, [0.35, 0.25, 0.25, 0.15]))
 
 
-def classify_parallel_state(
-    *,
-    mixed_score: float = 0.0,
-    technical_effect: float = 0.0,
-    depth_robust_z: float = 0.0,
-    mitochondrial_robust_z: float = 0.0,
-    cycling_fraction: float = 0.0,
-    stress_score: float = 0.0,
-    gradient_score: float = 0.0,
-) -> dict[str, Any]:
-    """Classify technical/state axes independently from biological identity."""
-
-    flags: list[str] = []
-    if mixed_score >= 0.6:
-        flags.append("mixed/doublet")
-    if technical_effect >= 0.3:
-        flags.append("technical")
-    if depth_robust_z <= -3.0 or mitochondrial_robust_z >= 3.0:
-        flags.append("low-quality")
-    if cycling_fraction >= 0.5:
-        flags.append("cycling")
-    if stress_score >= 0.6:
-        flags.append("stressed")
-    if gradient_score >= 0.6:
-        flags.append("gradient")
-    state = flags[0] if flags else "normal"
-    identity_must_abstain = state in {"mixed/doublet", "technical", "low-quality"}
-    return {
-        "cell_state": state,
-        "state_flags": flags,
-        "identity_must_abstain": identity_must_abstain,
-    }
-
-
-def profile_ambiguity(
-    cell_scores: pd.DataFrame,
-    *,
-    first_label: str,
-    second_label: str,
-) -> dict[str, Any]:
-    """Distinguish mixed co-support from a continuous/uncertain score gradient."""
-
-    required = {first_label, second_label}
-    missing = required.difference(cell_scores.columns)
-    if missing:
-        raise ContractError(f"ambiguity profile misses score columns: {sorted(missing)}")
-    first = cell_scores[first_label].astype(float).to_numpy()
-    second = cell_scores[second_label].astype(float).to_numpy()
-    if not len(first):
-        raise ContractError("ambiguity profile requires at least one cell")
-    high_first = first >= np.nanquantile(first, 0.75)
-    high_second = second >= np.nanquantile(second, 0.75)
-    co_high = float(np.mean(high_first & high_second))
-    contrast = first - second
-    middle = float(np.mean(np.abs(contrast) <= max(float(np.nanstd(contrast)) * 0.25, 1e-8)))
-    correlation = float(np.corrcoef(first, second)[0, 1]) if len(first) > 1 else 0.0
-    correlation = 0.0 if not np.isfinite(correlation) else correlation
-    if co_high >= 0.2:
-        interpretation = "mixed_coexpression"
-    elif middle >= 0.35 or abs(correlation) >= 0.7:
-        interpretation = "continuous_gradient"
-    else:
-        interpretation = "separable_or_sparse"
-    return {
-        "interpretation": interpretation,
-        "co_high_fraction": co_high,
-        "middle_contrast_fraction": middle,
-        "score_correlation": correlation,
-        "profiled_before_unknown": True,
-    }
-
-
 def validate_parent_vocabulary(vocabulary: pd.DataFrame) -> None:
     required = {"level", "parent_scope", "label"}
     missing = required.difference(vocabulary.columns)
@@ -185,148 +113,6 @@ def identity_vocabulary(vocabulary: pd.DataFrame) -> tuple[pd.DataFrame, list[st
             f"state cannot be separated: {orphaned}"
         )
     return identity, excluded
-
-
-def assign_parent_scoped_level(
-    scores: pd.DataFrame,
-    vocabulary: pd.DataFrame,
-    *,
-    level: str,
-    parent_scope: str,
-    minimum_confidence: float = 0.55,
-    minimum_margin: float = 0.1,
-    state_by_cluster: dict[str, dict[str, Any]] | None = None,
-) -> pd.DataFrame:
-    """Assign one level while strictly filtering candidates to the declared parent."""
-
-    validate_parent_vocabulary(vocabulary)
-    required = {"cluster_id", "label", "score"}
-    missing = required.difference(scores.columns)
-    if missing:
-        raise ContractError(f"hierarchy score table misses columns: {sorted(missing)}")
-    if "level" in scores.columns:
-        observed_levels = set(scores["level"].dropna().astype(str))
-        if observed_levels and observed_levels != {level}:
-            raise ContractError(
-                "hierarchy score table declares a different level than its execution "
-                f"scope: expected {level!r}, observed {sorted(observed_levels)}"
-            )
-    if "parent_scope" in scores.columns:
-        observed_parents = set(scores["parent_scope"].dropna().astype(str))
-        if observed_parents and observed_parents != {parent_scope}:
-            raise ContractError(
-                "hierarchy score table declares a different parent than its execution "
-                f"scope: expected {parent_scope!r}, observed {sorted(observed_parents)}"
-            )
-    candidates = vocabulary[
-        vocabulary["level"].astype(str).eq(level)
-        & vocabulary["parent_scope"].astype(str).eq(parent_scope)
-    ]
-    if candidates.empty:
-        raise ContractError(
-            f"hierarchy vocabulary has no candidates for {level} within {parent_scope}"
-        )
-    permitted = set(candidates["label"].astype(str))
-    block = scores[scores["label"].astype(str).isin(permitted)].copy()
-    if block.empty:
-        raise ContractError(
-            f"no executable evidence remains after parent scoping for {level}::{parent_scope}"
-        )
-    rows: list[dict[str, Any]] = []
-    state_by_cluster = state_by_cluster or {}
-    cl_lookup = dict(
-        zip(
-            candidates["label"].astype(str),
-            candidates.get("cl_id", pd.Series("", index=candidates.index)).astype(str),
-            strict=True,
-        )
-    )
-    for cluster_id, cluster_scores in block.groupby("cluster_id", observed=True, sort=True):
-        # A table from score_marker_programs carries per-cell votes, so it is
-        # ranked and gated on vote share in the units config.evidence uses.
-        # Without votes, confidence is the advisory blend, reported but never a
-        # gate: it is capped at 0.5 when specificity and agreement are absent.
-        voted = "vote_fraction" in cluster_scores.columns
-        rank = "vote_fraction" if voted else "score"
-        ordered = cluster_scores.sort_values(
-            [rank, "score", "label"], ascending=[False, False, True]
-        )
-        winner = ordered.iloc[0]
-        runner = ordered.iloc[1] if len(ordered) > 1 else None
-        margin = (
-            float(winner[rank] - runner[rank]) if runner is not None else float(winner[rank])
-        )
-        if voted and "raw_vote_fraction" in cluster_scores.columns:
-            # Decision row 14: a runner-up that failed a gate keeps its measured vote,
-            # so a near-tie stays visible as a small margin.
-            others = cluster_scores[cluster_scores["label"] != winner["label"]]
-            if not others.empty:
-                margin = max(0.0, float(winner[rank] - others["raw_vote_fraction"].max()))
-        specificity = float(winner.get("specificity", winner.get("de_overlap", 0.0)))
-        agreement = float(winner.get("agreement", winner.get("crosscheck_agreement", 0.0)))
-        coverage = float(winner.get("coverage", winner.get("positive_coverage", 0.0)))
-        confidence = advisory_confidence(
-            margin=margin,
-            specificity=specificity,
-            agreement=agreement,
-            coverage=coverage,
-        )
-        state = state_by_cluster.get(str(cluster_id), {"cell_state": "normal"})
-        rejected = [
-            f"{row.label} (score={float(row.score):.3f})"
-            for row in ordered.iloc[1:4].itertuples(index=False)
-        ]
-        abstain_reasons = []
-        if voted:
-            confidence = float(winner["vote_fraction"])
-        if voted and confidence < minimum_confidence:
-            abstain_reasons.append("vote share below threshold")
-        if margin < minimum_margin:
-            abstain_reasons.append("evidence margin below threshold")
-        if bool(state.get("identity_must_abstain", False)):
-            abstain_reasons.append(f"terminal parallel state: {state['cell_state']}")
-        label = "Unknown" if abstain_reasons else str(winner["label"])
-        if voted and "vote share below threshold" in abstain_reasons:
-            # Show where the votes went, so a split between related terms is visible.
-            share_column = (
-                "raw_vote_fraction"
-                if "raw_vote_fraction" in cluster_scores
-                else "vote_fraction"
-            )
-            shares = cluster_scores.sort_values(share_column, ascending=False).head(3)
-            top_votes = ", ".join(
-                f"{name} {float(share):.2f}"
-                for name, share in zip(shares["label"], shares[share_column], strict=True)
-                if float(share) > 0
-            )
-            abstain_reasons[0] += f" (top cell votes: {top_votes or 'none'})"
-        rationale = (
-            "; ".join(abstain_reasons)
-            if abstain_reasons
-            else (
-                f"Parent-scoped winner {label}; margin={margin:.3f}, specificity={specificity:.3f}, "
-                f"agreement={agreement:.3f}, coverage={coverage:.3f}."
-            )
-        )
-        rows.append(
-            {
-                "level": level,
-                "parent_scope": parent_scope,
-                "cluster_id": str(cluster_id),
-                "label": label,
-                "cell_state": str(state.get("cell_state", "normal")),
-                "cl_id": "" if label == "Unknown" else cl_lookup.get(label, ""),
-                "confidence": confidence,
-                "margin": margin,
-                "specificity": specificity,
-                "agreement": agreement,
-                "coverage": coverage,
-                "rationale": rationale,
-                "rejected_alternatives": " | ".join(rejected) or "none measured",
-                "reviewer": "",
-            }
-        )
-    return pd.DataFrame(rows, columns=LABEL_COLUMNS)
 
 
 def scaffold_labels_table(
@@ -401,56 +187,6 @@ def scaffold_labels_table(
     frame = frame.sort_values(keys, kind="stable").reset_index(drop=True)
     atomic_replace(destination, frame.to_csv(sep="\t", index=False).encode())
     return frame
-
-
-def recursive_parent_scoped_assignment(
-    *,
-    vocabulary: pd.DataFrame,
-    score_tables: dict[tuple[str, str], pd.DataFrame],
-    state_tables: dict[tuple[str, str], dict[str, dict[str, Any]]] | None = None,
-    minimum_confidence: float = 0.55,
-    minimum_margin: float = 0.1,
-) -> dict[tuple[str, str], pd.DataFrame]:
-    """Execute an arbitrary-depth hierarchy from independently checkpointable scopes."""
-
-    validate_parent_vocabulary(vocabulary)
-    outputs: dict[tuple[str, str], pd.DataFrame] = {}
-    state_tables = state_tables or {}
-    pending: list[tuple[str, str]] = [("L1", "ROOT")]
-    visited: set[tuple[str, str]] = set()
-    while pending:
-        scope = pending.pop(0)
-        if scope in visited:
-            continue
-        visited.add(scope)
-        if scope not in score_tables:
-            # A parent without an executable score table is a successful retained leaf,
-            # not permission to score it against some other parent's candidates.
-            continue
-        level, parent = scope
-        assigned = assign_parent_scoped_level(
-            score_tables[scope],
-            vocabulary,
-            level=level,
-            parent_scope=parent,
-            minimum_confidence=minimum_confidence,
-            minimum_margin=minimum_margin,
-            state_by_cluster=state_tables.get(scope),
-        )
-        outputs[scope] = assigned
-        try:
-            level_number = int(level.removeprefix("L"))
-        except ValueError as exc:
-            raise ContractError(f"hierarchy level must use L<number>: {level}") from exc
-        next_level = f"L{level_number + 1}"
-        available_parents = set(
-            vocabulary.loc[
-                vocabulary["level"].astype(str).eq(next_level), "parent_scope"
-            ].astype(str)
-        )
-        for label in sorted(set(assigned["label"]).intersection(available_parents)):
-            pending.append((next_level, label))
-    return outputs
 
 
 def validate_hierarchy_nesting(
@@ -699,12 +435,8 @@ def profile_refined_clusters(config_path: str | Path) -> dict[str, Any]:
 __all__ = [
     "LABEL_COLUMNS",
     "advisory_confidence",
-    "assign_parent_scoped_level",
-    "classify_parallel_state",
     "labels_from_existing_proposals",
-    "profile_ambiguity",
     "profile_refined_clusters",
-    "recursive_parent_scoped_assignment",
     "scaffold_labels_table",
     "validate_hierarchy_nesting",
     "identity_vocabulary",

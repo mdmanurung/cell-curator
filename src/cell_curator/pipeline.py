@@ -14,12 +14,10 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from . import __version__
 from .audit_parents import build_audit
 from .config import CellCuratorConfig, load_config
 from .contracts import (
     ContractError,
-    require_safe_path_component,
     safe_path_component,
     sha256,
 )
@@ -335,28 +333,6 @@ def _normalize_score_table(
     return frame.sort_values(["cluster_id", "label"], kind="stable").reset_index(drop=True)
 
 
-def _normalize_state_table(
-    value: Mapping[str, Mapping[str, Any]] | str | Path,
-    *,
-    level: str,
-    parent: str,
-) -> dict[str, dict[str, Any]]:
-    if isinstance(value, (str, Path)):
-        source = Path(value)
-        if not source.is_file():
-            raise ContractError(f"hierarchy state table does not exist: {source}")
-        loaded = json.loads(source.read_text())
-    else:
-        loaded = dict(value)
-    if not isinstance(loaded, dict) or any(
-        not isinstance(item, dict) for item in loaded.values()
-    ):
-        raise ContractError(
-            f"hierarchy state table for {level}::{parent} must map clusters to objects"
-        )
-    return {str(cluster): dict(state) for cluster, state in sorted(loaded.items())}
-
-
 def _valid_scope_checkpoint(
     path: Path,
     *,
@@ -391,19 +367,51 @@ def _valid_scope_checkpoint(
     )
 
 
+def _normalize_decisions(
+    table: pd.DataFrame,
+    scores: pd.DataFrame,
+    vocabulary: pd.DataFrame,
+    *,
+    level: str,
+    parent: str,
+) -> pd.DataFrame:
+    """A decision table names every cluster of its score table once, in this scope only.
+
+    A label must be ``Unknown`` or an identity label the vocabulary lists for this scope, so a
+    cell state program can never be assigned as a cell type.
+    """
+
+    from .hierarchy import LABEL_COLUMNS
+
+    missing = set(LABEL_COLUMNS).difference(table.columns)
+    if missing:
+        raise ContractError(f"decision table for {level}::{parent} misses columns: {sorted(missing)}")
+    decided = table.loc[:, list(LABEL_COLUMNS)].astype(str).reset_index(drop=True)
+    if set(decided["level"]) != {level} or set(decided["parent_scope"]) != {parent}:
+        raise ContractError(f"decision table for {level}::{parent} names another level or parent")
+    if decided["cluster_id"].duplicated().any():
+        raise ContractError(f"decision table for {level}::{parent} repeats a cluster")
+    if set(decided["cluster_id"]) != set(scores["cluster_id"].astype(str)):
+        raise ContractError(f"decision table for {level}::{parent} and its scores name different clusters")
+    in_scope = vocabulary["level"].astype(str).eq(level) & vocabulary["parent_scope"].astype(str).eq(parent)
+    outside = sorted(set(decided["label"]) - {"Unknown", *vocabulary.loc[in_scope, "label"].astype(str)})
+    if outside:
+        raise ContractError(f"decision labels for {level}::{parent} are outside its identity vocabulary: {outside[:5]}")
+    return decided
+
+
 def execute_recursive_hierarchy(
     config_path: str | Path,
     *,
     score_tables: Mapping[tuple[str, str], pd.DataFrame | str | Path],
+    decisions: Mapping[tuple[str, str], pd.DataFrame],
     vocabulary_path: str | Path | None = None,
-    state_tables: Mapping[tuple[str, str], Mapping[str, Mapping[str, Any]] | str | Path]
-    | None = None,
-    minimum_confidence: float | None = None,
-    minimum_margin: float | None = None,
 ) -> dict[str, Any]:
     """Execute and resume arbitrary-depth, strictly parent-scoped annotation.
 
     Score tables are addressed only by their exact ``(level, parent_scope)`` key.
+    ``decisions`` holds the label of every cluster in the same keys; this function
+    chooses no label, so a decision table is the only source of a label.
     Each executable scope gets independent input/label shards and a content-hashed
     checkpoint.  A reachable child without a score table is retained as its
     already-supported parent leaf rather than borrowing evidence from a sibling.
@@ -418,7 +426,6 @@ def execute_recursive_hierarchy(
     )
     from .hierarchy import (
         LABEL_COLUMNS,
-        assign_parent_scoped_level,
         scaffold_labels_table,
         validate_hierarchy_nesting,
     )
@@ -441,6 +448,10 @@ def execute_recursive_hierarchy(
             f"recursive hierarchy vocabulary does not exist: {selected_vocabulary}"
         )
     vocabulary = pd.read_csv(selected_vocabulary, sep="\t", keep_default_na=False)
+    # Only the configured levels can be assigned, so only their rows need an approved assumption.
+    vocabulary = vocabulary[
+        vocabulary["level"].astype(str).isin(config.guidance.hierarchy_levels)
+    ].reset_index(drop=True)
     vocabulary = _identity_vocabulary_for_execution(
         vocabulary, root=root, operator_supplied=vocabulary_path is not None
     )
@@ -464,12 +475,12 @@ def execute_recursive_hierarchy(
     root_scope = (levels[0], "ROOT")
     if root_scope not in normalized_scores:
         raise ContractError(f"root hierarchy score table is required: {root_scope}")
-    normalized_states: dict[tuple[str, str], Mapping[str, Mapping[str, Any]] | str | Path] = {}
-    for raw_scope, value in (state_tables or {}).items():
-        scope = (str(raw_scope[0]), str(raw_scope[1]))
-        if scope not in normalized_scores:
-            raise ContractError(f"state table has no matching score scope: {scope}")
-        normalized_states[scope] = value
+    normalized_decisions = {(str(a), str(b)): value for (a, b), value in decisions.items()}
+    if set(normalized_decisions) != set(normalized_scores):
+        raise ContractError(
+            "decision tables and score tables must cover the same scopes: "
+            f"{sorted(set(normalized_decisions) ^ set(normalized_scores))}"
+        )
 
     pending: list[tuple[str, str]] = [root_scope]
     origins: dict[tuple[str, str], list[dict[str, str]]] = {}
@@ -537,39 +548,16 @@ def execute_recursive_hierarchy(
             "scores": str(score_path),
             "vocabulary": str(selected_vocabulary),
         }
-        state_by_cluster: dict[str, dict[str, Any]] = {}
-        if scope in normalized_states:
-            state_by_cluster = _normalize_state_table(
-                normalized_states[scope], level=level, parent=parent
-            )
-            state_path = root / "hierarchy" / "states" / level / f"{safe_parent}.json"
-            state_payload = (
-                json.dumps(state_by_cluster, indent=2, sort_keys=True, default=str) + "\n"
-            ).encode()
-            _replace_if_changed(state_path, state_payload)
-            artifacts["states"] = str(state_path)
-        effective_confidence = (
-            config.evidence.min_confidence if minimum_confidence is None else minimum_confidence
+        decided = _normalize_decisions(
+            normalized_decisions[scope], scores, vocabulary, level=level, parent=parent
         )
-        effective_margin = config.evidence.min_margin if minimum_margin is None else minimum_margin
-        # Thresholds come from the manifest or arguments, not the config file, so they
-        # are hashed here as an artifact: changing them invalidates the resume.
-        params_path = root / "hierarchy" / "params" / level / f"{safe_parent}.json"
+        # The decisions are hashed here as an artifact: changing a label invalidates the resume.
+        decision_path = root / "hierarchy" / "decisions" / level / f"{safe_parent}.tsv"
         _replace_if_changed(
-            params_path,
-            (
-                json.dumps(
-                    {
-                        "minimum_confidence": effective_confidence,
-                        "minimum_margin": effective_margin,
-                        "package_version": __version__,
-                    },
-                    sort_keys=True,
-                )
-                + "\n"
-            ).encode(),
+            decision_path,
+            decided.to_csv(sep="\t", index=False, lineterminator="\n").encode(),
         )
-        artifacts["params"] = str(params_path)
+        artifacts["decisions"] = str(decision_path)
         labels_path = root / "labels" / "scopes" / level / f"{safe_parent}.tsv"
         artifacts["labels"] = str(labels_path)
         checkpoint_path = root / "checkpoints" / level / f"{safe_parent}.json"
@@ -593,15 +581,7 @@ def execute_recursive_hierarchy(
                 raise ContractError(f"resumed labels shard violates its scope: {labels_path}")
             resumed.append(identity)
         else:
-            assigned = assign_parent_scoped_level(
-                scores,
-                vocabulary,
-                level=level,
-                parent_scope=parent,
-                minimum_confidence=effective_confidence,
-                minimum_margin=effective_margin,
-                state_by_cluster=state_by_cluster,
-            )
+            assigned = decided
             _replace_if_changed(
                 labels_path,
                 assigned.to_csv(
@@ -757,104 +737,6 @@ def execute_recursive_hierarchy(
     return manifest
 
 
-def execute_recursive_hierarchy_manifest(
-    config_path: str | Path,
-    manifest_path: str | Path,
-) -> dict[str, Any]:
-    """Execute a recursive hierarchy from a strict, portable JSON manifest.
-
-    Relative artifact paths are resolved from the manifest directory.  The
-    manifest is only an invocation contract; the executor copies and hashes the
-    actual score, state, vocabulary, label, and checkpoint artifacts in the run
-    directory.
-    """
-
-    source = Path(manifest_path)
-    if not source.is_file():
-        raise ContractError(f"recursive hierarchy manifest does not exist: {source}")
-    try:
-        value = json.loads(source.read_text())
-    except json.JSONDecodeError as exc:
-        raise ContractError(f"recursive hierarchy manifest is invalid JSON: {source}") from exc
-    if not isinstance(value, dict):
-        raise ContractError("recursive hierarchy manifest must be a JSON object")
-    allowed = {
-        "schema_version",
-        "vocabulary_path",
-        "score_tables",
-        "minimum_confidence",
-        "minimum_margin",
-    }
-    extra = set(value).difference(allowed)
-    if extra:
-        raise ContractError(
-            f"recursive hierarchy manifest has unsupported fields: {sorted(extra)}"
-        )
-    if value.get("schema_version") != 3:
-        raise ContractError("recursive hierarchy manifest requires schema_version 3")
-    entries = value.get("score_tables")
-    if not isinstance(entries, list) or not entries:
-        raise ContractError("recursive hierarchy manifest requires non-empty score_tables")
-
-    def artifact_path(raw: object, *, field: str) -> Path:
-        if not isinstance(raw, str) or not raw.strip():
-            raise ContractError(f"recursive hierarchy manifest requires nonblank {field}")
-        path = Path(raw)
-        return path if path.is_absolute() else source.parent / path
-
-    score_tables: dict[tuple[str, str], Path] = {}
-    state_tables: dict[tuple[str, str], Path] = {}
-    for index, entry in enumerate(entries):
-        if not isinstance(entry, dict):
-            raise ContractError(f"score_tables[{index}] must be a JSON object")
-        entry_allowed = {"level", "parent_scope", "path", "state_path"}
-        entry_extra = set(entry).difference(entry_allowed)
-        if entry_extra:
-            raise ContractError(
-                f"score_tables[{index}] has unsupported fields: {sorted(entry_extra)}"
-            )
-        level = entry.get("level")
-        parent = entry.get("parent_scope")
-        if not isinstance(level, str) or not level.strip():
-            raise ContractError(f"score_tables[{index}] requires nonblank level")
-        if not isinstance(parent, str) or not parent.strip():
-            raise ContractError(f"score_tables[{index}] requires nonblank parent_scope")
-        scope = (level, parent)
-        if scope in score_tables:
-            raise ContractError(f"recursive hierarchy manifest duplicates scope: {scope}")
-        score_tables[scope] = artifact_path(entry.get("path"), field="score table path")
-        if "state_path" in entry:
-            state_tables[scope] = artifact_path(
-                entry.get("state_path"), field="state table path"
-            )
-
-    confidence = value.get("minimum_confidence")
-    margin = value.get("minimum_margin")
-    if confidence is not None and (
-        isinstance(confidence, bool)
-        or not isinstance(confidence, (int, float))
-        or not 0 <= float(confidence) <= 1
-    ):
-        raise ContractError("minimum_confidence must be a number between 0 and 1")
-    if margin is not None and (
-        isinstance(margin, bool) or not isinstance(margin, (int, float)) or float(margin) < 0
-    ):
-        raise ContractError("minimum_margin must be a nonnegative number")
-    vocabulary = value.get("vocabulary_path")
-    return execute_recursive_hierarchy(
-        config_path,
-        score_tables=score_tables,
-        vocabulary_path=(
-            artifact_path(vocabulary, field="vocabulary_path")
-            if vocabulary is not None
-            else None
-        ),
-        state_tables=state_tables,
-        minimum_confidence=float(confidence) if confidence is not None else None,
-        minimum_margin=float(margin) if margin is not None else None,
-    )
-
-
 def initialize(config_path: Path) -> dict[str, Any]:
     """Execute Stage 1 and persist local knowledge without opening the label gate."""
 
@@ -968,68 +850,6 @@ def refine(config_path: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]
     profile_refined_clusters(config_path)
     _advance(run_root(config), "CANDIDATES_DISCOVERED")
     return result
-
-
-def assign_hierarchy_level(
-    config_path: str | Path,
-    *,
-    scores_path: str | Path,
-    level: str,
-    parent: str,
-    vocabulary_path: str | Path | None = None,
-    state_path: str | Path | None = None,
-    output_path: str | Path | None = None,
-) -> dict[str, Any]:
-    """Assign one parent-scoped hierarchy level and checkpoint the labels table.
-
-    Shared by the CLI and the Python API. The level is validated as a safe path
-    component here rather than at the CLI boundary, because it is interpolated
-    into the output filename — a caller reaching this directly must not be able
-    to skip that check.
-    """
-
-    from .guided import checkpoint_level, require_label_gate
-    from .hierarchy import assign_parent_scoped_level, scaffold_labels_table
-
-    level = require_safe_path_component(level, field="hierarchy level")
-    config = load_config(config_path)
-    root = run_root(config)
-    require_label_gate(config_path, level=level, parent=parent)
-    vocabulary = pd.read_csv(
-        Path(vocabulary_path)
-        if vocabulary_path is not None
-        else root / "plan" / "vocabulary.tsv",
-        sep="\t",
-        keep_default_na=False,
-    )
-    vocabulary = _identity_vocabulary_for_execution(
-        vocabulary, root=root, operator_supplied=vocabulary_path is not None
-    )
-    scores = pd.read_csv(Path(scores_path), sep="\t", keep_default_na=False)
-    state_by_cluster = (
-        json.loads(Path(state_path).read_text()) if state_path is not None else None
-    )
-    assigned = assign_parent_scoped_level(
-        scores,
-        vocabulary,
-        level=level,
-        parent_scope=parent,
-        minimum_confidence=config.evidence.min_confidence,
-        minimum_margin=config.evidence.min_margin,
-        state_by_cluster=state_by_cluster,
-    )
-    output = (
-        Path(output_path) if output_path is not None else root / "labels" / f"{level}.tsv"
-    )
-    labels = scaffold_labels_table(output, assigned)
-    checkpoint_level(
-        config_path,
-        level=level,
-        parent=parent,
-        artifacts={"labels": str(output), "scores": str(Path(scores_path))},
-        next_action="review and reconcile this hierarchy level",
-    )
-    return {"assigned": assigned, "labels": labels, "output": output}
 
 
 def evidence_lane(
@@ -1506,10 +1326,8 @@ def run_annotation(config_path: str | Path) -> Path:
         return execute_annotation_workflow(path)
     if len(config.guidance.hierarchy_levels) != 1:
         raise ContractError(
-            "the standard pipeline supports exactly one hierarchy level; call "
-            "execute_recursive_hierarchy_manifest(config_path, manifest_path) "
-            "(CLI: `cell-curator run execute --score-manifest MANIFEST.json`) "
-            "for recursive multi-level annotation"
+            "the standard pipeline supports exactly one hierarchy level; deeper levels "
+            "need a hierarchical consensus call, which cell-curator does not support yet"
         )
     LOG.info(
         "run_annotation starting: run_id=%s mode=%s",

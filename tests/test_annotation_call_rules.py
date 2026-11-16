@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from cell_curator.annotation import _classifier_counts, _marker_family, _signature_support
 from cell_curator.evidence import benjamini_hochberg
-from cell_curator.hierarchy import assign_parent_scoped_level
 
 
 def _frame(role: str, pvalues: list[float], effects: list[float]) -> pd.DataFrame:
@@ -39,19 +37,6 @@ def test_top_genes_are_ranked_by_effect_after_the_p_filter() -> None:
     family = _marker_family([frame], adjusted_pvalue_max=0.05, top_n=3)
     assert family["feature"].tolist() == ["parent_remainder_g3", "parent_remainder_g4", "parent_remainder_g1"]
     assert family["rank"].tolist() == [1, 2, 3]
-
-
-def test_margin_keeps_the_failed_runner_up_vote() -> None:
-    vocabulary = pd.DataFrame(
-        {"label": ["A", "B", "ROOT"], "level": ["L1", "L1", "L0"], "parent_scope": ["ROOT", "ROOT", ""],
-         "axis": "cell_type", "cl_id": ["", "", ""]}
-    )
-    scores = pd.DataFrame(
-        {"cluster_id": ["c1", "c1"], "label": ["A", "B"], "score": [1.0, 0.9],
-         "vote_fraction": [0.6, 0.0], "raw_vote_fraction": [0.6, 0.55]}
-    )
-    labels = assign_parent_scoped_level(scores, vocabulary[vocabulary["label"] != "ROOT"], level="L1", parent_scope="ROOT")
-    assert labels.iloc[0]["margin"] == pytest.approx(0.05)
 
 
 def test_coarser_classifier_label_abstains_and_unmapped_label_is_dropped() -> None:

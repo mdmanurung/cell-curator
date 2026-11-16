@@ -546,20 +546,12 @@ class CellCurator:
             raise ContractError(
                 "annotate() runs the standard single-level pipeline, but this run "
                 f"declares {len(self.hierarchy_levels)} hierarchy levels "
-                f"({', '.join(self.hierarchy_levels)}). Use "
-                "execute_hierarchy_manifest(manifest_path) for recursive "
-                "multi-level annotation."
+                f"({', '.join(self.hierarchy_levels)}). Deeper levels need a "
+                "hierarchical consensus call, which cell-curator does not support yet."
             )
         from .api import annotate
 
         return annotate(self.config_path)
-
-    def execute_hierarchy_manifest(self, manifest_path: str | Path) -> dict[str, Any]:
-        """Execute arbitrary-depth parent-scoped annotation from a score manifest."""
-
-        from .api import execute_recursive_hierarchy_manifest
-
-        return execute_recursive_hierarchy_manifest(self.config_path, manifest_path)
 
     def run_evidence_lane(self, *, assay: str, representation: str) -> Path:
         """Execute one immutable assay/representation evidence lane."""
@@ -576,30 +568,6 @@ class CellCurator:
         from .api import profile_refined_clusters
 
         return profile_refined_clusters(self.config_path)
-
-    def assign_labels(
-        self,
-        *,
-        scores_path: str | Path,
-        level: str,
-        parent: str,
-        vocabulary_path: str | Path | None = None,
-        state_path: str | Path | None = None,
-        output_path: str | Path | None = None,
-    ) -> dict[str, Any]:
-        """Assign one parent-scoped hierarchy level and checkpoint the labels."""
-
-        from .api import assign_hierarchy_level
-
-        return assign_hierarchy_level(
-            self.config_path,
-            scores_path=scores_path,
-            level=level,
-            parent=parent,
-            vocabulary_path=vocabulary_path,
-            state_path=state_path,
-            output_path=output_path,
-        )
 
     # -- context, assumptions, and capability -----------------------------------
 

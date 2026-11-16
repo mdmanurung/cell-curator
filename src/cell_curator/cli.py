@@ -164,18 +164,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     annotation = commands.add_parser("annotation", help="run a corpus stage scheduled by annotation.smk")
     annotation_sub = annotation.add_subparsers(dest="action", required=True)
-    for action in ("classifier", "collect-level", "resolve-level", "import-consensus", "finalize"):
+    for action in ("classifier", "collect-level", "import-consensus", "finalize"):
         item = annotation_sub.add_parser(action)
         _config_argument(item)
         if action == "classifier":
             item.add_argument("--name", required=True)
-        if action in {"collect-level", "resolve-level", "import-consensus"}:
+        if action in {"collect-level", "import-consensus"}:
             item.add_argument("--level", required=True)
-        if action == "import-consensus":
-            item.add_argument(
-                "--consensus", required=True, type=Path,
-                help="output directory of an annotation-consensus run",
-            )
 
     ontology_command = commands.add_parser(
         "ontology", help="validate local Cell Ontology names, synonyms, and accessions"
@@ -204,14 +199,9 @@ def build_parser() -> argparse.ArgumentParser:
         _config_argument(action_parser)
     execute = run_sub.add_parser(
         "execute",
-        help="execute the standard pipeline or a recursive score manifest",
+        help="execute the standard pipeline",
     )
     _config_argument(execute)
-    execute.add_argument(
-        "--score-manifest",
-        type=Path,
-        help="strict JSON manifest for arbitrary-depth parent-scoped execution",
-    )
     confirm = run_sub.add_parser("confirm-context", help="confirm or correct scene context")
     _config_argument(confirm)
     confirm.add_argument("--input", required=True, type=Path)
@@ -396,19 +386,9 @@ def build_parser() -> argparse.ArgumentParser:
     confidence.add_argument("--coverage", required=True, type=float)
 
     hierarchy = commands.add_parser(
-        "hierarchy", help="assign and validate strict parent-scoped labels"
+        "hierarchy", help="validate strict parent-scoped labels"
     )
     hierarchy_sub = hierarchy.add_subparsers(dest="action", required=True)
-    hierarchy_assign = hierarchy_sub.add_parser(
-        "assign", help="assign one level inside one approved parent scope"
-    )
-    _config_argument(hierarchy_assign)
-    hierarchy_assign.add_argument("--scores", required=True, type=Path)
-    hierarchy_assign.add_argument("--vocabulary", type=Path)
-    hierarchy_assign.add_argument("--level", required=True)
-    hierarchy_assign.add_argument("--parent", required=True)
-    hierarchy_assign.add_argument("--state-json", type=Path)
-    hierarchy_assign.add_argument("--output", type=Path)
     hierarchy_validate = hierarchy_sub.add_parser(
         "validate", help="validate strict nesting and one-cell-one-leaf"
     )
@@ -662,7 +642,6 @@ def dispatch(args: argparse.Namespace) -> Any:
         from .annotation import (
             collect_level,
             finalize_annotation,
-            resolve_level,
             run_classifier,
         )
 
@@ -670,12 +649,10 @@ def dispatch(args: argparse.Namespace) -> Any:
             return run_classifier(args.config, args.name)
         if args.action == "collect-level":
             return collect_level(args.config, args.level)
-        if args.action == "resolve-level":
-            return resolve_level(args.config, args.level)
         if args.action == "import-consensus":
             from .consensus_import import import_consensus_level
 
-            return import_consensus_level(args.config, args.level, args.consensus)
+            return import_consensus_level(args.config, args.level)
         return finalize_annotation(args.config)
     if args.command == "config":
         from .config import configuration_schema, load_config
@@ -785,10 +762,6 @@ def dispatch(args: argparse.Namespace) -> Any:
         if args.action == "plan":
             return construct_plan(args.config)
         if args.action == "execute":
-            if args.score_manifest is not None:
-                from .pipeline import execute_recursive_hierarchy_manifest
-
-                return execute_recursive_hierarchy_manifest(args.config, args.score_manifest)
             output = run_annotation(args.config)
             key = "annotation_manifest" if load_config(args.config).annotation.enabled else "review_packet"
             return {key: str(output)}
@@ -1006,32 +979,13 @@ def dispatch(args: argparse.Namespace) -> Any:
             validate_hierarchy_nesting,
         )
 
-        if args.action == "validate":
-            frames = [
-                pd.read_csv(path, sep="\t", keep_default_na=False) for path in args.labels
-            ]
-            membership = (
-                pd.read_csv(args.cell_membership, sep="\t", keep_default_na=False)
-                if args.cell_membership
-                else None
-            )
-            return validate_hierarchy_nesting(frames, cell_membership=membership)
-        from .api import assign_hierarchy_level
-
-        result = assign_hierarchy_level(
-            args.config,
-            scores_path=args.scores,
-            level=args.level,
-            parent=args.parent,
-            vocabulary_path=args.vocabulary,
-            state_path=args.state_json,
-            output_path=args.output,
+        frames = [pd.read_csv(path, sep="\t", keep_default_na=False) for path in args.labels]
+        membership = (
+            pd.read_csv(args.cell_membership, sep="\t", keep_default_na=False)
+            if args.cell_membership
+            else None
         )
-        return {
-            "status": "complete",
-            "n_labels": len(result["assigned"]),
-            "output": str(result["output"]),
-        }
+        return validate_hierarchy_nesting(frames, cell_membership=membership)
     if args.command == "evidence-card":
         from .api import build_evidence_cards
 

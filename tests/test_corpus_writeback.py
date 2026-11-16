@@ -7,11 +7,13 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+from consensus_fixture import write_consensus_run
 from test_annotation_pipeline import annotation_fixture
 from test_end_to_end import _record_critics
 
-from cell_curator.annotation import collect_level, finalize_annotation, resolve_level
+from cell_curator.annotation import collect_level, finalize_annotation
 from cell_curator.config import load_config
+from cell_curator.consensus_import import import_consensus_level
 from cell_curator.contracts import ContractError, sha256
 from cell_curator.pipeline import validate
 from cell_curator.review import build_critic_packet, build_evidence_cards, build_html_report
@@ -25,9 +27,11 @@ from cell_curator.writeback import (
 
 def _completed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     config_path, root, expected = annotation_fixture(tmp_path, monkeypatch)
-    for level in ("L1", "L2", "L3"):
-        collect_level(config_path, level)
-        resolve_level(config_path, level)
+    collect_level(config_path, "L1")
+    write_consensus_run(
+        config_path, root, {cluster: values[0] for cluster, values in expected.items()}
+    )
+    import_consensus_level(config_path, "L1")
     finalize_annotation(config_path)
     config = load_config(config_path)
     build_evidence_cards(config, root)
@@ -48,7 +52,7 @@ def test_corpus_preview_has_all_identity_and_state_layers_without_writing(tmp_pa
     preview = validate_writeback(config, root, output_path=target)
     assert set(preview["output_columns"]) == {
         "cell_curator_type", "cell_curator_state", "cell_curator_leaf",
-        "cell_curator_L1", "cell_curator_L2", "cell_curator_L3", "cell_curator_L4",
+        "cell_curator_L1", "cell_curator_L4",
     }
     assert preview["critics_reconciled"] is True
     assert preview["n_cells"] == 160
@@ -57,8 +61,8 @@ def test_corpus_preview_has_all_identity_and_state_layers_without_writing(tmp_pa
     cells = pd.read_csv(root / "annotation" / "cell_labels.tsv", sep="\t", keep_default_na=False)
     first = cells[cells["cluster_id"].astype(str).eq("0")].iloc[0]
     observed = diff[diff["barcode"].eq(first["barcode"])].set_index("column")["new_value"]
-    assert [observed[f"cell_curator_L{i}"] for i in (1, 2, 3)] == expected["0"]
-    assert observed["cell_curator_L4"] == expected["0"][-1] + " S+"
+    assert observed["cell_curator_L1"] == expected["0"][0]
+    assert observed["cell_curator_L4"] == expected["0"][0] + " S+"
     assert observed["cell_curator_state"] == "S+"
     assert not target.exists()
     assert not (root / "writeback" / "receipt.json").exists()
@@ -71,7 +75,7 @@ def test_corpus_preview_rejects_changed_sidecar(tmp_path, monkeypatch):
     config, root, _ = _completed(tmp_path, monkeypatch)
     _record_critics(config, root, tmp_path)
     path = root / "annotation" / "cell_labels.tsv"
-    path.write_text(path.read_text().replace("Leaf A00", "Wrong leaf"))
+    path.write_text(path.read_text().replace("Lineage A", "Wrong label"))
     with pytest.raises(ContractError, match="stale annotation artifact"):
         validate_writeback(config, root, output_path=tmp_path / "annotated.h5ad")
 
@@ -80,7 +84,7 @@ def test_corpus_values_must_match_durable_labels_even_with_rehashed_sidecar(tmp_
     config, root, _ = _completed(tmp_path, monkeypatch)
     path = root / "annotation" / "cell_labels.tsv"
     cells = pd.read_csv(path, sep="\t", keep_default_na=False)
-    cells.loc[0, "L3"] = "Wrong leaf"
+    cells.loc[0, "L1"] = "Wrong label"
     cells.to_csv(path, sep="\t", index=False)
     manifest_path = root / "annotation" / "annotation.manifest.json"
     manifest = json.loads(manifest_path.read_text())
@@ -89,5 +93,5 @@ def test_corpus_values_must_match_durable_labels_even_with_rehashed_sidecar(tmp_
     mapping = pd.read_csv(root / "mapping" / "parent_child_mapping.tsv", sep="\t", keep_default_na=False)
     labels, _ = _load_durable_labels(root)
     mapping = _align_mapping(mapping, pd.Index(cells["barcode"].astype(str)))
-    with pytest.raises(ContractError, match="L3 values differ"):
+    with pytest.raises(ContractError, match="L1 values differ"):
         _writeback_values(config, root, mapping, labels, "cell_curator")

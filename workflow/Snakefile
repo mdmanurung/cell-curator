@@ -26,8 +26,8 @@ if DECLARED_CONFIG != config:
 LEVELS = list(config.get("guidance", {}).get("hierarchy_levels", ["L1"]))
 if len(LEVELS) != 1:
     raise WorkflowError(
-        "the standard DAG supports exactly one hierarchy level; use "
-        "`cell-curator run execute --score-manifest` for recursive multi-level execution"
+        "the standard DAG supports exactly one hierarchy level; deeper levels need a "
+        "hierarchical consensus call, which cell-curator does not support yet"
     )
 # Relative paths resolve against the config file's directory, as in the CLI, not
 # against wherever snakemake was started.
