@@ -158,13 +158,7 @@ Census route only in `online` mode. `reference acquire-azimuth` and
 `acquire-scimilarity` are downloads a person runs by name, each one GET for a
 public, checksum-pinned file. `reference acquire-census` queries Census through tiledb, outside the guard.
 
-LLM tie-breaks follow the same rule: `cell-curator llm propose` reaches only what
-`network` allows, so `institution` with a local Ollama or vLLM server keeps every
-payload inside the institution. A host agent that reads `llm packet` output sends
-it to its own model, so that command refuses unless `network` is `online` or
-`evidence.llm.host_agent_local` is set.
-
-**What `network` cannot govern: the agent itself.** In Claude Code or Codex with a cloud model, every file the agent reads goes to that vendor, and the evidence cards, reports, and score tables carry the same numbers as the LLM packet. Nothing leaves the institution only when the harness model is local too (for example OpenCode with Ollama), or when you run the CLI or Python without a cloud agent.
+**What `network` cannot govern: the agent itself.** In Claude Code or Codex with a cloud model, every file the agent reads goes to that vendor, and the evidence cards, reports, and score tables carry per-cluster statistics from your data. Nothing leaves the institution only when the harness model is local too (for example OpenCode with Ollama), or when you run the CLI or Python without a cloud agent.
 
 ## Execute the workflow
 
@@ -182,7 +176,7 @@ uv run cell-curator run execute --config config.yaml
 uv run cell-curator run validate --config config.yaml
 ```
 
-For additional commands, `cell-curator --help` lists all 24 command groups.
+For additional commands, `cell-curator --help` lists all 23 command groups.
 
 For resumable execution, Snakemake manages dependencies and stale artifacts. The
 targets below preserve the evidence, review, and finalization boundaries. Write-back

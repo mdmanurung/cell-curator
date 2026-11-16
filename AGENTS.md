@@ -25,14 +25,14 @@ anything.
    approval token in a terminal. Stop and ask the user to run it. Never pipe the
    token in.
 
-## LLM evidence is evidence, not a verdict
+## Labels come from the consensus run, not from you
 
-An LLM, including you, may only break a near-tie that the measured markers left
-open, and only through `evidence.llm.proposals`. It never overrules a call.
+An `annotation-consensus` run (`skills/annotation-consensus`) chooses every cluster
+label. `cell-curator annotation import-consensus` only checks that run against this
+run's cells, clusters and vocabulary and writes its labels. You never assign, edit or
+overrule a label, and no LLM lane exists in the package.
+
+## The network setting does not cover you
 
 `knowledge.network` decides what the package may send: `offline`, `institution`
-(localhost and allowed hosts), or `online`. Reading `cell-curator llm packet` output
-sends it to your model provider. Do not read it unless the network is `online` or
-the user set `evidence.llm.host_agent_local: true`.
-
-The network setting does not cover you. If your model is not local, everything you read from a run (cards, reports, score tables) leaves the institution. When the user asks for local-only work and your model is remote, say so before reading run outputs.
+(localhost and allowed hosts), or `online`. It does not cover you. If your model is not local, everything you read from a run (cards, reports, score tables) leaves the institution. When the user asks for local-only work and your model is remote, say so before reading run outputs.

@@ -408,7 +408,7 @@ Not built:
 - Truth only in the score step. Truth labels enter no other step, and scoring does not change the consensus outputs.
 - No overwrite. The run refuses an existing output directory without `--force`, and `--force` removes only what a
   directory marked by this pipeline holds. It refuses an `--output` inside a cell-curator run directory.
-- LLM evidence stays evidence. This pipeline uses no LLM. It does not read `cell-curator llm packet` output.
+- This pipeline uses no LLM, and cell-curator has no LLM lane.
 - Outputs hold cluster and cell labels and per-cell barcodes. Treat them as the input data's sensitivity level.
 
 ## 12. Integration

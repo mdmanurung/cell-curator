@@ -38,8 +38,6 @@ CLI_TO_PUBLIC_NAME: dict[tuple[str, ...], str] = {
     ("assumptions", "approve"): "approve_annotation_assumptions",
     ("assumptions", "list"): "list_annotation_assumptions",
     ("benchmark", "evaluate"): "evaluate_benchmark_predictions",
-    ("llm", "packet"): "build_llm_packet",
-    ("llm", "propose"): "propose_llm_tie_breaks",
     ("benchmark", "validate-manifest"): "validate_dataset_manifest",
     ("benchmark", "sweep"): "sweep_benchmark_risk_coverage",
     ("capabilities",): "list_capabilities",

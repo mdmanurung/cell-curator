@@ -1916,9 +1916,6 @@ def consolidate_lanes(
         cluster_ids=cluster_ids,
         ontology=ontology_from_config(config) if backoff_approved else None,
     )
-    from .llm import consume
-
-    decisions = consume(config, run_root, decisions, aggregate)
     decision_frame = pd.DataFrame([decision.model_dump(mode="json") for decision in decisions])
     from .provenance import atomic_publish
 
