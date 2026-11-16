@@ -118,9 +118,7 @@ def test_markers_mapping_is_persisted_as_a_local_provider(tmp_path: Path) -> Non
 
 def test_exactly_one_of_adata_or_path_is_required(tmp_path: Path) -> None:
     with pytest.raises(ContractError, match="exactly one of adata= or path="):
-        CellCurator(
-            organism="human", tissue="t", run_id="r", output_root=str(tmp_path / "a")
-        )
+        CellCurator(organism="human", tissue="t", run_id="r", output_root=str(tmp_path / "a"))
     with pytest.raises(ContractError, match="exactly one of adata= or path="):
         CellCurator(
             adata=_adata(),
@@ -159,19 +157,6 @@ def test_generated_config_is_plain_yaml_a_reviewer_can_read(tmp_path: Path) -> N
     # Gates are preserved, not silently disabled by the convenience layer.
     assert value["review"]["require_explicit_human_approval"] is True
     assert value["knowledge"]["require_local_grounding_for_labels"] is True
-
-
-def test_annotate_reaches_a_frozen_review_packet(tmp_path: Path) -> None:
-    """The object must be able to finish a run, not just start one.
-
-    The granular methods stop at decide_subclusters(); before annotate() existed
-    the only way to a review packet was to drop down to the function API.
-    """
-
-    curator = _unattended(tmp_path, mode="annotation")
-    packet = curator.annotate()
-    assert packet.is_dir()
-    assert curator.validate_run()["status"] == "complete"
 
 
 def test_annotate_refuses_a_multi_level_run_with_a_useful_message(tmp_path: Path) -> None:

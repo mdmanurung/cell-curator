@@ -14,30 +14,16 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from .audit_parents import build_audit
 from .config import CellCuratorConfig, load_config
 from .contracts import (
     ContractError,
     safe_path_component,
     sha256,
 )
-from .decisions import (
-    build_comparator_manifest,
-    build_mapping,
-    decide_parents_from_artifacts,
-    derive_candidate_evidence,
-)
-from .evidence import consolidate_lanes, lane_key, run_candidate_lane, run_lane
 from .knowledge import collect_programs, programs_digest
 from .models import RunState
 from .ontology import ontology_from_config, validate_program_ontology
-from .provenance import atomic_publish, atomic_replace, publish_json, replace_json
-from .refinement import discover_refinement_candidates
-from .review import (
-    build_critic_packet,
-    build_evidence_cards,
-    build_html_report,
-)
+from .provenance import atomic_replace, publish_json, replace_json
 
 LOG = logging.getLogger(__name__)
 
@@ -789,286 +775,6 @@ def initialize(config_path: Path) -> dict[str, Any]:
     return manifest
 
 
-def audit(config_path: Path) -> pd.DataFrame:
-    config = load_config(config_path)
-    root = run_root(config)
-    cells = pd.read_csv(root / "prepared" / "cells.tsv", sep="\t", keep_default_na=False)
-    frame = build_audit(config.model_dump(mode="json"), cells)
-    path = root / "adaptive_parent_audit.tsv"
-    atomic_publish(path, frame.to_csv(sep="\t", index=False, lineterminator="\n").encode())
-    technical_columns = [
-        column
-        for column in frame.columns
-        if column
-        in {
-            "schema_version",
-            "scope",
-            "parent_id",
-            "parent_uid",
-            "n_cells",
-            "n_donors",
-            "n_captures",
-            "max_donor_fraction",
-            "max_capture_fraction",
-            "max_sex_fraction",
-            "donor_dominated",
-            "capture_dominated",
-            "qc_outlier",
-        }
-        or column.startswith("median_technical__")
-    ]
-    doublet_columns = [
-        "schema_version",
-        "scope",
-        "parent_id",
-        "parent_uid",
-        "n_cells",
-        "doublet_fraction",
-        "doublet_enriched",
-        "incompatible_program_fraction",
-        "incompatible_program_enriched",
-    ]
-    adaptive_dir = root / "adaptive"
-    atomic_publish(
-        adaptive_dir / "technical_summary.tsv",
-        frame[technical_columns].to_csv(sep="\t", index=False, lineterminator="\n").encode(),
-    )
-    atomic_publish(
-        adaptive_dir / "doublet_summary.tsv",
-        frame[doublet_columns].to_csv(sep="\t", index=False, lineterminator="\n").encode(),
-    )
-    _advance(root, "PARENTS_AUDITED")
-    return frame
-
-
-def refine(config_path: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    config = load_config(config_path)
-    result = discover_refinement_candidates(config=config, run_root=run_root(config))
-    build_comparator_manifest(config=config, run_root=run_root(config))
-    from .hierarchy import profile_refined_clusters
-
-    profile_refined_clusters(config_path)
-    _advance(run_root(config), "CANDIDATES_DISCOVERED")
-    return result
-
-
-def evidence_lane(
-    config_path: Path,
-    *,
-    assay: str,
-    representation: str,
-) -> Path:
-    config = load_config(config_path)
-    programs = _programs(config)
-    result = run_lane(
-        config=config,
-        config_path=config_path,
-        run_root=run_root(config),
-        assay_id=assay,
-        representation_name=representation,
-        programs=programs,
-    )
-    return result.receipt_path
-
-
-def candidate_evidence_lane(config_path: Path, *, comparison_lane_id: str) -> Path:
-    config = load_config(config_path)
-    result = run_candidate_lane(
-        config=config,
-        config_path=config_path,
-        run_root=run_root(config),
-        comparison_lane_id=comparison_lane_id,
-        programs=_programs(config),
-    )
-    return result.receipt_path
-
-
-def evidence_all(config_path: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
-    config = load_config(config_path)
-    root = run_root(config)
-    receipts = []
-    for lane in config.evidence.lanes:
-        receipt = evidence_lane(
-            config_path,
-            assay=lane.assay,
-            representation=lane.representation,
-        )
-        receipts.append(
-            {
-                "lane_key": lane_key(lane.assay, lane.representation, lane.lane_key),
-                "path": str(receipt),
-                "sha256": sha256(receipt),
-            }
-        )
-    publish_json(
-        root / "evidence" / "receipts.validated.json",
-        {
-            "schema_version": 3,
-            "artifact_kind": "cell_curator_validated_backend_receipts",
-            "run_id": config.run.run_id,
-            "status": "complete",
-            "n_applicable_lanes": len(receipts),
-            "zero_lane_run": len(receipts) == 0,
-            "receipts": receipts,
-            "all_gpu_fallback_flags_false": True,
-        },
-    )
-    from .guided import require_assumption_gate
-
-    level = config.guidance.hierarchy_levels[0]
-    require_assumption_gate(config_path, level=level, parent="ROOT")
-    result = consolidate_lanes(config=config, run_root=root)
-    from .hierarchy import labels_from_existing_proposals, scaffold_labels_table
-
-    labels = labels_from_existing_proposals(result[1], level=level, parent_scope="ROOT")
-    scaffold_labels_table(root / "labels" / f"{level}.tsv", labels)
-    _advance(root, "EVIDENCE_COMPLETE")
-    return result
-
-
-def decide(config_path: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
-    config = load_config(config_path)
-    root = run_root(config)
-    from .guided import require_assumption_gate
-
-    require_assumption_gate(
-        config_path, level=config.guidance.hierarchy_levels[0], parent="ROOT"
-    )
-    comparator_manifest = pd.read_csv(
-        root / "comparators" / "comparator_manifest.tsv", sep="\t", keep_default_na=False
-    )
-    for comparison_lane_id in comparator_manifest["lane_id"].astype(str):
-        candidate_evidence_lane(config_path, comparison_lane_id=comparison_lane_id)
-    children = derive_candidate_evidence(
-        config=config,
-        run_root=root,
-        programs=_programs(config),
-    )
-    parents = decide_parents_from_artifacts(config=config, run_root=root)
-    _advance(root, "DECISIONS_PROPOSED")
-    return children, parents
-
-
-def map_cells(config_path: Path) -> pd.DataFrame:
-    config = load_config(config_path)
-    root = run_root(config)
-    from .guided import require_assumption_gate
-
-    require_assumption_gate(
-        config_path, level=config.guidance.hierarchy_levels[0], parent="ROOT"
-    )
-    mapping = build_mapping(config=config, run_root=root)
-    _label_parent_outcomes(root, level=config.guidance.hierarchy_levels[0])
-    _advance(root, "MAPPING_VALIDATED")
-    return mapping
-
-
-def _label_parent_outcomes(root: Path, *, level: str) -> None:
-    """Carry parent outcomes and accepted children into the durable labels tables.
-
-    Write-back, the report, and the benchmark export all resolve cells through
-    labels/*.tsv. Without this, an accepted split changed only the leaf column and a
-    DOUBLET/MIXED parent still wrote its parent label for every cell.
-    """
-
-    from .hierarchy import LABEL_COLUMNS, scaffold_labels_table
-    from .models import ParentOutcome
-
-    level_path = root / "labels" / f"{level}.tsv"
-    labels = pd.read_csv(level_path, sep="\t", keep_default_na=False)
-    decisions = pd.read_csv(
-        root / "decisions" / "parent_decision_summary.tsv", sep="\t", keep_default_na=False
-    )
-    children = pd.read_csv(
-        root / "decisions" / "child_evidence_summary.tsv", sep="\t", keep_default_na=False
-    )
-    outcome = dict(
-        zip(
-            decisions["parent_id"].astype(str),
-            decisions["recommended_outcome"].astype(str),
-            strict=True,
-        )
-    )
-    mixed = labels["cluster_id"].astype(str).map(outcome).eq(ParentOutcome.DOUBLET_MIXED.value)
-    if mixed.any():
-        labels.loc[mixed, ["label", "cell_state", "cl_id"]] = ["Unknown", "mixed_or_doublet", ""]
-        note = "DOUBLET/MIXED parent outcome; identity abstained. "
-        unnoted = mixed & ~labels["rationale"].astype(str).str.startswith(note)
-        labels.loc[unnoted, "rationale"] = note + labels.loc[unnoted, "rationale"]
-        scaffold_labels_table(level_path, labels)
-    parent_label = dict(
-        zip(labels["cluster_id"].astype(str), labels["label"].astype(str), strict=True)
-    )
-    child_level = f"L{int(level[1:]) + 1}" if level[1:].isdigit() else f"{level}.children"
-    by_uid = children.set_index(children["candidate_child_uid"].astype(str)) if len(children) else None
-    rows = []
-    for decision in decisions.to_dict("records"):
-        parent = str(decision["parent_id"])
-        accepted = [item for item in str(decision["accepted_child_ids_recommended"]).split(";") if item]
-        if by_uid is None:
-            continue
-        for uid in accepted:
-            child = by_uid.loc[uid]
-            rows.append(
-                {
-                    "level": child_level,
-                    # An abstained parent is often a genuine mix that refinement resolves.
-                    "parent_scope": parent_label.get(parent, "Unknown"),
-                    "cluster_id": uid,
-                    "label": str(child["cell_type"]),
-                    "cell_state": str(child.get("cell_state", "not_assessed")),
-                    "cl_id": str(child.get("cl_id", "")),
-                    "confidence": float(child.get("separation_score", 0.0)),
-                    "margin": 0.0,
-                    "specificity": 0.0,
-                    "agreement": 0.0,
-                    "coverage": 0.0,
-                    "rationale": "accepted child: passed the two-comparator, modality, "
-                    "stability, and technical gates",
-                    "rejected_alternatives": "none measured",
-                    "reviewer": "",
-                }
-            )
-    child_path = root / "labels" / f"{child_level}.tsv"
-    if rows:
-        scaffold_labels_table(
-            child_path, pd.DataFrame(rows, columns=LABEL_COLUMNS), retain_unmentioned=False
-        )
-    else:
-        child_path.unlink(missing_ok=True)
-
-
-def review(config_path: Path, *, strict: bool = True) -> Path:
-    config = load_config(config_path)
-    root = run_root(config)
-    from .guided import checkpoint_level, require_assumption_gate
-
-    level = config.guidance.hierarchy_levels[0]
-    require_assumption_gate(config_path, level=level, parent="ROOT")
-    build_evidence_cards(config, root)
-    build_critic_packet(config, root)
-    level_report = build_html_report(config, root, strict=strict, level=level)
-    report = build_html_report(config, root, strict=strict)
-    _advance(root, "REVIEW_PACKET_READY")
-    checkpoint_level(
-        config_path,
-        level=level,
-        parent="ROOT",
-        artifacts={
-            "labels": str(root / "labels" / f"{level}.tsv"),
-            "level_report": str(level_report),
-            "full_report": str(report),
-            "critic_packet": str(root / "review" / "critic_packet.json"),
-        },
-        next_action=(
-            "pause for level approval before descending"
-            if config.guidance.interactive and config.guidance.pause_after_each_level
-            else "continue to the next planned hierarchy scope or final validation"
-        ),
-    )
-    return report
-
-
 def validate(config_path: Path) -> dict[str, Any]:
     config = load_config(config_path)
     root = run_root(config)
@@ -1314,55 +1020,24 @@ def build_review_packet(config_path: Path) -> Path:
 
 
 def run_annotation(config_path: str | Path) -> Path:
-    """Execute all computational phases and return the immutable review packet."""
+    """Run the corpus annotation workflow and return its annotation manifest.
+
+    Only ``annotation.enabled: true`` runs are supported: cell-curator chooses no label itself,
+    so a run without the corpus workflow and an annotation-consensus run has nothing to execute.
+    """
 
     path = Path(config_path)
-    from .guided import construct_plan, load_state, require_assumption_gate
-
     config = load_config(path)
-    if config.annotation.enabled:
-        from .annotation import execute_annotation_workflow
-
-        return execute_annotation_workflow(path)
+    if not config.annotation.enabled:
+        raise ContractError(
+            "the standard pipeline was removed; set annotation.enabled: true and import the labels "
+            "of an annotation-consensus run (cell-curator annotation import-consensus)"
+        )
     if len(config.guidance.hierarchy_levels) != 1:
         raise ContractError(
             "the standard pipeline supports exactly one hierarchy level; deeper levels "
             "need a hierarchical consensus call, which cell-curator does not support yet"
         )
-    LOG.info(
-        "run_annotation starting: run_id=%s mode=%s",
-        config.run.run_id,
-        config.run.mode.value,
-    )
-    existing_packet = run_root(config) / "review_packet" / "review_packet.manifest.json"
-    if existing_packet.is_file():
-        LOG.info("run_annotation: review packet already exists, returning it")
-        return build_review_packet(path)
-    LOG.info("run_annotation: initializing run")
-    initialize(path)
-    state = load_state(run_root(config))
-    if not state.plan_complete:
-        if config.guidance.interactive:
-            raise ContractError(
-                "interactive run is paused after scene setting; construct the plan with "
-                "plan_annotation(config_path) (CLI: `cell-curator run plan`), approve "
-                "assumptions with approve_annotation_assumptions(config_path, "
-                "reviewer=...), then retry annotate(config_path)"
-            )
-        construct_plan(path)
-    require_assumption_gate(path, level=config.guidance.hierarchy_levels[0], parent="ROOT")
-    LOG.info("run_annotation: auditing parent clusters")
-    audit(path)
-    LOG.info("run_annotation: discovering subcluster candidates")
-    refine(path)
-    LOG.info("run_annotation: computing evidence lanes")
-    evidence_all(path)
-    LOG.info("run_annotation: deciding parent outcomes")
-    decide(path)
-    LOG.info("run_annotation: mapping cells to labels")
-    map_cells(path)
-    LOG.info("run_annotation: building review artifacts")
-    review(path, strict=True)
-    LOG.info("run_annotation: validating the run")
-    validate(path)
-    return build_review_packet(path)
+    from .annotation import execute_annotation_workflow
+
+    return execute_annotation_workflow(path)

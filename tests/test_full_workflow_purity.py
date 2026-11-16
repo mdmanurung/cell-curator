@@ -42,48 +42,6 @@ def no_subprocess(monkeypatch: pytest.MonkeyPatch) -> None:
             monkeypatch.setattr(subprocess, name, forbidden)
 
 
-def test_a_complete_run_needs_no_subprocess_and_prints_nothing(
-    tmp_path: Path,
-    no_subprocess: None,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    curator = _unattended(tmp_path, mode="annotation", run_id="purity-v1")
-
-    # SystemExit is a BaseException: uncaught, it can abort the whole pytest
-    # session rather than failing one test, so catch it explicitly.
-    try:
-        curator.inspect()
-        curator.freeze()
-        packet = curator.annotate()
-        report = curator.check_report()
-        validation = curator.validate_run()
-    except SystemExit as exc:  # pragma: no cover - guard, not expected to fire
-        pytest.fail(f"SystemExit escaped the pure-Python workflow: {exc}")
-
-    assert packet.is_dir()
-    assert report["status"]
-    assert validation["status"] == "complete"
-
-    captured = capsys.readouterr()
-    assert captured.out == "", f"library code wrote to stdout: {captured.out!r}"
-
-
-def test_the_function_api_reaches_the_same_result_without_the_object(
-    tmp_path: Path, no_subprocess: None
-) -> None:
-    """The object is a convenience; the plain functions must remain sufficient."""
-
-    from cell_curator import annotate, load_config, validate_run
-
-    curator = _unattended(tmp_path, mode="annotation", run_id="functions-v1")
-    config_path = curator.config_path
-
-    packet = annotate(config_path)
-    assert packet.is_dir()
-    assert validate_run(config_path)["status"] == "complete"
-    assert load_config(config_path).run.run_id == "functions-v1"
-
-
 def test_read_only_inspection_never_touches_the_caller_object(tmp_path: Path) -> None:
     """A notebook keeps using its AnnData after handing it over."""
 

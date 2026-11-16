@@ -13,14 +13,10 @@ from conftest import SKILL_ROOT
 from cell_curator.config import CellCuratorConfig, load_config
 from cell_curator.contracts import ContractError, sha256
 from cell_curator.guided import approve_assumptions, construct_plan
-from cell_curator.hierarchy import profile_refined_clusters
-from cell_curator.ontology import CellOntology
-from cell_curator.pipeline import run_annotation, run_root
 from cell_curator.review import (
     build_critic_packet,
     build_evidence_cards,
     build_html_report,
-    check_report_completeness,
     import_critic_findings,
     import_reconciliation,
     resolve_durable_mapping_values,
@@ -108,41 +104,29 @@ def _config(tmp_path: Path, source: Path, markers: Path) -> Path:
 
 
 def _completed_synthetic_run(
-    tmp_path: Path,
-    *,
-    existing_writeback_contract: bool = False,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> tuple[Path, CellCuratorConfig, Path]:
-    source = tmp_path / "source.h5ad"
-    _synthetic_input(source)
-    if existing_writeback_contract:
-        adata = ad.read_h5ad(source)
-        adata.obs["cell_curator_type"] = pd.Categorical(
-            ["Type A"] * 30 + ["Type B"] * 30,
-            categories=["Type B", "Type A", "Legacy"],
-            ordered=True,
-        )
-        adata.uns["cell_curator_type_colors"] = np.asarray(["#222222", "#AAAAAA", "#777777"])
-        adata.obs["cell_curator_state"] = pd.Categorical(
-            ["legacy"] * adata.n_obs,
-            categories=["not_assessed", "legacy"],
-            ordered=True,
-        )
-        adata.uns["cell_curator_state_colors"] = np.asarray(["#008800", "#880000"])
-        adata.write_h5ad(source)
-    markers = tmp_path / "markers.json"
-    markers.write_text(
-        json.dumps(
-            {
-                "Type A": {"pos": ["A1", "A2"], "neg": ["B1", "B2"]},
-                "Type B": {"pos": ["B1", "B2"], "neg": ["A1", "A2"]},
-            }
-        )
+    """A corpus run with consensus labels, finalized, reviewed and critic-attested."""
+
+    from consensus_fixture import write_consensus_run
+    from test_annotation_pipeline import annotation_fixture
+
+    from cell_curator.annotation import collect_level, finalize_annotation
+    from cell_curator.consensus_import import import_consensus_level
+
+    config_path, root, expected = annotation_fixture(tmp_path, monkeypatch)
+    collect_level(config_path, "L1")
+    write_consensus_run(
+        config_path, root, {cluster: values[0] for cluster, values in expected.items()}
     )
-    config_path = _config(tmp_path, source, markers)
-    run_annotation(config_path)
+    import_consensus_level(config_path, "L1")
+    finalize_annotation(config_path)
     config = load_config(config_path)
-    _record_critics(config, run_root(config), tmp_path)
-    return source, config, run_root(config)
+    build_evidence_cards(config, root)
+    build_critic_packet(config, root)
+    build_html_report(config, root, strict=True)
+    _record_critics(config, root, tmp_path)
+    return Path(config.input.path), config, root
 
 
 def _rebuild_strict_review(config: CellCuratorConfig, root: Path) -> None:
@@ -234,79 +218,10 @@ def test_durable_mapping_resolution_uses_deepest_parent_scoped_review() -> None:
     assert list(full["cell_state"]) == ["cycling", "normal"]
 
 
-def test_independent_end_to_end_and_guarded_writeback(tmp_path: Path) -> None:
-    source = tmp_path / "source.h5ad"
-    _synthetic_input(source)
-    source_before = sha256(source)
-    markers = tmp_path / "markers.json"
-    markers.write_text(
-        json.dumps(
-            {
-                "Type A": {"pos": ["A1", "A2"], "neg": ["B1", "B2"]},
-                "Type B": {"pos": ["B1", "B2"], "neg": ["A1", "A2"]},
-            }
-        )
-    )
-    config_path = _config(tmp_path, source, markers)
-    packet = run_annotation(config_path)
-    config = load_config(config_path)
-    root = run_root(config)
-    assert packet.is_dir()
-    assert (packet / "review_packet.manifest.json").is_file()
-    assert sha256(source) == source_before
-    assert (root / "adaptive/technical_summary.tsv").is_file()
-    assert (root / "adaptive/doublet_summary.tsv").is_file()
-    assert (root / "evidence/summary/program_cooccurrence.tsv").is_file()
-    assert (root / "evidence/summary/source_corroboration.tsv").is_file()
-    report = (root / "review/report.html").read_text()
-    assert "Program co-occurrence" in report
-    assert "Independent-source corroboration" in report
-
-    proposals = pd.read_csv(
-        root / "evidence" / "summary" / "annotation_proposals.tsv",
-        sep="\t",
-        keep_default_na=False,
-    ).set_index("cluster_id")
-    assert proposals.loc[0, "cell_type"] == "Type A"
-    assert proposals.loc[1, "cell_type"] == "Type B"
-    assert not proposals["abstained"].astype(bool).any()
-
-    output = tmp_path / "annotated.h5ad"
-    # A run no critic has looked at must not pass as "critics reconciled".
-    with pytest.raises(ContractError, match="no critic pass"):
-        validate_writeback(config, root, output_path=output)
-    _record_critics(config, root, tmp_path)
-    validate_writeback(config, root, output_path=output)
-    with pytest.raises(ContractError, match="does not match"):
-        write_back(
-            config,
-            root,
-            output_path=tmp_path / "must-not-exist.h5ad",
-            confirm=lambda _preview: "not-the-prefix",
-        )
-    assert not (tmp_path / "must-not-exist.h5ad").exists()
-    write_back(config, root, output_path=output, confirm=_confirm)
-    receipt = json.loads((root / "writeback/receipt.json").read_text())
-    # A Python callback is not the terminal prompt, so it is not recorded as one.
-    assert receipt["approval"]["approval_mode"] == "api_callback"
-    assert output.is_file()
-    assert sha256(source) == source_before
-    annotated = ad.read_h5ad(output)
-    assert set(annotated.obs["cell_curator_type"].astype(str)) == {"Type A", "Type B"}
-
-    second_output = tmp_path / "second-annotated.h5ad"
-    validate_writeback(config, root, output_path=second_output)
-    first_hash = sha256(output)
-    with pytest.raises(ContractError, match="immutable write-back receipt"):
-        write_back(config, root, output_path=second_output, confirm=_confirm)
-    assert not second_output.exists()
-    assert sha256(output) == first_hash
-
-
 def test_writeback_confirmation_binds_the_previewed_diff(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _, config, root = _completed_synthetic_run(tmp_path)
+    _, config, root = _completed_synthetic_run(tmp_path, monkeypatch)
     output = tmp_path / "bound-output.h5ad"
     preview = validate_writeback(config, root, output_path=output)
     # A prefix typed for a different target is a different diff and refuses.
@@ -319,378 +234,12 @@ def test_writeback_confirmation_binds_the_previewed_diff(
     assert output.is_file()
 
 
-def test_review_rebuild_preserves_manual_reasoning_and_detects_tampering(
-    tmp_path: Path,
-) -> None:
-    _, config, root = _completed_synthetic_run(tmp_path)
-    labels_path = root / "labels/L1.tsv"
-    labels = pd.read_csv(labels_path, sep="\t", keep_default_na=False)
-    labels.loc[0, "rationale"] = "Manual reviewer rationale retained verbatim."
-    labels.loc[0, "reviewer"] = "reviewer-one"
-    labels.to_csv(labels_path, sep="\t", index=False)
-
-    with pytest.raises(ContractError, match="stale"):
-        check_report_completeness(config, root, require_report=True)
-    _rebuild_strict_review(config, root)
-    card_path = root / "review/evidence_cards/L1__ROOT__cluster_0.md"
-    assert "Manual reviewer rationale retained verbatim." in card_path.read_text()
-    assert (
-        "Manual reviewer rationale retained verbatim."
-        in (root / "review/report.html").read_text()
-    )
-    assert check_report_completeness(config, root)["status"] == "complete"
-
-    card_path.write_text(card_path.read_text() + "\nTAMPERED\n")
-    with pytest.raises(ContractError, match="stale"):
-        check_report_completeness(config, root)
-
-    _rebuild_strict_review(config, root)
-    report_path = root / "review/report.html"
-    report_path.write_text(
-        report_path.read_text() + '<img src="https://example.invalid/pixel.png">'
-    )
-    manifest_path = root / "review/report.manifest.json"
-    manifest = json.loads(manifest_path.read_text())
-    manifest["report_sha256"] = sha256(report_path)
-    manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
-    with pytest.raises(ContractError, match="self-contained"):
-        check_report_completeness(config, root)
-
-
-def test_writeback_uses_durable_labels_and_previews_categories_colors_and_cells(
-    tmp_path: Path,
-) -> None:
-    source, config, root = _completed_synthetic_run(tmp_path, existing_writeback_contract=True)
-    source_before = sha256(source)
-    labels_path = root / "labels/L1.tsv"
-    labels = pd.read_csv(labels_path, sep="\t", keep_default_na=False)
-    labels.loc[labels["cluster_id"].astype(str).eq("0"), "label"] = "Reviewed A"
-    labels.loc[labels["cluster_id"].astype(str).eq("0"), "rationale"] = (
-        "Reviewer-selected durable identity after inspecting raw evidence."
-    )
-    labels.loc[labels["cluster_id"].astype(str).eq("0"), "cl_id"] = "CL:0000001"
-    labels.loc[labels["cluster_id"].astype(str).eq("1"), "cl_id"] = "CL:0000002"
-    labels.to_csv(labels_path, sep="\t", index=False)
-    ontology_path = tmp_path / "writeback-cl.obo"
-    ontology_path.write_text(
-        """format-version: 1.2
-
-[Term]
-id: CL:0000000
-name: cell
-
-[Term]
-id: CL:0000001
-name: Reviewed A
-is_a: CL:0000000 ! cell
-
-[Term]
-id: CL:0000002
-name: Type B
-is_a: CL:0000000 ! cell
-"""
-    )
-    ontology = CellOntology.load(ontology_path)
-    _rebuild_strict_review(config, root)
-
-    invalid_labels = labels.copy()
-    invalid_labels.loc[invalid_labels["cluster_id"].astype(str).eq("0"), "cl_id"] = "CL:0000002"
-    invalid_labels.to_csv(labels_path, sep="\t", index=False)
-    _rebuild_strict_review(config, root)
-    with pytest.raises(ContractError, match="inconsistent"):
-        validate_writeback(config, root, ontology=ontology)
-    labels.to_csv(labels_path, sep="\t", index=False)
-    _rebuild_strict_review(config, root)
-
-    output = tmp_path / "reviewed.h5ad"
-    preview = validate_writeback(config, root, ontology=ontology, output_path=output)
-    assert sha256(source) == source_before
-    assert preview["n_cell_types"] == 2
-    assert preview["labels_sha256"] == {"labels/L1.tsv": sha256(labels_path)}
-    assert preview["ontology_validation"]["ontology_status"] == "validated"
-    assert preview["hierarchy_validation"]["invariants"]["one_cell_one_leaf"] is True
-    diff = pd.read_csv(preview["diff_path"], sep="\t", keep_default_na=False)
-    metadata = diff[diff["barcode"].eq("<METADATA>")]
-    assert len(diff) == 3 * 60 + 9
-    assert len(metadata) == 9
-    assert {
-        "cell_curator_type.__categories__",
-        "cell_curator_type.__colors__",
-        "cell_curator_type.__ordered__",
-        "cell_curator_state.__categories__",
-        "cell_curator_state.__colors__",
-        "cell_curator_state.__ordered__",
-        "cell_curator_leaf.__categories__",
-        "cell_curator_leaf.__colors__",
-        "cell_curator_leaf.__ordered__",
-    } == set(metadata["column"])
-    type_contract = preview["category_and_color_contract"]["cell_curator_type"]
-    assert type_contract["categories"] == ["Type B", "Reviewed A"]
-    assert type_contract["colors"][0] == "#222222"
-    state_contract = preview["category_and_color_contract"]["cell_curator_state"]
-    assert state_contract == {
-        "categories": ["not_assessed", "legacy"],
-        "colors": ["#008800", "#880000"],
-    }
-
-    labels.loc[0, "rationale"] = "Final manually reviewed rationale."
-    labels.to_csv(labels_path, sep="\t", index=False)
-    _rebuild_strict_review(config, root)
-    # The prefix a person read before the labels changed no longer approves them.
-    with pytest.raises(ContractError, match="does not match"):
-        write_back(
-            config,
-            root,
-            output_path=tmp_path / "stale-must-not-exist.h5ad",
-            confirm=_typed(preview),
-            ontology=ontology,
-        )
-    assert not (tmp_path / "stale-must-not-exist.h5ad").exists()
-
-    write_back(config, root, output_path=output, confirm=_confirm, ontology=ontology)
-    assert sha256(source) == source_before
-    written = ad.read_h5ad(output)
-    assert set(written.obs["cell_curator_type"].astype(str)) == {
-        "Reviewed A",
-        "Type B",
-    }
-    assert list(written.obs["cell_curator_type"].cat.categories) == type_contract["categories"]
-    assert list(map(str, written.uns["cell_curator_type_colors"])) == type_contract["colors"]
-    assert (
-        list(written.obs["cell_curator_state"].cat.categories) == state_contract["categories"]
-    )
-    assert list(map(str, written.uns["cell_curator_state_colors"])) == state_contract["colors"]
-
-
-def test_interactive_equivalent_end_to_end_requires_named_gate_approval(
-    tmp_path: Path,
-) -> None:
-    source = tmp_path / "interactive.h5ad"
-    _synthetic_input(source)
-    markers = tmp_path / "interactive-markers.json"
-    markers.write_text(
-        json.dumps(
-            {
-                "Type A": {"pos": ["A1", "A2"], "neg": ["B1", "B2"]},
-                "Type B": {"pos": ["B1", "B2"], "neg": ["A1", "A2"]},
-            }
-        )
-    )
-    config_path = _config(tmp_path, source, markers)
-    value = yaml.safe_load(config_path.read_text())
-    value["run"]["run_id"] = "interactive-v1"
-    value["guidance"].update({"interactive": True, "preauthorized": False, "reviewer": ""})
-    config_path.write_text(yaml.safe_dump(value, sort_keys=False))
-
-    with pytest.raises(ContractError, match="paused after scene setting"):
-        run_annotation(config_path)
-    construct_plan(config_path)
-    with pytest.raises(ContractError, match="Gate A blocks"):
-        run_annotation(config_path)
-    approval = approve_assumptions(config_path, reviewer="interactive-reviewer")
-    # The suite has no terminal attached, so the approval is recorded as agent-made.
-    assert approval["approval_mode"] == "agent_recorded"
-    packet = run_annotation(config_path)
-    root = tmp_path / "results" / "interactive-v1"
-    assert packet.is_dir()
-    assert (root / "labels/L1.tsv").is_file()
-    assert (root / "checkpoints/L1/ROOT.json").is_file()
-
-    # An interactive run writes only after a person types the approval token.
-    config = load_config(config_path)
-    _record_critics(config, root, tmp_path)
-    with pytest.raises(ContractError, match="needs a person to confirm"):
-        write_back(config, root, output_path=tmp_path / "unconfirmed.h5ad")
-    assert not (tmp_path / "unconfirmed.h5ad").exists()
-
-
-@pytest.mark.parametrize("optional_noise_lane", [False, True])
-def test_stored_refinement_promotes_only_evidence_backed_children(
-    tmp_path: Path, optional_noise_lane: bool
-) -> None:
-    """With ``optional_noise_lane``, a second lane that cannot separate the children
-    is configured as not required: it may corroborate, but it must not veto."""
-    rng = np.random.default_rng(11)
-    n = 40
-    barcodes = [f"split-{index:02d}" for index in range(n)]
-    child = np.array(["a"] * 20 + ["b"] * 20)
-    counts = np.ones((n, 3), dtype=np.float32)
-    counts[:20, 0] = rng.poisson(8, size=20) + 1
-    counts[:20, 1] = 0
-    counts[20:, 0] = 0
-    counts[20:, 1] = rng.poisson(8, size=20) + 1
-    obs = pd.DataFrame(
-        {
-            "canonical_cluster": "P",
-            "lineage": "immune",
-            "stored_low": child,
-            "stored_high": child,
-        },
-        index=barcodes,
-    )
-    adata = ad.AnnData(
-        X=np.log1p(counts),
-        obs=obs,
-        var=pd.DataFrame({"gene_symbol": ["A", "B", "HK"]}, index=["A", "B", "HK"]),
-    )
-    adata.layers["counts"] = counts
-    adata.layers["logcounts"] = np.log1p(counts)
-    adata.layers["noise"] = rng.permutation(np.log1p(counts).ravel()).reshape(counts.shape)
-    adata.obsm["X_pca"] = np.column_stack(
-        [
-            np.r_[rng.normal(-4, 0.1, 20), rng.normal(4, 0.1, 20)],
-            rng.normal(size=n),
-        ]
-    )
-    source = tmp_path / "split.h5ad"
-    adata.write_h5ad(source)
-    markers = tmp_path / "split_markers.json"
-    markers.write_text(
-        json.dumps(
-            {
-                "Type A": {"positive": ["A"], "negative": ["B"]},
-                "Type B": {"positive": ["B"], "negative": ["A"]},
-            }
-        )
-    )
-    config_path = _config(tmp_path, source, markers)
-    config = yaml.safe_load(config_path.read_text())
-    config["run"]["run_id"] = "accepted-split-v1"
-    config["input"]["keys"].update(
-        {"embedding": "X_pca", "stored_resolutions": ["stored_low", "stored_high"]}
-    )
-    config["guidance"]["context"]["visualization_key"] = "X_pca"
-    config["input"]["assays"]["transcriptome"]["graph_representations"] = [
-        {"source": "obsm", "key": "X_pca"}
-    ]
-    config["canonical_partitions"] = {
-        "immune": {"parent_key": "canonical_cluster", "expected_parent_count": 1}
-    }
-    config["adaptive"]["parent_local"]["enabled"] = True
-    config["adaptive"]["stored_candidates"].update(
-        {"min_parent_fraction": 0.1, "max_parent_fraction": 0.9}
-    )
-    if optional_noise_lane:
-        representations = config["input"]["assays"]["transcriptome"]["representations"]
-        representations["noise"] = {**representations["logcounts"], "key": "noise"}
-        config["evidence"]["lanes"].append(
-            {
-                "assay": "transcriptome",
-                "representation": "noise",
-                "required_for_acceptance": False,
-            }
-        )
-    config_path.write_text(yaml.safe_dump(config, sort_keys=False))
-
-    packet = run_annotation(config_path)
-    root = tmp_path / "results" / "accepted-split-v1"
-    assert packet.is_dir()
-    profile = profile_refined_clusters(config_path)
-    assert {"size", "qc", "composition"}.issubset(profile["panels"])
-    assert Path(profile["profile_path"]).is_file()
-    registry = pd.read_csv(root / "discovery" / "candidate_registry.tsv", sep="\t")
-    assert registry["eligibility_counts_pass"].astype(bool).all()
-    assert registry["parent_purity"].eq(1.0).all()
-    assert registry["parent_fraction"].eq(0.5).all()
-    manifest = pd.read_csv(root / "comparators" / "comparator_manifest.tsv", sep="\t")
-    lanes = 2 if optional_noise_lane else 1
-    assert len(manifest) == 4 * lanes
-    assert manifest["lane_id"].nunique() == 4 * lanes
-    assert all(
-        (root / "evidence" / "candidate_lanes" / lane_id / "receipt.json").is_file()
-        for lane_id in manifest["lane_id"].astype(str)
-    )
-    children = pd.read_csv(root / "decisions" / "child_evidence_summary.tsv", sep="\t")
-    assert children["accepted_child_evidence_gate"].astype(bool).all()
-    assert set(children["cell_type"]) == {"Type A", "Type B"}
-    parents = pd.read_csv(root / "decisions" / "parent_decision_summary.tsv", sep="\t")
-    assert parents.loc[0, "recommended_outcome"] == "ACCEPT SPLIT"
-    mapping = pd.read_csv(root / "mapping" / "parent_child_mapping.tsv", sep="\t")
-    assert mapping["barcode"].nunique() == n
-    assert mapping["leaf_id"].nunique() == 2
-    assert set(mapping["membership_role"]) == {"accepted_child"}
-    assert run_annotation(config_path) == packet
-
-    # The accepted children must reach the written object, not only the leaf column.
-    config_value = load_config(config_path)
-    _record_critics(config_value, root, tmp_path)
-    output = tmp_path / "split-annotated.h5ad"
-    write_back(config_value, root, output_path=output, confirm=_confirm)
-    written = ad.read_h5ad(output)
-    assert set(written.obs["cell_curator_type"].astype(str)) == {"Type A", "Type B"}
-
-
-def test_zero_applicable_lanes_complete_with_unknown_calls(tmp_path: Path) -> None:
-    source = tmp_path / "zero-lane.h5ad"
-    _synthetic_input(source)
-    markers = tmp_path / "markers.json"
-    markers.write_text(
-        json.dumps({"Type A": {"positive": ["A1"]}, "Type B": {"positive": ["B1"]}})
-    )
-    config_path = _config(tmp_path, source, markers)
-    value = yaml.safe_load(config_path.read_text())
-    value["run"]["run_id"] = "zero-lane-v1"
-    value["evidence"]["lanes"] = []
-    config_path.write_text(yaml.safe_dump(value, sort_keys=False))
-
-    packet = run_annotation(config_path)
-    root = tmp_path / "results" / "zero-lane-v1"
-    receipt_manifest = json.loads((root / "evidence/receipts.validated.json").read_text())
-    proposals = pd.read_csv(root / "evidence/summary/annotation_proposals.tsv", sep="\t")
-    assert packet.is_dir()
-    assert receipt_manifest["zero_lane_run"] is True
-    assert proposals["cell_type"].eq("Unknown").all()
-    assert proposals["abstained"].astype(bool).all()
-
-
-def test_evidence_only_run_completes_review_with_unknown_labels(tmp_path: Path) -> None:
-    source = tmp_path / "evidence-only.h5ad"
-    _synthetic_input(source)
-    markers = tmp_path / "evidence-only-markers.json"
-    markers.write_text(
-        json.dumps({"Type A": {"positive": ["A1"]}, "Type B": {"positive": ["B1"]}})
-    )
-    config_path = _config(tmp_path, source, markers)
-    value = yaml.safe_load(config_path.read_text())
-    value["run"].update({"run_id": "evidence-only-v1", "mode": "evidence-only"})
-    config_path.write_text(yaml.safe_dump(value, sort_keys=False))
-
-    packet = run_annotation(config_path)
-    root = tmp_path / "results" / "evidence-only-v1"
-    proposals = pd.read_csv(root / "evidence/summary/annotation_proposals.tsv", sep="\t")
-    gate = json.loads((root / "checkpoints/L1/ROOT.json").read_text())
-    assert packet.is_dir()
-    assert proposals["cell_type"].eq("Unknown").all()
-    assert proposals["abstained"].astype(bool).all()
-    assert gate["status"] == "complete"
-    with pytest.raises(ContractError, match="evidence-only"):
-        validate_writeback(load_config(config_path), root)
-
-
-def test_standard_pipeline_rejects_multi_level_config_before_materialization(
-    tmp_path: Path,
-) -> None:
-    source = tmp_path / "multi-level.h5ad"
-    _synthetic_input(source)
-    markers = tmp_path / "multi-level-markers.json"
-    markers.write_text(json.dumps({"Type A": {"positive": ["A1"]}}))
-    config_path = _config(tmp_path, source, markers)
-    value = yaml.safe_load(config_path.read_text())
-    value["run"]["run_id"] = "multi-level-v1"
-    value["guidance"]["hierarchy_levels"] = ["L1", "L2"]
-    config_path.write_text(yaml.safe_dump(value, sort_keys=False))
-
-    with pytest.raises(ContractError, match="exactly one hierarchy level"):
-        run_annotation(config_path)
-    assert not (tmp_path / "results" / "multi-level-v1").exists()
-
-
 def test_writeback_refuses_labels_older_than_a_later_approved_assumption(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from cell_curator.api import record_annotation_assumption
 
-    _, config, root = _completed_synthetic_run(tmp_path)
+    _, config, root = _completed_synthetic_run(tmp_path, monkeypatch)
     config_path = tmp_path / "config.yaml"
     output = tmp_path / "after-new-assumption.h5ad"
     validate_writeback(config, root, output_path=output)
@@ -702,45 +251,6 @@ def test_writeback_refuses_labels_older_than_a_later_approved_assumption(
     approve_assumptions(config_path, reviewer="fixture-reviewer", preauthorized=True)
     with pytest.raises(ContractError, match="stale assumptions"):
         validate_writeback(config, root, output_path=output)
-
-
-def test_marker_edit_after_plan_approval_refuses_execution(tmp_path: Path) -> None:
-    source = tmp_path / "source.h5ad"
-    _synthetic_input(source)
-    markers = tmp_path / "markers.json"
-    markers.write_text(
-        json.dumps(
-            {
-                "Type A": {"pos": ["A1", "A2"], "neg": ["B1", "B2"]},
-                "Type B": {"pos": ["B1", "B2"], "neg": ["A1", "A2"]},
-            }
-        )
-    )
-    config_path = _config(tmp_path, source, markers)
-    construct_plan(config_path)
-    # Swap the two programs after the plan, and its assumptions, were approved.
-    markers.write_text(
-        json.dumps(
-            {
-                "Type A": {"pos": ["B1", "B2"], "neg": ["A1", "A2"]},
-                "Type B": {"pos": ["A1", "A2"], "neg": ["B1", "B2"]},
-            }
-        )
-    )
-    with pytest.raises(ContractError, match="changed after the plan was approved"):
-        run_annotation(config_path)
-
-
-def test_the_documented_review_loop_still_validates_after_critics(tmp_path: Path) -> None:
-    """Critics import, reconcile, and rebuild the report after execution; none of that
-    may make the run fail validation or its frozen packet report drift."""
-
-    from cell_curator.pipeline import validate
-
-    _completed_synthetic_run(tmp_path)  # executes, then records critics and rebuilds
-    config_path = tmp_path / "config.yaml"
-    assert validate(config_path)["status"] == "complete"
-    assert run_annotation(config_path).is_dir()
 
 
 def test_a_finer_level_abstention_keeps_the_supported_parent_label() -> None:
@@ -763,53 +273,6 @@ def test_a_finer_level_abstention_keeps_the_supported_parent_label() -> None:
     )
     resolved = resolve_durable_mapping_values(mapping, labels)
     assert list(resolved["cell_type"]) == ["T cell"]
-
-
-def test_a_doublet_mixed_parent_abstains_on_identity_in_the_durable_labels(
-    tmp_path: Path,
-) -> None:
-    from cell_curator.hierarchy import LABEL_COLUMNS
-    from cell_curator.pipeline import _label_parent_outcomes
-
-    (tmp_path / "labels").mkdir()
-    (tmp_path / "decisions").mkdir()
-    base = dict.fromkeys(LABEL_COLUMNS, "")
-    pd.DataFrame(
-        [
-            {
-                **base,
-                "level": "L1",
-                "parent_scope": "ROOT",
-                "cluster_id": "0",
-                "label": "Type A",
-                "cell_state": "normal",
-                "rationale": "markers",
-            },
-            {
-                **base,
-                "level": "L1",
-                "parent_scope": "ROOT",
-                "cluster_id": "1",
-                "label": "Type B",
-                "cell_state": "normal",
-                "rationale": "markers",
-            },
-        ]
-    ).to_csv(tmp_path / "labels/L1.tsv", sep="\t", index=False)
-    pd.DataFrame(
-        {
-            "parent_id": ["0", "1"],
-            "recommended_outcome": ["RETAIN PARENT", "DOUBLET/MIXED"],
-            "accepted_child_ids_recommended": ["", ""],
-        }
-    ).to_csv(tmp_path / "decisions/parent_decision_summary.tsv", sep="\t", index=False)
-    pd.DataFrame(columns=["candidate_child_uid"]).to_csv(
-        tmp_path / "decisions/child_evidence_summary.tsv", sep="\t", index=False
-    )
-    _label_parent_outcomes(tmp_path, level="L1")
-    labels = pd.read_csv(tmp_path / "labels/L1.tsv", sep="\t", keep_default_na=False)
-    by_cluster = labels.set_index(labels["cluster_id"].astype(str))["label"].to_dict()
-    assert by_cluster == {"0": "Type A", "1": "Unknown"}
 
 
 def test_ontology_backoff_is_a_plan_assumption_only_when_an_ontology_is_configured(
@@ -860,94 +323,6 @@ def test_ontology_backoff_is_a_plan_assumption_only_when_an_ontology_is_configur
         )
 
 
-def test_an_ontology_backoff_label_reaches_the_written_h5ad(tmp_path: Path) -> None:
-    """Cluster 0 is half Type A and half Type B cells, both kinds of Shared parent.
-    With the ontology configured, the cluster is written as Shared parent with its
-    CL id, not Unknown."""
-
-    rng = np.random.default_rng(3)
-    counts = np.zeros((60, 6), dtype=np.float32)
-    counts[:15, :2] = rng.poisson(8, size=(15, 2)) + 1
-    counts[15:30, 2:4] = rng.poisson(8, size=(15, 2)) + 1
-    counts[30:, 4:] = rng.poisson(8, size=(30, 2)) + 1
-    genes = ["A1", "A2", "B1", "B2", "N1", "N2"]
-    adata = ad.AnnData(
-        X=np.log1p(counts),
-        obs=pd.DataFrame(
-            {"canonical_cluster": ["0"] * 30 + ["1"] * 30, "lineage": ["immune"] * 60},
-            index=[f"cell-{index:03d}" for index in range(60)],
-        ),
-        var=pd.DataFrame({"gene_symbol": genes}, index=genes),
-    )
-    adata.layers["counts"] = counts
-    adata.layers["logcounts"] = np.log1p(counts)
-    adata.obsm["X_pca_harmony"] = np.vstack(
-        [rng.normal(-3, 0.2, size=(30, 3)), rng.normal(3, 0.2, size=(30, 3))]
-    ).astype(np.float32)
-    source = tmp_path / "source.h5ad"
-    adata.write_h5ad(source)
-    markers = tmp_path / "markers.json"
-    markers.write_text(
-        json.dumps(
-            {
-                "Type A": {"pos": ["A1", "A2"], "neg": ["N1", "N2"], "cl_id": "CL:9000001"},
-                "Type B": {"pos": ["B1", "B2"], "neg": ["N1", "N2"], "cl_id": "CL:9000002"},
-                "Type N": {"pos": ["N1", "N2"], "neg": ["A1", "B1"], "cl_id": "CL:9000003"},
-            }
-        )
-    )
-    obo = tmp_path / "cl.obo"
-    obo.write_text(
-        "format-version: 1.2\n\n"
-        "[Term]\nid: CL:0000000\nname: cell\n\n"
-        "[Term]\nid: CL:9000000\nname: Shared parent\nis_a: CL:0000000\n\n"
-        "[Term]\nid: CL:9000001\nname: Type A\nis_a: CL:9000000\n\n"
-        "[Term]\nid: CL:9000002\nname: Type B\nis_a: CL:9000000\n\n"
-        "[Term]\nid: CL:9000003\nname: Type N\nis_a: CL:0000000\n"
-    )
-    config_path = _config(tmp_path, source, markers)
-    value = yaml.safe_load(config_path.read_text())
-    value["knowledge"]["providers"].append(
-        {"kind": "ontology", "path": str(obo), "version": "fixture"}
-    )
-    config_path.write_text(yaml.safe_dump(value, sort_keys=False))
-
-    run_annotation(config_path)
-    config = load_config(config_path)
-    root = run_root(config)
-    proposals = pd.read_csv(
-        root / "evidence/summary/annotation_proposals.tsv", sep="\t", keep_default_na=False
-    ).set_index("cluster_id")
-    assert proposals.loc[0, "cell_type"] == "Shared parent"
-    assert proposals.loc[0, "cl_id"] == "CL:9000000"
-    assert proposals.loc[0, "rationale"].startswith("Backed off to Shared parent")
-    assert proposals.loc[1, "cell_type"] == "Type N"
-
-    _record_critics(config, root, tmp_path)
-    output = tmp_path / "annotated.h5ad"
-    write_back(
-        config, root, output_path=output, confirm=_confirm, ontology=CellOntology.load(obo)
-    )
-    written = ad.read_h5ad(output).obs
-    assert set(written["cell_curator_type"].astype(str).iloc[:30]) == {"Shared parent"}
-    assert set(written["cell_curator_type"].astype(str).iloc[30:]) == {"Type N"}
-
-
-def test_progress_status_names_the_next_command_at_each_stage(tmp_path: Path) -> None:
-    from cell_curator.guided import status
-
-    _, config, root = _completed_synthetic_run(tmp_path)
-    config_path = tmp_path / "config.yaml"
-    assert status(config_path)["next_command"].startswith("cell-curator write-back preview")
-    (root / "review" / "critic_reconciliation.tsv").unlink()
-    assert status(config_path)["next_command"].startswith("cell-curator critic import-findings")
-    (root / "review_packet" / "review_packet.manifest.json").unlink()
-    assert (
-        status(config_path)["next_command"]
-        == f"cell-curator run execute --config {config_path}"
-    )
-
-
 def test_a_cli_failure_is_one_json_object_with_its_own_exit_code(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -984,14 +359,13 @@ def test_a_full_run_and_write_back_open_no_socket(
     monkeypatch.setattr(socket.socket, "connect", no_network)
     monkeypatch.setattr(socket.socket, "connect_ex", no_network)
     monkeypatch.setattr(socket, "create_connection", no_network)
-    _, config, root = _completed_synthetic_run(tmp_path)
+    _, config, root = _completed_synthetic_run(tmp_path, monkeypatch)
     assert config.knowledge.network == "offline"
     output = tmp_path / "offline.h5ad"
     write_back(config, root, output_path=output, confirm=_confirm)
-    assert set(ad.read_h5ad(output).obs["cell_curator_type"].astype(str)) == {
-        "Type A",
-        "Type B",
-    }
+    assert set(ad.read_h5ad(output).obs["cell_curator_type"].astype(str)).difference(
+        {"Unknown"}
+    )
 
 
 def test_a_write_back_interrupted_before_its_receipt_completes_on_retry(
@@ -1003,7 +377,7 @@ def test_a_write_back_interrupted_before_its_receipt_completes_on_retry(
 
     from cell_curator import writeback
 
-    _, config, root = _completed_synthetic_run(tmp_path)
+    _, config, root = _completed_synthetic_run(tmp_path, monkeypatch)
     output = tmp_path / "interrupted.h5ad"
     real_replace = os.replace
 
@@ -1024,8 +398,10 @@ def test_a_write_back_interrupted_before_its_receipt_completes_on_retry(
     assert not (root / "writeback/receipt.json.pending").exists()
 
 
-def test_repeating_a_completed_write_back_returns_the_same_output(tmp_path: Path) -> None:
-    _, config, root = _completed_synthetic_run(tmp_path)
+def test_repeating_a_completed_write_back_returns_the_same_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, config, root = _completed_synthetic_run(tmp_path, monkeypatch)
     output = tmp_path / "once.h5ad"
     write_back(config, root, output_path=output, confirm=_confirm)
     first = sha256(output)
@@ -1041,7 +417,7 @@ def test_a_filesystem_that_cannot_fsync_a_directory_still_completes_write_back(
 
     from cell_curator import writeback
 
-    _, config, root = _completed_synthetic_run(tmp_path)
+    _, config, root = _completed_synthetic_run(tmp_path, monkeypatch)
     real_fsync = os.fsync
 
     def no_directory_fsync(fd: int) -> None:

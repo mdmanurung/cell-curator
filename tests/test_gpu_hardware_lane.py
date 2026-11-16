@@ -22,12 +22,8 @@ import pytest
 import yaml
 from conftest import SKILL_ROOT
 
-from cell_curator.capabilities import build_capability_registry
 from cell_curator.config import load_config
 from cell_curator.contracts import ContractError
-from cell_curator.evidence import validate_backend_receipt
-from cell_curator.models import BackendReceipt
-from cell_curator.pipeline import evidence_lane
 from cell_curator.rank_markers_gpu import (
     GpuContractError,
     format_compute_capability,
@@ -165,48 +161,6 @@ def test_real_gpu_validates_the_declared_hardware_contract(tmp_path: Path) -> No
     # A two-digit major must survive the round trip; "120" must not become "1.2".
     major, _, minor = str(observed["compute_capability"]).partition(".")
     assert major.isdigit() and len(minor) == 1
-
-
-def test_rapids_lane_executes_natively_and_publishes_a_gpu_receipt(tmp_path: Path) -> None:
-    observed = _observed_runtime()
-    config_path = _gpu_fixture(tmp_path, observed)
-
-    receipt_path = evidence_lane(
-        config_path, assay="transcriptome", representation="logcounts"
-    )
-    receipt = BackendReceipt.model_validate_json(Path(receipt_path).read_text())
-
-    assert receipt.backend == "rapids_singlecell"
-    assert receipt.status == "complete"
-    assert set(receipt.marker_methods) == {"wilcoxon", "logreg"}
-    assert receipt.convergence_validated is True
-    assert not receipt.fallback_used
-    assert not receipt.cpu_fallback_available
-    assert not receipt.cpu_fallback_used
-
-    runtime = receipt.runtime
-    assert int(runtime["device_count"]) == 1
-    assert runtime["device_name"] == observed["device_name"]
-    assert runtime["compute_capability"] == observed["compute_capability"]
-    assert int(runtime["cuda_major"]) == int(observed["cuda_major"])
-    assert str(runtime["native_api"]).startswith("rapids_singlecell")
-    assert runtime["cuda_driver_version"]
-    # Binary logreg reports one group for a two-group comparison; the receipt
-    # records what each method actually covered rather than leaving the gap
-    # to look like methodological disagreement.
-    coverage = runtime["ranking_group_coverage"]
-    assert sorted(coverage["wilcoxon"]) == ["0", "1"]
-    assert set(coverage["logreg"]).issubset({"0", "1"})
-
-    # The published receipt must also satisfy the consumer-side contract that
-    # every downstream reader applies before trusting the lane.
-    capability = next(
-        item
-        for item in build_capability_registry(load_config(config_path))
-        if item.assay == "transcriptome" and item.representation == "logcounts"
-    )
-    assert capability.requires_gpu is True
-    validate_backend_receipt(receipt, capability)
 
 
 def test_real_gpu_still_rejects_a_mismatched_hardware_contract(tmp_path: Path) -> None:

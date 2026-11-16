@@ -21,11 +21,8 @@ corresponds to a way the join could quietly produce a number nobody chose:
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
-import anndata as ad
-import numpy as np
 import pandas as pd
 import pytest
 import yaml
@@ -34,7 +31,6 @@ from conftest import SKILL_ROOT
 from cell_curator.config import CellCuratorConfig, load_config
 from cell_curator.contracts import ContractError, sha256
 from cell_curator.export import export_benchmark_predictions
-from cell_curator.pipeline import run_annotation, run_root
 
 
 def _run_artifacts(
@@ -58,9 +54,11 @@ def _run_artifacts(
         index=False,
         lineterminator="\n",
     )
-    tables = {name: frame for name, frame in labels.items()} if isinstance(labels, dict) else {
-        "L1.tsv": labels
-    }
+    tables = (
+        {name: frame for name, frame in labels.items()}
+        if isinstance(labels, dict)
+        else {"L1.tsv": labels}
+    )
     for name, frame in tables.items():
         frame.to_csv(root / "labels" / name, sep="\t", index=False, lineterminator="\n")
     value = yaml.safe_load((SKILL_ROOT / "assets" / "config.template.yaml").read_text())
@@ -91,7 +89,9 @@ def _mapping(
             "scope": ["ROOT"] * len(barcodes),
             "canonical_parent": parents,
             "parent_uid": [f"ROOT::{value}" for value in parents],
-            "leaf_id": [f"ROOT::{parent}::{value}" for parent, value in zip(parents, types, strict=True)],
+            "leaf_id": [
+                f"ROOT::{parent}::{value}" for parent, value in zip(parents, types, strict=True)
+            ],
             "cell_type": types,
             "cell_state": ["normal"] * len(barcodes),
             "membership_role": ["retained_parent"] * len(barcodes),
@@ -225,7 +225,9 @@ def test_a_completed_export_carries_both_sides_of_every_comparable_column(
     assert receipt["coverage"] == pytest.approx(0.8)
     assert receipt["truth_sha256"] == sha256(truth)
     assert receipt["mapping_sha256"]
-    assert receipt["label_tables_sha256"] == {"L1.tsv": receipt["label_tables_sha256"]["L1.tsv"]}
+    assert receipt["label_tables_sha256"] == {
+        "L1.tsv": receipt["label_tables_sha256"]["L1.tsv"]
+    }
     assert receipt["prediction_sha256"] == sha256(output)
     assert receipt["accuracy_claimed"] is False
     assert receipt["hierarchy_paths_emitted"] is True
@@ -306,9 +308,7 @@ def test_a_label_with_two_cell_ontology_ids_is_refused(tmp_path: Path) -> None:
     conflict = pd.concat(
         [first, _labels([("1", "T cell", "CL:0000625", 0.9)])], ignore_index=True
     )
-    config = _run_artifacts(
-        tmp_path, mapping=_mapping(["c0"], ["T cell"]), labels=conflict
-    )
+    config = _run_artifacts(tmp_path, mapping=_mapping(["c0"], ["T cell"]), labels=conflict)
     truth = _truth(["c0"], ["T cell"], __path=tmp_path / "truth.tsv")
     with pytest.raises(ContractError, match="conflicting Cell Ontology ids"):
         export_benchmark_predictions(config, truth_path=truth, output_path=tmp_path / "a.tsv")
@@ -356,9 +356,7 @@ def test_a_cluster_described_at_two_levels_is_refused_rather_than_guessed(
     )
     truth = _truth(["c0"], ["T cell"], __path=tmp_path / "truth.tsv")
     with pytest.raises(ContractError, match="more than one level or parent scope"):
-        export_benchmark_predictions(
-            config, truth_path=truth, output_path=tmp_path / "a.tsv"
-        )
+        export_benchmark_predictions(config, truth_path=truth, output_path=tmp_path / "a.tsv")
 
 
 def test_a_recursive_run_gets_no_path_rather_than_a_wrong_one(tmp_path: Path) -> None:
@@ -375,9 +373,7 @@ def test_a_recursive_run_gets_no_path_rather_than_a_wrong_one(tmp_path: Path) ->
         mapping=_mapping(["c0", "c1"], ["T cell", "T cell"]),
         labels={
             "L1.tsv": _labels([("0", "T cell", "CL:0000084", 0.9)]),
-            "L2.tsv": _labels(
-                [("1", "CD4-positive T cell", "CL:0000624", 0.8)], level="L2"
-            ),
+            "L2.tsv": _labels([("1", "CD4-positive T cell", "CL:0000624", 0.8)], level="L2"),
         },
     )
     truth = _truth(["c0", "c1"], ["T cell"] * 2, __path=tmp_path / "truth.tsv")
@@ -438,154 +434,3 @@ def test_a_run_without_a_mapping_or_labels_is_refused_before_any_write(
     with pytest.raises(ContractError, match="no durable mapping to export"):
         export_benchmark_predictions(config, truth_path=truth, output_path=output)
     assert not output.exists()
-
-
-def test_the_exported_table_of_a_real_run_scores_end_to_end(tmp_path: Path) -> None:
-    """The join has to work against artifacts a pipeline actually produced.
-
-    Every other test here builds its run directory by hand, which would pass
-    even if the real artifact names had moved. This one runs the pipeline, so it
-    fails if the mapping or the label tables stop being where the exporter
-    expects, and it then scores the export through the same public entry point
-    an operator would use.
-    """
-
-    from cell_curator import evaluate_benchmark_predictions
-
-    # The exported table makes an ontology claim whenever the labels carry CL
-    # identifiers, and the harness refuses to score such a table without a
-    # snapshot. That refusal is the point: an ontology metric that quietly
-    # abstains is the failure mode this work removed.
-    ontology = tmp_path / "cl.tsv"
-    pd.DataFrame(
-        [
-            {"id": "CL:0000000", "name": "cell", "parents": ""},
-            {"id": "CL:0000003", "name": "native cell", "parents": "CL:0000000"},
-            {"id": "CL:0000738", "name": "leukocyte", "parents": "CL:0000003"},
-            {"id": "CL:0000542", "name": "lymphocyte", "parents": "CL:0000738"},
-            {"id": "CL:0000084", "name": "T cell", "parents": "CL:0000542"},
-            {"id": "CL:0000236", "name": "B cell", "parents": "CL:0000542"},
-            {"id": "CL:0000624", "name": "CD4-positive T cell", "parents": "CL:0000084"},
-        ]
-    ).to_csv(ontology, sep="\t", index=False, lineterminator="\n")
-
-    source = tmp_path / "source.h5ad"
-    rng = np.random.default_rng(11)
-    counts = np.zeros((40, 4), dtype=np.float32)
-    counts[:20, :2] = rng.poisson(9, size=(20, 2)) + 1
-    counts[20:, 2:4] = rng.poisson(9, size=(20, 2)) + 1
-    adata = ad.AnnData(
-        X=np.log1p(counts),
-        obs=pd.DataFrame(
-            {"canonical_cluster": ["0"] * 20 + ["1"] * 20, "lineage": ["immune"] * 40},
-            index=[f"cell-{index:03d}" for index in range(40)],
-        ),
-        var=pd.DataFrame({"gene_symbol": ["A1", "A2", "B1", "B2"]}, index=["A1", "A2", "B1", "B2"]),
-    )
-    adata.layers["counts"] = counts
-    adata.layers["logcounts"] = np.log1p(counts)
-    adata.obsm["X_pca_harmony"] = np.vstack(
-        [rng.normal(-3, 0.2, size=(20, 3)), rng.normal(3, 0.2, size=(20, 3))]
-    ).astype(np.float32)
-    adata.write_h5ad(source)
-
-    markers = tmp_path / "markers.json"
-    markers.write_text(
-        json.dumps(
-            {
-                "T cell": {"pos": ["A1", "A2"], "neg": ["B1", "B2"]},
-                "B cell": {"pos": ["B1", "B2"], "neg": ["A1", "A2"]},
-            }
-        )
-    )
-    value = yaml.safe_load((SKILL_ROOT / "assets" / "config.template.yaml").read_text())
-    value["run"].update(
-        {
-            "run_id": "export-real-v1",
-            "output_root": str(tmp_path / "results"),
-            "mode": "annotation",
-        }
-    )
-    value["input"]["path"] = str(source)
-    value["canonical_partitions"] = {
-        "immune": {"parent_key": "canonical_cluster", "expected_parent_count": 2}
-    }
-    value["adaptive"]["eligibility"].update(
-        {"min_cells": 5, "min_donors": None, "min_captures": None}
-    )
-    value["adaptive"]["parent_local"]["enabled"] = False
-    value["knowledge"]["providers"] = [
-        {"kind": "local_markers", "path": str(markers), "version": "export-real-v1"}
-    ]
-    value["guidance"] = {
-        "interactive": False,
-        "preauthorized": True,
-        "reviewer": "export-fixture-reviewer",
-        "pause_after_each_level": False,
-        "assumptions": ["Synthetic markers and context are pre-authorized."],
-        "hierarchy_levels": ["L1"],
-        "context": {
-            "organism": "human",
-            "tissue": "synthetic tissue",
-            "developmental_stage": "adult",
-            "condition": "healthy",
-            "technology": "dissociated",
-            "experimental_context": "export integration fixture",
-            "composition_covariates": [],
-            "vocabulary_contract": "local synthetic marker programs",
-            "reference_contract": "local_only",
-            "visualization_key": "X_pca_harmony",
-            "writeback_prefix": "cell_curator",
-        },
-    }
-    value["evidence"].update(
-        {
-            "min_positive_coverage": 1.0,
-            "max_negative_violation": 0.0,
-            "min_confidence": 0.6,
-            "min_margin": 0.2,
-        }
-    )
-    config_path = tmp_path / "config.yaml"
-    config_path.write_text(yaml.safe_dump(value, sort_keys=False))
-    run_annotation(config_path)
-    config = load_config(config_path)
-
-    root = run_root(config)
-    mapping = pd.read_csv(root / "mapping" / "parent_child_mapping.tsv", sep="\t")
-    truth_path = tmp_path / "truth.tsv"
-    pd.DataFrame(
-        {
-            "barcode": mapping["barcode"].astype(str),
-            "true_label": ["T cell"] * 20 + ["B cell"] * 20,
-            "true_cl_id": ["CL:0000084"] * 20 + ["CL:0000236"] * 20,
-        }
-    ).to_csv(truth_path, sep="\t", index=False, lineterminator="\n")
-
-    predictions = tmp_path / "predictions.tsv"
-    receipt = export_benchmark_predictions(config, truth_path=truth_path, output_path=predictions)
-    assert receipt["n_cells"] == 40
-
-    result = evaluate_benchmark_predictions(
-        predictions,
-        system="cell-curator-fixture",
-        dataset="export-integration-v1",
-        output_path=tmp_path / "result.json",
-        ontology=ontology,
-    )
-    assert result.n == 40
-    assert result.coverage == 1.0
-    assert result.brier_score is not None
-
-    # The markers declare no Cell Ontology identifiers, so the run has no
-    # validated accessions to carry and the export records none. The ontology
-    # metrics are then absent rather than zero, and absent rather than borrowed
-    # from the slash-path metric, which is the behaviour this work established.
-    # A table that *does* make an ontology claim is scored by
-    # test_benchmark_ontology_distance.py and test_benchmark_relaxed_agreement.py.
-    assert result.ontology_distance_error is None
-    assert result.relaxed_accuracy is None
-
-    exported = pd.read_csv(predictions, sep="\t", keep_default_na=False, dtype=str)
-    assert "None" not in set(exported["predicted_cl_id"])
-    assert set(exported["predicted_cl_id"]) == {""}
