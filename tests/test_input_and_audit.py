@@ -8,7 +8,6 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cell_curator import audit_parents
 from cell_curator.config import CellCuratorConfig
 from cell_curator.data import inspect
 
@@ -185,49 +184,3 @@ def test_input_contract_fails_on_annotation_without_local_grounding(config: dict
     config["run"]["mode"] = "annotation"
     with pytest.raises(ValueError, match="local marker"):
         CellCuratorConfig.model_validate(config)
-
-
-def test_parent_audit_uses_configured_metadata_and_technical_metrics(
-    config: dict,
-) -> None:
-    config["input"]["guide_columns"] = ["guide_a", "guide_b"]
-    config["input"]["technical_metrics"] = {"complexity": "n_features"}
-    cells = pd.DataFrame(
-        {
-            "barcode": ["a", "b", "c", "d"],
-            "canonical_cluster": ["0", "0", "1", "1"],
-            "lineage": ["immune"] * 4,
-            "donor_id": ["d1", "d1", "d1", "d2"],
-            "capture_id": ["c1", "c1", "c1", "c2"],
-            "doublet_class": ["doublet", "doublet", "singlet", "singlet"],
-            "n_features": [50, 50, 100, 100],
-            "guide_a": ["T", "B", "B", "B"],
-            "guide_b": ["B", "B", "B", "B"],
-        }
-    )
-    result = audit_parents.build_audit(config, cells).set_index("parent_id")
-    assert bool(result.loc["0", "doublet_enriched"])
-    assert bool(result.loc["0", "donor_dominated"])
-    assert bool(result.loc["0", "guide_top_disagreement"])
-    assert "median_technical__complexity" in result.columns
-
-
-def test_parent_audit_allows_missing_replication_axes(config: dict) -> None:
-    config["input"]["keys"].update({"donor": "", "capture": "", "doublet_class": ""})
-    config["adaptive"]["audit"].update(
-        {
-            "donor_max_fraction": None,
-            "capture_max_fraction": None,
-            "doublet_fraction_max": None,
-        }
-    )
-    cells = pd.DataFrame(
-        {
-            "barcode": ["a", "b"],
-            "canonical_cluster": ["0", "0"],
-            "lineage": ["immune", "immune"],
-        }
-    )
-    row = audit_parents.build_audit(config, cells).iloc[0]
-    assert row["n_donors"] == 0
-    assert not bool(row["donor_dominated"])

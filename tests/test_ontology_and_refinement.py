@@ -5,7 +5,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 import pandas as pd
 import pytest
 
@@ -19,12 +18,6 @@ from cell_curator.ontology import (
     ontology_from_config,
     validate_durable_label_ontology,
     validate_program_ontology,
-)
-from cell_curator.refinement import (
-    adjusted_rand_index,
-    evaluate_local_partitions,
-    mutual_best_matches,
-    partition_jaccard_index,
 )
 
 
@@ -273,70 +266,6 @@ name: cell
     )
     assert unavailable["status"] == "unavailable"
     assert "CL-free" in unavailable["remediation"]
-
-
-def test_refinement_metrics_and_graph_partition_are_computed(config: dict) -> None:
-    assert adjusted_rand_index(np.array([0, 0, 1, 1]), np.array([1, 1, 0, 0])) == 1.0
-    assert partition_jaccard_index(
-        np.array([0, 0, 1, 1]), np.array([1, 1, 0, 0])
-    ) == pytest.approx(1.0)
-    matches = mutual_best_matches(
-        {"a": {"1", "2"}, "b": {"3", "4"}},
-        {"x": {"1", "2"}, "y": {"3", "4"}},
-        threshold=0.8,
-    )
-    assert matches == [("a", "x", 1.0), ("b", "y", 1.0)]
-
-    rng = np.random.default_rng(3)
-    embedding = np.vstack(
-        [rng.normal(-3, 0.15, size=(20, 3)), rng.normal(3, 0.15, size=(20, 3))]
-    )
-    config["input"]["keys"].update({"donor": "", "capture": "", "batch": ""})
-    config["adaptive"]["eligibility"].update(
-        {"min_cells": 5, "min_donors": None, "min_captures": None}
-    )
-    config["adaptive"]["parent_local"].update(
-        {
-            "resolutions": [0.5, 1.0],
-            "stability_threshold_strictly_greater_than": 0.0,
-            "reference_seeds": [0, 1, 2],
-            "knn_k": 8,
-        }
-    )
-    config["input"]["assays"]["transcriptome"]["representations"]["logcounts"][
-        "ranking_backend"
-    ] = "scipy_mannwhitney"
-    model = CellCuratorConfig.model_validate(config)
-    evaluations = evaluate_local_partitions(
-        embedding,
-        pd.DataFrame(index=[f"c{i}" for i in range(40)]),
-        model,
-    )
-    assert any(item.n_clusters >= 2 for item in evaluations)
-    assert all(0 <= item.stability <= 1 for item in evaluations)
-    assert all(item.separation >= 0 for item in evaluations)
-
-    config["adaptive"]["parent_local"]["stability_metric"] = "jaccard"
-    jaccard_model = CellCuratorConfig.model_validate(config)
-    jaccard_evaluations = evaluate_local_partitions(
-        embedding,
-        pd.DataFrame(index=[f"c{i}" for i in range(40)]),
-        jaccard_model,
-    )
-    assert jaccard_evaluations
-    assert {item.stability_metric for item in jaccard_evaluations} == {"jaccard"}
-    assert all(0 <= item.stability <= 1 for item in jaccard_evaluations)
-
-    config["adaptive"]["parent_local"]["max_passes_per_parent"] = 0
-    disabled_model = CellCuratorConfig.model_validate(config)
-    assert (
-        evaluate_local_partitions(
-            embedding,
-            pd.DataFrame(index=[f"c{i}" for i in range(40)]),
-            disabled_model,
-        )
-        == []
-    )
 
 
 def _cl_obo(tmp_path: Path) -> Path:

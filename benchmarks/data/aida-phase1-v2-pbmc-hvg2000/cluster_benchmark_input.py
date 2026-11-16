@@ -13,15 +13,67 @@ Outputs:
                                clusters
 """
 
+import math
 import sys
 from pathlib import Path
 
 import anndata as ad
+import networkx as nx
 import numpy as np
 import pandas as pd
+from scipy.spatial import cKDTree
 from scipy.special import comb
 
-from cell_curator.refinement import graph_partition
+
+# Copied from cell_curator.refinement, removed with the package's own clustering.
+def _knn_graph(embedding: np.ndarray, *, k: int) -> nx.Graph:
+    if embedding.ndim != 2 or len(embedding) < 2:
+        raise ValueError("the embedding needs at least two cells")
+    effective_k = min(k + 1, len(embedding))
+    distances, indices = cKDTree(embedding).query(embedding, k=effective_k)
+    if indices.ndim == 1:
+        indices = indices[:, None]
+        distances = distances[:, None]
+    graph = nx.Graph()
+    graph.add_nodes_from(range(len(embedding)))
+    positive = distances[:, 1:][distances[:, 1:] > 0]
+    scale = float(np.median(positive)) if positive.size else 1.0
+    for source in range(len(embedding)):
+        for distance, target in zip(distances[source, 1:], indices[source, 1:], strict=True):
+            if source == int(target):
+                continue
+            weight = math.exp(-float(distance) / max(scale, 1e-12))
+            if graph.has_edge(source, int(target)):
+                graph[source][int(target)]["weight"] = max(
+                    graph[source][int(target)]["weight"], weight
+                )
+            else:
+                graph.add_edge(source, int(target), weight=weight)
+    return graph
+
+
+def graph_partition(
+    embedding: np.ndarray,
+    *,
+    resolution: float,
+    seed: int,
+    k: int,
+) -> np.ndarray:
+    graph = _knn_graph(embedding, k=k)
+    communities = nx.community.louvain_communities(
+        graph,
+        weight="weight",
+        resolution=float(resolution),
+        seed=int(seed),
+    )
+    ordered = sorted(
+        (sorted(group) for group in communities), key=lambda group: (group[0], len(group))
+    )
+    labels = np.empty(len(embedding), dtype=int)
+    for label, members in enumerate(ordered):
+        labels[members] = label
+    return labels
+
 
 HERE = Path(__file__).resolve().parent
 OUT = Path(sys.argv[1])

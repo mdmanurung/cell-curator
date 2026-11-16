@@ -25,7 +25,6 @@ from cell_curator.evidence import (
 from cell_curator.hierarchy import identity_vocabulary, validate_parent_vocabulary
 from cell_curator.models import MarkerProgram
 from cell_curator.provenance import atomic_publish
-from cell_curator.refinement import _stored_evaluation
 
 
 def _model(config: dict) -> CellCuratorConfig:
@@ -369,34 +368,6 @@ def test_gpu_marker_lane_rejects_one_group_before_claiming_methods() -> None:
             rsc=object(),
             marker_config={},
         )
-
-
-def test_stored_resolution_excludes_transient_children(config: dict) -> None:
-    value = yaml.safe_load(yaml.safe_dump(config))
-    value["input"]["keys"]["stored_resolutions"] = ["stored_low", "stored_high"]
-    model = _model(value)
-    parent_obs = pd.DataFrame(
-        {
-            "stored_low": ["A"] * 6 + ["B"] * 6,
-            "stored_high": ["A"] * 5 + ["transient"] + ["B"] * 6,
-        },
-        index=[f"cell-{index}" for index in range(12)],
-    )
-    embedding = np.vstack(
-        [
-            np.column_stack((np.arange(6), np.zeros(6))),
-            np.column_stack((np.arange(6), np.ones(6) * 10)),
-        ]
-    )
-    evaluation = _stored_evaluation(parent_obs, embedding, model)
-    assert evaluation is not None
-    assert evaluation.n_clusters == 2
-    assert evaluation.eligible_children is not None
-    selected_names = {
-        str(pd.Categorical(parent_obs["stored_high"]).categories[index])
-        for index in evaluation.eligible_children
-    }
-    assert selected_names == {"A", "B"}
 
 
 def test_immutable_atomic_publisher_resumes_identical_and_refuses_overwrite(
