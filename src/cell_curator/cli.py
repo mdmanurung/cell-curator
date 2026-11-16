@@ -164,13 +164,18 @@ def build_parser() -> argparse.ArgumentParser:
 
     annotation = commands.add_parser("annotation", help="run a corpus stage scheduled by annotation.smk")
     annotation_sub = annotation.add_subparsers(dest="action", required=True)
-    for action in ("classifier", "collect-level", "resolve-level", "finalize"):
+    for action in ("classifier", "collect-level", "resolve-level", "import-consensus", "finalize"):
         item = annotation_sub.add_parser(action)
         _config_argument(item)
         if action == "classifier":
             item.add_argument("--name", required=True)
-        if action in {"collect-level", "resolve-level"}:
+        if action in {"collect-level", "resolve-level", "import-consensus"}:
             item.add_argument("--level", required=True)
+        if action == "import-consensus":
+            item.add_argument(
+                "--consensus", required=True, type=Path,
+                help="output directory of an annotation-consensus run",
+            )
 
     ontology_command = commands.add_parser(
         "ontology", help="validate local Cell Ontology names, synonyms, and accessions"
@@ -667,6 +672,10 @@ def dispatch(args: argparse.Namespace) -> Any:
             return collect_level(args.config, args.level)
         if args.action == "resolve-level":
             return resolve_level(args.config, args.level)
+        if args.action == "import-consensus":
+            from .consensus_import import import_consensus_level
+
+            return import_consensus_level(args.config, args.level, args.consensus)
         return finalize_annotation(args.config)
     if args.command == "config":
         from .config import configuration_schema, load_config
