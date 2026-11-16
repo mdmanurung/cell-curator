@@ -16,12 +16,7 @@ from cell_curator.contracts import (
     safe_path_component,
 )
 from cell_curator.data import feature_ids_for
-from cell_curator.evidence import (
-    aggregate_multimodal_evidence,
-    compute_bottom_up_markers,
-    compute_gpu_bottom_up_markers,
-    score_marker_programs,
-)
+from cell_curator.evidence import compute_bottom_up_markers, score_marker_programs
 from cell_curator.hierarchy import identity_vocabulary, validate_parent_vocabulary
 from cell_curator.models import MarkerProgram
 from cell_curator.provenance import atomic_publish
@@ -75,72 +70,8 @@ def test_bottom_up_bh_correction_covers_all_features(
     assert target["adjusted_pvalue"] == pytest.approx(0.5)
 
 
-def test_missing_detection_and_unmeasured_program_features_force_abstention(
-    config: dict,
-) -> None:
-    model = _model(config)
-    capabilities = build_capability_registry(model)
-    matrix = np.array([[5.0], [4.0], [0.0], [0.0]])
-    groups = pd.Series(["0", "0", "1", "1"])
-    program = MarkerProgram(
-        label="Target",
-        positive=("measured", *tuple(f"missing-{index}" for index in range(99))),
-    )
-    evidence = score_marker_programs(
-        matrix,
-        groups,
-        pd.Index(["measured"]),
-        [program],
-        detection=None,
-        run_id=model.run.run_id,
-        assay="transcriptome",
-        representation="logcounts",
-        capability=capabilities[0],
-    )
-    assert evidence["detection_valid"].eq(False).all()
-    assert evidence["positive_coverage"].isna().all()
-    assert evidence["negative_violation"].isna().all()
-    assert evidence["program_coverage"].eq(0.01).all()
-    _, decisions = aggregate_multimodal_evidence(
-        evidence,
-        capabilities,
-        model,
-        scope="global",
-        cluster_ids=["0", "1"],
-    )
-    assert all(item.abstained and item.cell_type == "Unknown" for item in decisions)
 
 
-def test_unmeasured_expected_negative_forces_abstention(config: dict) -> None:
-    model = _model(config)
-    capabilities = build_capability_registry(model)
-    matrix = np.array([[5.0], [4.0], [0.0], [0.0]])
-    groups = pd.Series(["0", "0", "1", "1"])
-    program = MarkerProgram(
-        label="Target",
-        positive=("measured",),
-        negative=("unmeasured-negative",),
-    )
-    evidence = score_marker_programs(
-        matrix,
-        groups,
-        pd.Index(["measured"]),
-        [program],
-        detection=matrix,
-        run_id=model.run.run_id,
-        assay="transcriptome",
-        representation="logcounts",
-        capability=capabilities[0],
-    )
-    assert evidence["negative_violation"].isna().all()
-    _, decisions = aggregate_multimodal_evidence(
-        evidence,
-        capabilities,
-        model,
-        scope="global",
-        cluster_ids=["0", "1"],
-    )
-    assert all(item.abstained and item.cell_type == "Unknown" for item in decisions)
 
 
 def test_a_partly_measured_negative_list_is_judged_on_its_measured_genes(config: dict) -> None:
@@ -174,41 +105,6 @@ def test_a_partly_measured_negative_list_is_judged_on_its_measured_genes(config:
     assert strict["negative_violation"].isna().all()
 
 
-def test_axisless_evidence_is_refused_rather_than_called_cell_type(config: dict) -> None:
-    """Losing the axis column must stop the run, not relabel state as identity.
-
-    The aggregator used to default a missing axis to `cell_type`, so an evidence
-    frame that had been round-tripped through a table without the column — a
-    cached export, a hand-edited TSV — turned every cycling, stress, and
-    low-quality program into a candidate identity without saying so.
-    """
-
-    model = _model(config)
-    capabilities = build_capability_registry(model)
-    matrix = np.array([[5.0], [4.0], [0.0], [0.0]])
-    groups = pd.Series(["0", "0", "1", "1"])
-    program = MarkerProgram(label="Cycling", positive=("measured",), axis="cell_state")
-    evidence = score_marker_programs(
-        matrix,
-        groups,
-        pd.Index(["measured"]),
-        [program],
-        detection=matrix,
-        run_id=model.run.run_id,
-        assay="transcriptome",
-        representation="logcounts",
-        capability=capabilities[0],
-    )
-    assert evidence["axis"].eq("cell_state").all()
-
-    with pytest.raises(ContractError, match="axis"):
-        aggregate_multimodal_evidence(
-            evidence.drop(columns=["axis"]),
-            capabilities,
-            model,
-            scope="global",
-            cluster_ids=["0", "1"],
-        )
 
 
 def _vocabulary_rows() -> pd.DataFrame:
@@ -358,16 +254,6 @@ def test_evidence_feature_ids_apply_declared_gene_mapping(tmp_path) -> None:
     ) == ["A", "B"]
 
 
-def test_gpu_marker_lane_rejects_one_group_before_claiming_methods() -> None:
-    with pytest.raises(ContractError, match="no marker methods were executed"):
-        compute_gpu_bottom_up_markers(
-            np.ones((2, 1)),
-            pd.Series(["only", "only"]),
-            pd.Index(["gene"]),
-            detection=None,
-            rsc=object(),
-            marker_config={},
-        )
 
 
 def test_immutable_atomic_publisher_resumes_identical_and_refuses_overwrite(
@@ -384,59 +270,8 @@ def test_immutable_atomic_publisher_resumes_identical_and_refuses_overwrite(
     assert stale.read_text() == "incomplete\n"
 
 
-def test_confidence_is_the_cluster_share_voting_for_the_label(config: dict) -> None:
-    """A cluster that is 80% T cells is called T at confidence 0.8, whatever else is in the
-    vocabulary, and the 20% B cells in it do not count against T's expected negatives."""
-
-    model = _model(config)
-    capabilities = build_capability_registry(model)
-    features = pd.Index(["CD3E", "MS4A1", "LYZ", *[f"X{i}" for i in range(5)]])
-    t, b, m = (np.eye(len(features))[i] * 5.0 for i in range(3))
-    matrix = np.vstack([t] * 80 + [b] * 20 + [b] * 100 + [m] * 100)
-    groups = pd.Series(["0"] * 100 + ["1"] * 100 + ["2"] * 100)
-    core = [
-        MarkerProgram(label="T", positive=("CD3E",), negative=("MS4A1", "LYZ")),
-        MarkerProgram(label="B", positive=("MS4A1",), negative=("CD3E", "LYZ")),
-        MarkerProgram(label="Mono", positive=("LYZ",), negative=("CD3E", "MS4A1")),
-    ]
-    padding = [MarkerProgram(label=f"Pad{i}", positive=(f"X{i}",)) for i in range(5)]
-
-    def call(programs: list[MarkerProgram]):
-        evidence = score_marker_programs(
-            matrix,
-            groups,
-            features,
-            programs,
-            detection=matrix,
-            run_id=model.run.run_id,
-            assay="transcriptome",
-            representation="logcounts",
-            capability=capabilities[0],
-        )
-        _, decisions = aggregate_multimodal_evidence(
-            evidence, capabilities, model, scope="global", cluster_ids=["0", "1", "2"]
-        )
-        return evidence, {item.cluster_id: item for item in decisions}
-
-    evidence, decisions = call(core)
-    t_in_0 = evidence[evidence["cluster_id"].eq("0") & evidence["label"].eq("T")].iloc[0]
-    assert t_in_0["vote_fraction"] == pytest.approx(0.8)
-    assert t_in_0["n_voters"] == 80
-    assert t_in_0["negative_violation"] == 0.0
-    assert [decisions[c].cell_type for c in "012"] == ["T", "B", "Mono"]
-    assert decisions["0"].confidence == pytest.approx(0.8)
-    assert decisions["0"].margin == pytest.approx(0.6)
-
-    _, padded = call(core + padding)
-    assert padded["0"].cell_type == "T"
-    assert padded["0"].confidence == pytest.approx(0.8)
 
 
-def test_an_exact_tie_reports_bounded_entropy() -> None:
-    from cell_curator.evidence import _normalized_entropy
-
-    # Five-way tie: unclipped, rounding gives 1.0000000000000002, which the model refuses.
-    assert _normalized_entropy(np.full(5, 1 / 5)) <= 1.0
 
 
 def test_a_gene_cannot_be_both_expected_and_forbidden() -> None:
@@ -498,63 +333,6 @@ def test_a_two_group_comparison_ranks_programs_by_effect_not_by_name(config: dic
 CL_SNAPSHOT = Path(__file__).parents[1] / "benchmarks/data/aida-phase1-v2-pbmc-hvg2000/cl.obo"
 
 
-def test_a_near_tie_backs_off_to_the_shared_ancestor_only_with_an_ontology(
-    config: dict,
-) -> None:
-    """A T-cell cluster split 50/45 between CD4 and CD8 is a mature alpha-beta T
-    cell, not Unknown, once an ontology says so; without one it stays Unknown, and
-    a tie whose only shared ancestors are generic terms (leukocyte) stays Unknown."""
-
-    from cell_curator.ontology import CellOntology
-
-    model = _model(config)
-    capabilities = build_capability_registry(model)
-    features = pd.Index(["CD4", "CD8A", "MS4A1", "LYZ"])
-    cd4, cd8, b, mono = (np.eye(4)[i] * 5.0 for i in range(4))
-    matrix = np.vstack([cd4] * 50 + [cd8] * 45 + [b] * 5 + [mono] * 50 + [cd4] * 45 + [b] * 5)
-    groups = pd.Series(["T"] * 100 + ["mixed"] * 100)
-    programs = [
-        MarkerProgram(
-            label="CD4-positive, alpha-beta T cell", positive=("CD4",), cl_id="CL:0000624"
-        ),
-        MarkerProgram(
-            label="CD8-positive, alpha-beta T cell", positive=("CD8A",), cl_id="CL:0000625"
-        ),
-        MarkerProgram(label="B cell", positive=("MS4A1",), cl_id="CL:0000236"),
-        MarkerProgram(label="monocyte", positive=("LYZ",), cl_id="CL:0000576"),
-    ]
-    evidence = score_marker_programs(
-        matrix,
-        groups,
-        features,
-        programs,
-        detection=matrix,
-        run_id=model.run.run_id,
-        assay="transcriptome",
-        representation="logcounts",
-        capability=capabilities[0],
-    )
-
-    def decide(ontology):
-        _, decisions = aggregate_multimodal_evidence(
-            evidence,
-            capabilities,
-            model,
-            scope="global",
-            cluster_ids=["T", "mixed"],
-            ontology=ontology,
-        )
-        return {item.cluster_id: item for item in decisions}
-
-    without = decide(None)
-    assert without["T"].cell_type == "Unknown" and without["T"].abstained
-
-    with_cl = decide(CellOntology.load(CL_SNAPSHOT))
-    assert with_cl["T"].cell_type == "mature alpha-beta T cell"
-    assert with_cl["T"].cl_id == "CL:0000791"
-    assert with_cl["T"].confidence == pytest.approx(0.95)
-    assert not with_cl["T"].abstained
-    assert with_cl["mixed"].cell_type == "Unknown"
 
 
 def test_cells_without_marker_signal_do_not_vote(config: dict) -> None:

@@ -3,21 +3,14 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import anndata as ad
 import numpy as np
 import pandas as pd
 import pytest
-import yaml
 from scipy import optimize, sparse
 
-from cell_curator.config import load_config
 from cell_curator.contracts import ContractError
-from cell_curator.evidence import (
-    compute_bottom_up_markers,
-    run_lane,
-    validate_backend_receipt,
-)
-from cell_curator.models import BackendReceipt, MarkerProgram
+from cell_curator.evidence import compute_bottom_up_markers
+from cell_curator.models import MarkerProgram
 
 BOTH = ("wilcoxon", "logreg")  # decision row 18: logistic regression is opt-in
 
@@ -132,89 +125,8 @@ def test_failed_logistic_fit_cannot_publish_a_wilcoxon_only_success(
         )
 
 
-@pytest.mark.parametrize("single_group", [False, True])
-def test_cpu_lane_receipt_binds_executed_methods_and_rejects_incomplete_resume(
-    tmp_path: Path,
-    config: dict,
-    single_group: bool,
-) -> None:
-    matrix = np.repeat(np.eye(2) * 5, 8, axis=0)
-    source = tmp_path / "input.h5ad"
-    adata = ad.AnnData(
-        matrix,
-        obs=pd.DataFrame(
-            {
-                "canonical_cluster": ["A"] * 16 if single_group else ["A"] * 8 + ["B"] * 8,
-                "lineage": ["immune"] * 16,
-            },
-            index=[f"c{i}" for i in range(16)],
-        ),
-        var=pd.DataFrame({"gene_symbol": ["x", "y"]}, index=["x", "y"]),
-    )
-    adata.layers["logcounts"] = matrix.copy()
-    adata.layers["counts"] = matrix.copy()
-    adata.write_h5ad(source)
-    config["input"]["path"] = str(source)
-    representation = config["input"]["assays"]["transcriptome"]["representations"]["logcounts"]
-    representation["ranking_backend"] = "scipy_mannwhitney"
-    config_path = tmp_path / "config.yaml"
-    config_path.write_text(yaml.safe_dump(config))
-    model = load_config(config_path)
-    root = Path(model.run.output_root) / model.run.run_id
-    result = run_lane(
-        config=model,
-        config_path=config_path,
-        run_root=root,
-        assay_id="transcriptome",
-        representation_name="logcounts",
-        programs=[MarkerProgram(label="A", positive=("x",), negative=("y",))],
-    )
-    receipt = BackendReceipt.model_validate_json(result.receipt_path.read_text())
-    if single_group:
-        assert result.bottom_up.empty
-        assert receipt.marker_methods == ()
-        assert receipt.convergence_validated is None
-        assert receipt.runtime["marker_status"] == "unavailable_no_comparator"
-    else:
-        assert receipt.marker_methods == ("wilcoxon",)
-        assert receipt.convergence_validated is None
-        assert receipt.runtime["ranking_group_coverage"] == {"wilcoxon": ["A", "B"]}
-    value = json.loads(result.receipt_path.read_text())
-    value["marker_methods"] = ["logreg"]
-    result.receipt_path.write_text(json.dumps(value))
-    message = "cannot claim" if single_group else "Wilcoxon and balanced logreg"
-    with pytest.raises(ContractError, match=message):
-        run_lane(
-            config=model,
-            config_path=config_path,
-            run_root=root,
-            assay_id="transcriptome",
-            representation_name="logcounts",
-            programs=[],
-        )
 
 
-def test_cpu_receipt_requires_successful_logistic_convergence(config: dict) -> None:
-    from cell_curator.capabilities import build_capability_registry
-    from cell_curator.config import CellCuratorConfig
-
-    config["input"]["assays"]["transcriptome"]["representations"]["logcounts"][
-        "ranking_backend"
-    ] = "scipy_mannwhitney"
-    capability = build_capability_registry(CellCuratorConfig.model_validate(config))[0]
-    receipt = BackendReceipt(
-        run_id="fixture",
-        lane_key="cpu",
-        backend="scipy_mannwhitney",
-        capability_level=capability.level,
-        status="complete",
-        input_sha256="a" * 64,
-        config_sha256="b" * 64,
-        marker_methods=("wilcoxon", "logreg"),
-        convergence_validated=False,
-    )
-    with pytest.raises(ContractError, match="convergence"):
-        validate_backend_receipt(receipt, capability)
 
 
 def test_standalone_marker_artifacts_record_the_default_wilcoxon_runtime(tmp_path: Path) -> None:

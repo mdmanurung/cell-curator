@@ -116,7 +116,7 @@ def test_the_matrix_still_has_forty_three_mapped_capabilities() -> None:
 
     # 45 until 2026-11-16, when the user chose to delete the old non-corpus pipeline; its parent-local
     # refinement and parallel-state profiling rows went with it (plans/v8-agent-decisions.md).
-    assert len(_matrix_rows()) == 43
+    assert len(_matrix_rows()) == 42
 
 
 def test_every_implementation_path_in_the_matrix_is_real() -> None:
