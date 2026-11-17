@@ -40,7 +40,7 @@ The earlier prototype differed on `environment.txt` (host 0.2.0 against wheel 0.
 
 ### Rebuilt after the removal (2026-11-17)
 
-The image was rebuilt from `a7083bb` (SIF `97febc139e1c…`, wheel `f6ddb0bd…`) because the package changed. Inside it the demo gives 0 of 18 differing files on the login node (AMD EPYC 7713P), under `unshare -rn` (row 12), and on `res-hpc-path01` and `res-hpc-path02` (Xeon Gold 6234). `verify --demo` passes (row 10) and the manifest holds the SIF hash. The run on `res-hpc-exe032` (E5-4650 v3, no AVX2) is not done: its job was queued 30+ minutes. Until it runs, row 8 inside the new image covers two CPU types, not three. Details: `skills/annotation-consensus/container/README.md`.
+The image was rebuilt from `a7083bb` (SIF `97febc139e1c…`, wheel `f6ddb0bd…`) because the package changed. Inside it the demo gives 0 of 18 differing files on the login node (AMD EPYC 7713P), under `unshare -rn` (row 12), and on `res-hpc-path01` and `res-hpc-path02` (Xeon Gold 6234). `verify --demo` passes (row 10) and the manifest holds the SIF hash. The run on `res-hpc-exe032` (E5-4650 v3, no AVX2) also gives 0 of 18, so row 8 holds on three CPU types in the new image. Details: `skills/annotation-consensus/container/README.md`.
 
 ## Limits
 
