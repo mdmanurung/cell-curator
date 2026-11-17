@@ -48,3 +48,25 @@ Evidence: `table fallback: each verdict is exact equality of two label tables`. 
 Reading of the figure: the strict panel follows the scanpy cluster names for B cells, both monocyte groups and megakaryocytes. The CD8, NK and dendritic-cell regions carry `Unknown`. PBMC3K has one donor and no truth labels, so this shows the workflow, not accuracy.
 
 Status after the packet: `cell-curator critic import-findings --config pbmc3k.yaml --input FINDINGS.tsv`. Critic findings, `run validate`, the write-back preview and `write-back apply` stay with the user.
+
+# Reruns with rule h4 (2026-11-17)
+
+After the user dropped the tie-break (`plans/v8-agent-decisions.md`, 2026-11-17), both datasets were rerun with rule h4 and snap on as new package runs `v8-accept-aida-split-a-002` and `v8-accept-pbmc3k-002` (configs `aida_split_a_002.yaml`, `pbmc3k_002.yaml`). Gate A was approved by the user for both on 2026-11-17 (reviewer Mikhael Manurung); 43 of 44 assumptions equal run 001's, and the 44th is the annotation-rules text, which names the new consensus directory.
+
+Evidence type: `table fallback: each verdict is exact equality of two label tables`.
+
+| Check | AIDA split A | PBMC3K |
+| --- | --- | --- |
+| consensus under h4 (verify OK) | 19 of 23 clusters labelled, coverage 0.9072, 1702 cells flagged | 5 of 8 labelled, coverage 0.636088, 958 flagged |
+| cluster `label`, `cl_id` against the h5 run | 23 of 23 equal | 8 of 8 equal |
+| per-cell strict label against the h5 run | 8847 of 8847 equal | all cells equal (`cell_labels.tsv` identical) |
+| `cell_flags.tsv` against the h5 run | identical | identical |
+| per-cell best-guess label against the h5 run | 11 of 8847 differ (abstained cells in cluster 11 with 4 tied terms: h5 picked `platelet`, h4 picks a CD16-positive NK term by tool order) | not compared |
+| `labels.tsv` and `cell_labels.tsv` of the package run 002 against 001 | equal | equal |
+| `collect-level` | minutes (ranking cache hit) | 21 s |
+
+Snap off was tested on AIDA and rejected: rule h4 with `snap_to_vocabulary: false` gave the cluster label `memory regulatory T cell`, which is outside the approved vocabulary and which `import-consensus` refuses.
+
+Both 002 runs stand at the critic step (`pipeline packet` done). Draft findings for the user to edit are in `acceptance-2026-11-17/critic-drafts/` (6 for PBMC3K, 13 for AIDA); none is recorded.
+
+Cost: the stale `consensus_aida_config.yaml` pointed at the deleted worktree for the ontology; the path now points at the main checkout, and `verify` of the original h5 run still passes.

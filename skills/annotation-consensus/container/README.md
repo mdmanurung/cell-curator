@@ -26,21 +26,20 @@ bash run_container.sh _build/consensus.sif OUT verify --demo
 
 Rebuild the wheel and the SIF after any change under `src/`, because the image carries the package.
 
-## Measured on 2026-11-17 (demo, 654 cells)
+## Measured on 2026-11-17 (demo with rule h4, 654 cells)
 
-SIF `01703be8d325…`, built from `8782684` (wheel `1083cee6…`, source commit `5c79dd2`), after the removal of the package's own labelling and the receipt-path fix. The table compares each run's 18 hashed files with the committed `expected_hashes.json`. Outputs and logs: `cc-v8-work/audit/container-2026-11-17/r2/`. An earlier image (`97febc139e1c…`, from `a7083bb`) passed the same table; it predates the fix.
+SIF `9802f62555362b5e…`, built from `5455579` (wheel `1083cee6…`, source commit `5c79dd2`) in 8 min 18 s. The wheel hash is the same as in the earlier build, because none of the files it ships changed. The demo now runs rule h4 (the product rule, user 2026-11-17), so the table compares each run's 18 hashed files with the rewritten `expected_hashes.json`. Outputs and logs: `cc-v8-work/audit/container-2026-11-17/r3/`.
 
 | Run | Where | Files differing |
 | --- | --- | --- |
 | login | `res-hpc-exe102`, AMD EPYC 7713P | 0 of 18 |
 | login, no network (`unshare -rn`) | `res-hpc-exe102` | 0 of 18 |
-| short partition | `res-hpc-path02`, Xeon Gold 6234 | 0 of 18 |
-| short partition | `res-hpc-path01`, Xeon Gold 6234 | 0 of 18 |
+| short partition | `res-hpc-path03`, Xeon Gold 6234 | 0 of 18 |
 | highmem partition | `res-hpc-exe032`, Xeon E5-4650 v3 (no AVX2) | 0 of 18 |
 
-`verify --demo` inside the container reports "18 stored files and the rerun are byte-identical". The manifest `container_sif_sha256` equals the SIF hash. The container passed the version check with no `--allow-version-drift`.
+`verify --demo` inside the container reports "18 stored files and the rerun are byte-identical". The manifest `container_sif_sha256` equals the SIF hash.
 
-The 2026-11-16 image (`2deafd07f26c…`, from `fd819fb`) passed the same table.
+Earlier images (`2deafd07f26c…` from `fd819fb`, `97febc139e1c…` from `a7083bb`, `01703be8d325…` from `8782684`) passed the same table under rule h5. Their files were removed with a git worktree, so only this build exists on disk. Rebuild with `build_wheel.sh` and `build_sif.sbatch`.
 
 `table fallback: the evidence is sha256 equality, not a plotted quantity`.
 

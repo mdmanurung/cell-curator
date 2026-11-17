@@ -52,3 +52,7 @@ The image was rebuilt from `8782684` (SIF `01703be8d325…`, wheel `1083cee6…`
 ## Evidence files
 
 `/exports/para-lipg-hpc/mdmanurung/cc-v8-work/audit/row8-2026-11-14/`: `compute.sbatch`, `logs/`, `out_compute/` (full output), and `checksums.sha256` for `out_login_seed1`, `out_login_seed999` and `out_nonet`.
+
+## Rule h4 as the product rule (2026-11-17)
+
+The user dropped the marker-share tie-break and made rule `h4` the product rule, with `snap_to_vocabulary: true`. The demo config and `expected_hashes.json` moved to h4. Four of the 18 hashed files change (`calls.tsv`, `report.md`, `reproducibility/input_checksums.sha256`, `result.json`); `consensus.tsv` and `cell_flags.tsv` do not, and the demo still labels 19 of 23 clusters and flags 117 cells. The fast skill suite passes (81). The rule-dependent rows were rerun inside a rebuilt image (SIF `9802f62555362b5e…`): rows 1, 8 and 12 and `verify --demo` pass on the login node (AMD EPYC 7713P), under `unshare -rn`, on `res-hpc-path03` (Xeon Gold 6234) and on `res-hpc-exe032` (E5-4650 v3), with 0 of 18 files differing from the new `expected_hashes.json`. Row 3 (no global RNG, any `PYTHONHASHSEED`) and rows 4 to 7 and 9 to 11 rest on the skill's test suite, which passes under h4. I did not rerun the Snakemake and CLI comparison (row 9) outside that suite.

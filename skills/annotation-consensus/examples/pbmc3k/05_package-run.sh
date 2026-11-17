@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Purpose: take the PBMC3K consensus run into cell-curator, up to the write-back preview.
 # Run:     bash 05_package-run.sh RUN PKG_CONFIG   (CONTINUE=1 after the two person steps)
-# Inputs:  RUN/out_h5/{consensus.tsv,run_manifest.json,work/cells.tsv}  [01 to 04 above]
+# Inputs:  RUN/out_h4/{consensus.tsv,run_manifest.json,work/cells.tsv}  [01 to 04 above]
 #          PKG_CONFIG: a cell-curator config with annotation.enabled: true,
-#          guidance.hierarchy_levels: [L1] and annotation.consensus_directory: RUN/out_h5
+#          guidance.hierarchy_levels: [L1] and annotation.consensus_directory: RUN/out_h4
 # Outputs: the run directory named by PKG_CONFIG (labels, review report, write-back preview)
 # Four steps stay with a person and the script stops at each: Gate A (assumptions approve),
 # corpus review, critic findings and write-back apply. It never runs them.
