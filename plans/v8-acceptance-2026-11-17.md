@@ -67,6 +67,6 @@ Evidence type: `table fallback: each verdict is exact equality of two label tabl
 
 Snap off was tested on AIDA and rejected: rule h4 with `snap_to_vocabulary: false` gave the cluster label `memory regulatory T cell`, which is outside the approved vocabulary and which `import-consensus` refuses.
 
-Both 002 runs stand at the critic step (`pipeline packet` done). Draft findings for the user to edit are in `acceptance-2026-11-17/critic-drafts/` (6 for PBMC3K, 13 for AIDA); none is recorded.
+Critic step (agent drafts, user approves; `plans/v8-agent-decisions.md`, 2026-11-17): the agent drafted 6 findings for PBMC3K and 13 for AIDA from `scores.tsv`, the consensus tool calls and donor counts (`critic_summary_*.tsv`, `critic-drafts/`). On the user's yes ("Keep all labels, record findings", then "Record as drafted") the findings were imported and reconciled with reviewer Mikhael Manurung: PBMC3K 3 RESOLVED and 3 DISMISSED, AIDA 7 RESOLVED and 6 DISMISSED; every RESOLVED line keeps the label and names the alternative. The strict report was rebuilt after reconcile (`report build --strict`) and `run validate` returned `complete` for both runs.
 
 Cost: the stale `consensus_aida_config.yaml` pointed at the deleted worktree for the ontology; the path now points at the main checkout, and `verify` of the original h5 run still passes.
