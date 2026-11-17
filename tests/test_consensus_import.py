@@ -135,3 +135,21 @@ def test_a_corpus_config_with_a_second_level_is_refused_at_load(
     config_path.write_text(yaml.safe_dump(value, sort_keys=False))
     with pytest.raises(Exception, match="L1 only"):
         load_config(config_path)
+
+
+def test_a_receipt_written_from_a_relative_config_path_is_valid_from_any_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config_path, root, expected = annotation_fixture(tmp_path, monkeypatch)
+    monkeypatch.chdir(tmp_path)
+    relative = Path(config_path).relative_to(tmp_path)
+    collect_level(relative, "L1")
+    write_consensus_run(
+        config_path, root, {cluster: values[0] for cluster, values in expected.items()}
+    )
+    import_consensus_level(relative, "L1")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    for name in ("evidence", "decision"):
+        _check_receipt(root / "annotation" / "levels" / "L1" / f"{name}.manifest.json")

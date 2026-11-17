@@ -214,8 +214,8 @@ def _frame(path: Path, frame: pd.DataFrame) -> None:
 
 def _receipt(path: Path, *, artifacts: list[Path], inputs: list[Path], **values: Any) -> dict[str, Any]:
     value = {"schema_version": 3, **values,
-             "inputs": {str(item): sha256(item) for item in inputs},
-             "artifacts": {str(item): sha256(item) for item in artifacts}}
+             "inputs": {os.path.abspath(item): sha256(item) for item in inputs},
+             "artifacts": {os.path.abspath(item): sha256(item) for item in artifacts}}
     publish_json(path, value)
     return value
 
