@@ -27,3 +27,24 @@ Evidence type: `table fallback: each verdict is exact equality of two label tabl
 ## Still the user's
 
 Critic findings, `run validate`, `write-back preview` review and `write-back apply`.
+
+# Acceptance run, PBMC3K (2026-11-17)
+
+Run `v8-accept-pbmc3k-001` under `cc-v8-work/acceptance-2026-11-17/`, config `pbmc3k.yaml`, code at `6ab8d75` (local `main`). Consensus run: `cc-v8-work/pbmc3k-2026-11-13/out_h5` (rule h5, the frozen values the user approved for the showcase on 2026-11-13). Gate A was approved by the user ("approve", reviewer Mikhael Manurung) on 2026-11-17; PBMC3K is not a dev set, so the standing dev-set confirmation does not cover it.
+
+**Corpus review was not needed.** The plan runs on `benchmarks/data/v8-corpus/reviewed_v3.json`, which the user reviewed on 2026-11-09 (34 reviewed labels, 4 disputed). The plan's `vocabulary.tsv` has sha256 `25f65f5a…`, equal to `examples/pbmc3k/vocabulary.sha256`. The earlier plan claim that this corpus is unreviewed was wrong.
+
+Evidence: `table fallback: each verdict is exact equality of two label tables`. Figure inspected for the reading below: `skills/annotation-consensus/examples/pbmc3k/figures/fig1_umap.png` (consensus strict panel).
+
+| Step | Result |
+| --- | --- |
+| `run scene`, `run plan` | pass, no blockers. The input is a copy with one added column, `annotation_scope = ROOT` (`pbmc3k_package_input.h5ad`); the original `pbmc3k.h5ad` is unchanged |
+| Gate A | 43 of 44 assumptions identical to the AIDA run; the 44th differs only by the `consensus_directory` path |
+| `collect-level`, `import-consensus`, `finalize` | pass |
+| Imported `labels.tsv` against `consensus.tsv` | 8 of 8 clusters equal in `label` and `cl_id`; clusters 3, 4, 6 `Unknown` (rule `abstain`) |
+| `cell_labels.tsv` | 2638 cells, each equals its cluster's consensus label |
+| Review build and `pipeline packet` | pass; `report.html` 1.9 MB, 3 inline SVG, 0 `<img>` |
+
+Reading of the figure: the strict panel follows the scanpy cluster names for B cells, both monocyte groups and megakaryocytes. The CD8, NK and dendritic-cell regions carry `Unknown`. PBMC3K has one donor and no truth labels, so this shows the workflow, not accuracy.
+
+Status after the packet: `cell-curator critic import-findings --config pbmc3k.yaml --input FINDINGS.tsv`. Critic findings, `run validate`, the write-back preview and `write-back apply` stay with the user.
