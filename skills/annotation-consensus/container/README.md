@@ -26,18 +26,21 @@ bash run_container.sh _build/consensus.sif OUT verify --demo
 
 Rebuild the wheel and the SIF after any change under `src/`, because the image carries the package.
 
-## Measured on 2026-11-16 (demo, 654 cells)
+## Measured on 2026-11-17 (demo, 654 cells)
 
-SIF `2deafd07f26c…`, built from `fd819fb` in 5 min 33 s. The table compares each run's 18 hashed files with the committed `expected_hashes.json`.
+SIF `97febc139e1c…`, built from `a7083bb` (wheel `f6ddb0bd…`) in 5 min 12 s, after the removal of the package's own labelling. The table compares each run's 18 hashed files with the committed `expected_hashes.json`. Outputs and logs: `cc-v8-work/audit/container-2026-11-17/`.
 
 | Run | Where | Files differing |
 | --- | --- | --- |
-| login | `res-hpc-exe102` | 0 of 18 |
+| login | `res-hpc-exe102`, AMD EPYC 7713P | 0 of 18 |
 | login, no network (`unshare -rn`) | `res-hpc-exe102` | 0 of 18 |
 | short partition | `res-hpc-path02`, Xeon Gold 6234 | 0 of 18 |
-| highmem partition | `res-hpc-exe032`, Xeon E5-4650 v3 | 0 of 18 |
+| short partition | `res-hpc-path01`, Xeon Gold 6234 | 0 of 18 |
+| highmem partition | `res-hpc-exe032`, Xeon E5-4650 v3 | not run: job 26039073 was still queued |
 
-`verify --demo` inside the container reports "18 stored files and the rerun are byte-identical". The container passed the version check with no `--allow-version-drift`.
+`verify --demo` inside the container reports "18 stored files and the rerun are byte-identical". The manifest `container_sif_sha256` equals the SIF hash. The container passed the version check with no `--allow-version-drift`.
+
+The 2026-11-16 image (`2deafd07f26c…`, from `fd819fb`) passed the same table, including `res-hpc-exe032`. The E5-4650 v3 node is the one without AVX2, so the new image needs that run before the three-CPU claim holds.
 
 `table fallback: the evidence is sha256 equality, not a plotted quantity`.
 
