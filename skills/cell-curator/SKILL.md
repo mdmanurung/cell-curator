@@ -139,19 +139,17 @@ Renew approval when a later hierarchy level introduces a material assumption.
 
 ## 3. Generate evidence and assign labels
 
-When `annotation.enabled: true`, use the corpus workflow described in
-[annotation-corpus.md](references/annotation-corpus.md). Snakemake schedules
-CellTypist/popV, marker analysis, decisions within each accepted parent, and the
-study/state display. Use `workflow/annotation.smk`, first with `--dry-run`.
-Do not run the legacy single-level pipeline on this configuration. Source imports
-remain unreviewed until a person reviews a corpus proposal. Keep each source's
-definitions and taxonomy; Allen is one example, not a preferred standard.
+Set `annotation.enabled: true` and use the corpus workflow described in
+[annotation-corpus.md](references/annotation-corpus.md). `workflow/annotation.smk`
+compiles the DAG; run it first with `--dry-run`. Source imports remain unreviewed until a
+person reviews a corpus proposal. Keep each source's definitions and taxonomy; Allen is
+one example, not a preferred standard.
 
-Execute each level within one parent. Assess technical association, quality, stress,
-cycling, gradients, mixed states, composition, and spatial context before accepting
-a child label or `Unknown`.
+Assess technical association, quality, stress, cycling, gradients, mixed states,
+composition, and spatial context before accepting a label or `Unknown`.
 
 ```bash
+# run execute runs the compiled DAG and needs the consensus run described below
 cell-curator run execute --config config.yaml
 cell-curator cluster confidence --margin 0.3 --specificity 0.8 \
   --agreement 0.7 --coverage 0.9

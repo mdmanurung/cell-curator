@@ -40,6 +40,10 @@ knowledge:
 # are initially unreviewed; the packaged example is not a callable marker panel.
 annotation:
   enabled: false
+  # The directory of an annotation-consensus run (skills/annotation-consensus). The package
+  # assigns no label: `annotation import-consensus` checks that run and writes its labels.
+  # Leave it empty until `run plan` has written plan/vocabulary.tsv, which the run needs.
+  consensus_directory: ""
   assay: transcriptome
   representation: logcounts
   corpus_assay: ""  # defaults to assay kind (rna/protein/etc); declare a platform scope explicitly
@@ -223,7 +227,7 @@ guidance:
   reviewer: ""
   pause_after_each_level: true
   assumptions: []
-  hierarchy_levels: [L1]
+  hierarchy_levels: [L1]  # the consensus run covers L1 only; a corpus run rejects deeper levels
   context:
     organism: ""
     tissue: ""

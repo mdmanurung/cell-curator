@@ -555,8 +555,11 @@ class CellCuratorConfig(StrictModel):
         if self.annotation.enabled:
             if self.evidence.min_confidence <= 0 or self.evidence.min_margin <= 0:
                 raise ValueError("corpus annotation requires positive confidence and margin thresholds")
-            if self.guidance.hierarchy_levels not in (["L1"], ["L1", "L2"], ["L1", "L2", "L3"]):
-                raise ValueError("corpus annotation identity levels must be consecutive L1 through at most L3; L4 is the study/state display")
+            if self.guidance.hierarchy_levels != ["L1"]:
+                raise ValueError(
+                    "corpus annotation covers L1 only: deeper levels need a hierarchical "
+                    "consensus call, which cell-curator does not support yet"
+                )
             if self.annotation.assay not in self.input.assays:
                 raise ValueError("annotation.assay must name an input assay")
             if self.annotation.representation not in self.input.assays[self.annotation.assay].representations:

@@ -120,3 +120,18 @@ def test_a_config_without_a_consensus_directory_is_refused(
     collect_level(config_path, "L1")
     with pytest.raises(ContractError, match="names no annotation-consensus run"):
         import_consensus_level(config_path, "L1")
+
+
+def test_a_corpus_config_with_a_second_level_is_refused_at_load(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import yaml
+
+    from cell_curator.config import load_config
+
+    config_path, _, _ = annotation_fixture(tmp_path, monkeypatch)
+    value = yaml.safe_load(config_path.read_text())
+    value["guidance"]["hierarchy_levels"] = ["L1", "L2"]
+    config_path.write_text(yaml.safe_dump(value, sort_keys=False))
+    with pytest.raises(Exception, match="L1 only"):
+        load_config(config_path)

@@ -1074,6 +1074,28 @@ def status(config_path: str | Path) -> dict[str, Any]:
     }
 
 
+def _consensus_next_command(config_path: str | Path, root: Path) -> str:
+    """The next step between Gate A and the finalized annotation, for a consensus-fed run."""
+
+    config = f"--config {config_path}"
+    loaded = load_config(config_path)
+    level = loaded.guidance.hierarchy_levels[0]
+    target = root / "annotation" / "levels" / level
+    if not (target / "evidence.manifest.json").is_file():
+        return f"cell-curator annotation collect-level {config} --level {level}"
+    directory = loaded.annotation.consensus_directory
+    if not directory:
+        return (
+            f"waiting for the consensus run: run annotation-consensus with {root / 'plan' / 'vocabulary.tsv'}"
+            " as its vocabulary, then set annotation.consensus_directory in the config"
+        )
+    if not (Path(directory) / "consensus.tsv").is_file():
+        return f"waiting for the consensus run: {directory}/consensus.tsv does not exist yet"
+    if not (target / "decision.manifest.json").is_file():
+        return f"cell-curator annotation import-consensus {config} --level {level}"
+    return f"cell-curator annotation finalize {config}"
+
+
 def _next_command(config_path: str | Path, root: Path, state: RunState) -> str:
     """The one command that moves the run forward, for an agent to run or hand over."""
 
@@ -1091,7 +1113,7 @@ def _next_command(config_path: str | Path, root: Path, state: RunState) -> str:
             f"{config} --reviewer NAME"
         )
     if not (root / "annotation" / "annotation.manifest.json").is_file():
-        return f"cell-curator run execute {config}"
+        return _consensus_next_command(config_path, root)
     if not (root / "review" / "report.manifest.json").is_file():
         from shlex import quote
 
