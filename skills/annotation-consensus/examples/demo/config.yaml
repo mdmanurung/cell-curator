@@ -42,10 +42,10 @@ smoothing:
   embedding_key: X_pca                     # [IMPACTFUL] obsm key of the kNN graph
 
 consensus:
-  rule: h5                                 # [IMPACTFUL] majority | h4 (marker co-voter) | h5 (h4 + tie-break)
+  rule: h4                                 # [IMPACTFUL] majority | h4 (marker co-voter) | h5 (h4 + tie-break, no measured gain)
   marker_weight: 1.0                       # [IMPACTFUL] marker voter, in units of one tool vote
   gate: 0.53                               # [IMPACTFUL] winning share needed for a strict label
-  tie_break_delta: 0.0                     # [IMPACTFUL] vote-split width in tool votes (rule h5 only)
+  tie_break_delta: 0.0                     # [IMPACTFUL] vote-split width in tool votes (rule h5 only; unused by h4)
   snap_to_vocabulary: true                 # [IMPACTFUL] move tool terms to the nearest vocabulary term
   marker_scope: cell                       # [IMPACTFUL] cell | cluster: marker share per cell or cluster mean
   tool_order: [celltypist, popv, singler]  # [IMPACTFUL] best tool first; breaks exact ties

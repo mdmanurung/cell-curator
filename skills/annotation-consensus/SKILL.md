@@ -56,7 +56,7 @@ The run is deterministic. The same inputs and config give byte-identical hashed 
 
 - Maps each tool's labels to the corpus vocabulary along the Cell Ontology (`snap_to_vocabulary`).
 - Votes per cell: each tool counts one vote, the marker evidence counts `marker_weight`.
-- Three rules: `majority`, `h4` (marker co-voter), `h5` (co-voter plus ontology tie-break).
+- Three rules: `majority`, `h4` (marker co-voter; the product rule, user 2026-11-17), `h5` (co-voter plus ontology tie-break; measured no gain, kept so the frozen c014 regression reproduces).
 - Two label columns: strict (`Unknown` kept) and best guess (flagged low-confidence where strict is `Unknown`).
 - Cluster label from the plurality of strict per-cell calls, behind a share and a lead gate.
 - `consensus.tsv`: one row per cluster with the decision rule, each tool's call, marker votes, gate
@@ -172,7 +172,7 @@ These choices are impactful, are the user's, and have no default:
 | `consensus.rule` | `majority`, `h4` or `h5` |
 | `consensus.marker_weight` | marker voter weight, in units of one tool vote |
 | `consensus.gate` | winning share needed for a strict label |
-| `consensus.tie_break_delta` | vote-split width in tool votes (rule `h5`) |
+| `consensus.tie_break_delta` | vote-split width in tool votes (rule `h5`; read but unused by `h4`) |
 | `consensus.snap_to_vocabulary` | move tool terms to the nearest vocabulary term (`true` or `false`) |
 | `consensus.marker_scope` | `cell` or `cluster`: marker share per cell or cluster mean |
 | `consensus.tool_order` | best tool first; breaks exact ties |
@@ -196,7 +196,7 @@ The demo is 654 cells from AIDA split A that cover all 23 `bench_cluster` values
 stratified draw by `examples/make_demo.py`. It has three tool prediction files, precomputed marker
 votes, a marker table and a truth file. Truth is read only when you add `--score`.
 
-A run on this machine labelled 19 of 23 clusters and flagged 117 cells (rule `h5`, coverage 0.899083).
+A run on this machine labelled 19 of 23 clusters and flagged 117 cells (rule `h4`, coverage 0.899083; rule `h5` gives the same labels).
 With `--score` the same run gave consensus_strict 0.82483 at 0.899083 and 19 hashed files (checked here).
 That fixture is small, so do not compare its accuracy to the frozen numbers in section 7.
 
