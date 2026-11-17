@@ -1,6 +1,10 @@
 # v8 consensus mode: design plan (not implemented)
 
-Status: draft for the user's approval. No `src/` change has been made.
+Status (2026-11-17): implemented as the skill `skills/annotation-consensus` plus the importer
+`annotation import-consensus`. The package assigns no label. Determinism audit:
+`plans/v8-consensus-audit.md`. Decisions: `plans/v8-agent-decisions.md`. The text below is
+the original design; where it says "not implemented" or lists open decisions, the audit and
+decision files are current.
 Decisions by the user, 2026-11-12: provenance = per cluster plus per-cell flags; scope now =
 this design plan only. The role of the marker evidence was first set to referee, then
 replaced in round 2 (below) by equal co-voter plus ontology tie-break.

@@ -7,6 +7,7 @@ anything.
 ## Commands
 
 - `cell-curator run scene|plan|execute|validate --config CONFIG`: the guided run.
+- `cell-curator annotation collect-level|import-consensus --config CONFIG --level L1`, then `annotation finalize --config CONFIG`: evidence, the consensus labels, the durable tables.
 - `cell-curator progress status --config CONFIG`: where the run is, and what is next.
 - `cell-curator write-back preview|apply --config CONFIG --output OUT.h5ad`.
 - Tests: `.venv/bin/python -m pytest -q`, plus `ruff check .` and `mypy`.
