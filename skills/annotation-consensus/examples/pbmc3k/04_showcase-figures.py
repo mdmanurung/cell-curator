@@ -1,7 +1,7 @@
 # Purpose: draw the PBMC3K showcase figures from the two consensus runs and write the cluster table.
 # Run:     .venv/bin/python 04_showcase-figures.py RUN_DIR      (RUN_DIR/figures must not exist)
 # Inputs:  RUN_DIR/pbmc3k.h5ad                         [01_prep-pbmc3k.py]
-#          RUN_DIR/out_h5/{consensus,calls}.tsv        run 1: rule h5, marker co-voter [annotation_consensus.py]
+#          RUN_DIR/out_h4/{consensus,calls}.tsv        run 1: rule h4, marker co-voter [annotation_consensus.py]
 #          RUN_DIR/out_majority/{consensus,calls}.tsv  run 2: plain majority, no marker vote
 # Outputs: RUN_DIR/figures/fig1_umap.png          UMAP: scanpy name, strict label, best-guess label
 #          RUN_DIR/figures/fig2_tool_votes.png    per cluster: each tool's call and its share of the cluster
@@ -41,9 +41,9 @@ read = lambda name, file: pd.read_csv(  # noqa: E731
     run_dir / name / file, sep="\t", keep_default_na=False, dtype=str
 )
 cons = {
-    n: read(f"out_{n}", "consensus.tsv").set_index("cluster_id") for n in ("h5", "majority")
+    n: read(f"out_{n}", "consensus.tsv").set_index("cluster_id") for n in ("h4", "majority")
 }
-calls = read("out_h5", "calls.tsv").set_index("barcode").loc[adata.obs_names]
+calls = read("out_h4", "calls.tsv").set_index("barcode").loc[adata.obs_names]
 vocab = pd.read_csv(HERE / "vocabulary.tsv", sep="\t", keep_default_na=False)
 if not calls["cluster_id"].equals(adata.obs["cluster"].astype(str)):
     raise ValueError("calls.tsv clusters differ from the h5ad clusters")
@@ -56,11 +56,11 @@ short = lambda s: s.replace(", alpha-beta", "").replace("thymus-derived ", "")  
 table = pd.DataFrame(
     {
         "scanpy_name": names.loc[order],
-        "run1_h5_strict": cons["h5"].loc[order, "label"],
-        "run1_h5_best_guess": cons["h5"].loc[order, "label_best_guess"],
+        "run1_h4_strict": cons["h4"].loc[order, "label"],
+        "run1_h4_best_guess": cons["h4"].loc[order, "label_best_guess"],
         "run2_majority_strict": cons["majority"].loc[order, "label"],
         "run2_majority_best_guess": cons["majority"].loc[order, "label_best_guess"],
-        "n_cells": cons["h5"].loc[order, "n_cells"],
+        "n_cells": cons["h4"].loc[order, "n_cells"],
     }
 )
 table.to_csv(fig_dir / "cluster_table.tsv", sep="\t")
@@ -103,14 +103,14 @@ tools = ("celltypist", "popv", "singler")
 fig, axes = plt.subplots(1, 3, figsize=(260 * MM, 70 * MM), sharey=True)
 for ax, tool in zip(axes, tools, strict=True):
     share = np.array(
-        [json.loads(cons["h5"].loc[c, "tool_calls"])[tool]["cluster_share"] for c in order]
+        [json.loads(cons["h4"].loc[c, "tool_calls"])[tool]["cluster_share"] for c in order]
     )
     ax.barh(range(len(order)), share.astype(float), color="0.7")
     for i, c in enumerate(order):
         ax.text(
             0.01,
             i,
-            short(json.loads(cons["h5"].loc[c, "tool_calls"])[tool]["label"]),
+            short(json.loads(cons["h4"].loc[c, "tool_calls"])[tool]["label"]),
             va="center",
             fontsize=5.5,
         )
@@ -137,7 +137,7 @@ share = {
 fig, ax = plt.subplots(figsize=(130 * MM, 75 * MM))
 width = 0.38
 for k, (n, label) in enumerate(
-    (("h5", "run 1: tools + marker vote (h5)"), ("majority", "run 2: tools only (majority)"))
+    (("h4", "run 1: tools + marker vote (h4)"), ("majority", "run 2: tools only (majority)"))
 ):
     ax.bar(np.arange(len(order)) + (k - 0.5) * width, share[n].to_numpy(), width, label=label)
 ax.set_xticks(range(len(order)), [names[c] for c in order], rotation=40, ha="right")
@@ -160,7 +160,7 @@ fig.savefig(fig_dir / "fig4_crosstab.png", dpi=200)
 plt.close(fig)
 
 # Fig 5: vocabulary markers of each best-guess label, per cluster --------------------------
-labels = pd.unique(cons["h5"].loc[order, "label_best_guess"])
+labels = pd.unique(cons["h4"].loc[order, "label_best_guess"])
 genes = {}
 for lab in labels:
     row = vocab[vocab["label"].eq(lab) & vocab["axis"].eq("cell_type")]

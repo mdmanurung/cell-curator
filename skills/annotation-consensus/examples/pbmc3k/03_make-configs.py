@@ -1,11 +1,11 @@
 # Purpose: write the two PBMC3K consensus configs into RUN_DIR: run 1 with the frozen demo
-#          values (rule h5, marker co-voter) and run 2 with plain majority (no marker vote).
+#          values (rule h4, marker co-voter) and run 2 with plain majority (no marker vote).
 # Run:     .venv/bin/python 03_make-configs.py RUN_DIR
 # Inputs:  RUN_DIR/pbmc3k.h5ad                         [01_prep-pbmc3k.py]
 #          RUN_DIR/tools/{celltypist,popv,singler}.tsv [02_*]
 #          vocabulary.tsv                              34 L1 corpus terms, copied from
 #                                                      runs/v8-dev-aida-split-a-003/plan/ (sha256 in vocabulary.sha256)
-# Outputs: RUN_DIR/config_h5.yaml, RUN_DIR/config_majority.yaml
+# Outputs: RUN_DIR/config_h4.yaml, RUN_DIR/config_majority.yaml
 
 import sys
 from pathlib import Path
@@ -42,20 +42,20 @@ BASE = {
     },
     "smoothing": {"k": 20, "embedding_key": "X_pca"},
     "consensus": {
-        "rule": "h5",
+        "rule": "h4",
         "marker_weight": 1.0,
         "gate": 0.53,
         "tie_break_delta": 0.0,
         "snap_to_vocabulary": True,
         "marker_scope": "cell",
         "tool_order": ["celltypist", "popv", "singler"],
-        "values_status": "demo values frozen on AIDA split A; approved for the PBMC3K showcase by the user, 2026-11-13",
+        "values_status": "demo values frozen on AIDA split A; approved for the PBMC3K showcase by the user, 2026-11-13; rule h4 (tie-break dropped) chosen by the user, 2026-11-17",
     },
     "cluster_gate": {"share": 0.5, "lead": 0.2, "fallback_margin": 0.40},
     "determinism": {"threads": 1, "float_digits": 6},
 }
 
-for name, rule, weight in (("h5", "h5", 1.0), ("majority", "majority", 0.0)):
+for name, rule, weight in (("h4", "h4", 1.0), ("majority", "majority", 0.0)):
     cfg = yaml.safe_load(yaml.safe_dump(BASE))
     cfg["run"] = {"name": f"pbmc3k-{name}"}
     cfg["consensus"].update(rule=rule, marker_weight=weight)

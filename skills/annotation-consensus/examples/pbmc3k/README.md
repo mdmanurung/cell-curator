@@ -12,8 +12,8 @@ RUN=/path/to/pbmc3k-run
 $PUBLIC_MODELS_ENV/bin/python 02a_run-celltypist.py Immune_All_Low $RUN
 # popV tabula_sapiens_Blood (GPU) and SingleR monaco_immune: the runners in cc-v8-work/public_models/
 #   write tools/popv.tsv and tools/singler.tsv (barcode, predicted_label, predicted_cl_id, confidence)
-.venv/bin/python 03_make-configs.py $RUN                      # config_h5.yaml, config_majority.yaml
-for n in h5 majority; do
+.venv/bin/python 03_make-configs.py $RUN                      # config_h4.yaml, config_majority.yaml
+for n in h4 majority; do
   .venv/bin/python ../../annotation_consensus.py run --input $RUN/config_$n.yaml --output $RUN/out_$n
   .venv/bin/python ../../annotation_consensus.py verify --input $RUN/config_$n.yaml --output $RUN/out_$n
 done
@@ -24,7 +24,7 @@ Both runs passed `verify` (stored files and a rerun are byte-identical). The two
 
 | Run | Rule | Marker weight | Values chosen by |
 | --- | --- | --- | --- |
-| 1 | h5 (tools + marker co-voter + ontology tie-break) | 1.0 | frozen demo values, user, 2026-11-13 |
+| 1 | h4 (tools + marker co-voter) | 1.0 | frozen demo values, user, 2026-11-13; rule h4, user, 2026-11-17 |
 | 2 | majority (tools only) | 0 | user, 2026-11-13 |
 
 Shared values: gate 0.53, k 20 on `X_pca`, snap to vocabulary on, cell-level marker share, cluster gate 0.5 / 0.2 / 0.40. The 34-term vocabulary is inherited from the AIDA corpus run (`vocabulary.sha256`).
