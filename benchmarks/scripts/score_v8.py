@@ -3,7 +3,11 @@
 #          38 corpus terms (amendment 3 item 4, amendment 2 item 2). No metric is
 #          reimplemented here.
 # Run:     .venv/bin/python benchmarks/scripts/score_v8.py \
-#              PREDICTIONS TRUTH OUT_DIR --method NAME --dataset NAME
+#              PREDICTIONS TRUTH OUT_DIR --method NAME --dataset NAME [--restrict BARCODES]
+#          --restrict: a text file of barcodes, one per line; only those truth cells are scored
+#          (the blood cells of a pooled run). The count of cells left out is written to the JSON.
+#          A truth term the pinned ontology cannot resolve is not an error: its cells are left out
+#          of the metrics and reported as unmapped (user decision, 2026-11-17).
 # Inputs:
 #   PREDICTIONS  TSV, one row per cell (a cluster call is repeated on each of its
 #                cells, as the v6 export does): barcode, predicted_cl_id, and
@@ -23,7 +27,7 @@ from pathlib import Path
 import pandas as pd
 
 from cell_curator.benchmark import evaluate_predictions, risk_coverage_sweep
-from cell_curator.contracts import sha256
+from cell_curator.contracts import ContractError, sha256
 from cell_curator.ontology import CellOntology
 from cell_curator.provenance import publish_json
 
@@ -45,6 +49,14 @@ STRATUM_FIELDS = (  # v6 fields repeated per stratum
 TRUE_VALUES = {"1", "true", "yes", "t"}
 
 
+def resolves(ontology, term):
+    try:
+        ontology.resolve(term)
+    except ContractError:
+        return False
+    return True
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("predictions", type=Path)
@@ -52,6 +64,7 @@ def main():
     parser.add_argument("out_dir", type=Path)
     parser.add_argument("--method", required=True)
     parser.add_argument("--dataset", required=True)
+    parser.add_argument("--restrict", type=Path, default=None)
     args = parser.parse_args()
 
     ontology = CellOntology.load(ONTOLOGY)
@@ -59,6 +72,12 @@ def main():
     # Join predictions to truth ------------------------------------------------------
     truth = pd.read_csv(args.truth, sep="\t", keep_default_na=False, dtype=str)
     preds = pd.read_csv(args.predictions, sep="\t", keep_default_na=False, dtype=str)
+    n_excluded = 0
+    if args.restrict is not None:
+        keep = set(args.restrict.read_text().split())
+        n_excluded = int((~truth["barcode"].isin(keep)).sum())
+        truth = truth[truth["barcode"].isin(keep)].reset_index(drop=True)
+        preds = preds[preds["barcode"].isin(keep)].reset_index(drop=True)
     if not preds["barcode"].isin(truth["barcode"]).all():
         raise ValueError("predictions contain barcodes that are not in the truth")
     if "predicted_label" not in preds:
@@ -73,11 +92,21 @@ def main():
     frame = frame.fillna({"predicted_cl_id": "", "predicted_label": "", "confidence": ""})
 
     # An abstention has no term and the label Unknown (benchmark.py contract) --------
+    # A truth term the ontology cannot resolve is reported, not fatal: those cells leave the metrics.
+    unmapped_truth = sorted(
+        term for term in frame["cell_type_ontology_term_id"].unique() if not resolves(ontology, term)
+    )
+    n_unmapped_truth = int(frame["cell_type_ontology_term_id"].isin(unmapped_truth).sum())
+    frame = frame[~frame["cell_type_ontology_term_id"].isin(unmapped_truth)].reset_index(drop=True)
     abstain = (
         frame["abstain"].str.lower().isin(TRUE_VALUES)
         | frame["predicted_cl_id"].str.strip().eq("")
         | frame["predicted_label"].eq(UNKNOWN)
     )
+    # A predicted term the ontology cannot resolve counts as an abstention and is reported.
+    bad_prediction = ~abstain & ~frame["predicted_cl_id"].map(lambda term: resolves(ontology, term))
+    n_unmapped_predictions = int(bad_prediction.sum())
+    abstain = abstain | bad_prediction
     names = {
         accession: ontology.resolve(accession).name
         for accession in frame.loc[~abstain, "predicted_cl_id"].unique()
@@ -158,6 +187,11 @@ def main():
         "risk_coverage_abstain_unknown": ABSTAIN_ON_CURVE,
         "strata": strata,
         "n_truth_cells_without_prediction": n_unpredicted,
+        "n_truth_cells_excluded_by_restrict": n_excluded,
+        "restrict_sha256": sha256(args.restrict) if args.restrict else None,
+        "n_truth_cells_unmapped": n_unmapped_truth,
+        "unmapped_truth_cl_ids": unmapped_truth,
+        "n_unmapped_predictions": n_unmapped_predictions,
         "prediction_path": args.predictions.name,
         "prediction_sha256": sha256(args.predictions),
         "truth_path": args.truth.name,
