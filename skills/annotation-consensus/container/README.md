@@ -28,7 +28,7 @@ Rebuild the wheel and the SIF after any change under `src/`, because the image c
 
 ## Measured on 2026-11-17 (demo, 654 cells)
 
-SIF `97febc139e1c…`, built from `a7083bb` (wheel `f6ddb0bd…`) in 5 min 12 s, after the removal of the package's own labelling. The table compares each run's 18 hashed files with the committed `expected_hashes.json`. Outputs and logs: `cc-v8-work/audit/container-2026-11-17/`.
+SIF `01703be8d325…`, built from `8782684` (wheel `1083cee6…`, source commit `5c79dd2`), after the removal of the package's own labelling and the receipt-path fix. The table compares each run's 18 hashed files with the committed `expected_hashes.json`. Outputs and logs: `cc-v8-work/audit/container-2026-11-17/r2/`. An earlier image (`97febc139e1c…`, from `a7083bb`) passed the same table; it predates the fix.
 
 | Run | Where | Files differing |
 | --- | --- | --- |

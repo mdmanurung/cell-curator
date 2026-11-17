@@ -21,7 +21,7 @@ Evidence type: `table fallback: each verdict is exact equality of two label tabl
 
 - **Fixed:** a receipt written from a relative config path was stale once the working directory changed. The Snakemake review step runs from the run directory, so it refused the evidence receipt. Receipt paths are now absolute (`5c79dd2`, test `test_a_receipt_written_from_a_relative_config_path_is_valid_from_any_directory`). This run's `evidence.manifest.json` still holds the relative key, so its review step was built by direct calls from the acceptance directory, not by Snakemake.
 - **Cost:** a second Snakemake attempt deleted the report it was asked to rebuild; it was rebuilt by hand.
-- **Open:** the container image (SIF `97febc139e1c…`, from `a7083bb`) predates `5c79dd2`. It must be rebuilt before merge.
+- **Container:** rebuilt after the fix (SIF `01703be8d325…`); passes on three CPU types, see `container/README.md`.
 - **Not checked:** accuracy. The run scores against split-A truth only if someone runs the skill's `score` step.
 
 ## Still the user's
