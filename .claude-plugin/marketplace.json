@@ -12,7 +12,7 @@
   "plugins": [
     {
       "name": "cell-curator",
-      "description": "Guided, offline-first hierarchical cell-type annotation for pre-clustered AnnData/MuData, with evidence cross-checks, human review gates, and guarded write-back.",
+      "description": "Annotation of pre-clustered AnnData/MuData with consensus labels from three tools plus marker votes, evidence cross-checks, human review gates and guarded write-back.",
       "source": "./"
     }
   ]

@@ -1,7 +1,7 @@
 {
   "name": "cell-curator",
   "version": "0.3.0",
-  "description": "Independent, local-first, evidence-driven annotation of clustered AnnData and MuData with hierarchical parent-scoped labels, multimodal cross-checks, human gates, and guarded write-back.",
+  "description": "Local-first annotation of clustered AnnData and MuData: labels come from the annotation-consensus skill (three tools plus marker votes, ontology-checked); the package imports, reviews and gates them, with human gates and guarded write-back.",
   "author": {
     "name": "mdmanurung",
     "url": "https://github.com/mdmanurung"
